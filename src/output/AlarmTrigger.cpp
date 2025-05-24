@@ -8,6 +8,14 @@
 #include <chrono>
 #include <curl/curl.h>
 
+#ifdef HAVE_MQTT
+#ifdef USE_SIMPLE_MQTT
+#include "../../third_party/mqtt/simple_mqtt.h"
+#else
+#include <mqtt/async_client.h>
+#endif
+#endif
+
 // Callback function for libcurl to write response data
 static size_t WriteCallback(void* contents, size_t size, size_t nmemb, std::string* userp) {
     userp->append((char*)contents, size * nmemb);
@@ -77,6 +85,11 @@ void AlarmTrigger::shutdown() {
 #ifdef HAVE_WEBSOCKETPP
         // Stop WebSocket server
         stopWebSocketServer();
+#endif
+
+#ifdef HAVE_MQTT
+        // Disconnect MQTT client
+        disconnectMQTTClient();
 #endif
 
         std::cout << "[AlarmTrigger] Shutdown complete" << std::endl;
@@ -257,8 +270,8 @@ void AlarmTrigger::deliverAlarm(const AlarmPayload& payload) {
                     break;
 
                 case AlarmMethod::MQTT:
-                    // TODO: Implement MQTT delivery in future tasks
-                    std::cout << "[AlarmTrigger] MQTT delivery not yet implemented" << std::endl;
+                    deliverMQTTAlarm(payload, config.mqttConfig);
+                    delivered = true;
                     break;
             }
         } catch (const std::exception& e) {
@@ -475,5 +488,108 @@ void AlarmTrigger::broadcastToWebSocketClients(const std::string& message) {
     if (m_webSocketServer && m_webSocketServer->isRunning()) {
         m_webSocketServer->broadcast(message);
     }
+#endif
+}
+
+// MQTT delivery implementation
+void AlarmTrigger::deliverMQTTAlarm(const AlarmPayload& payload, const MQTTAlarmConfig& config) {
+#ifdef HAVE_MQTT
+    if (!config.enabled) {
+        std::cerr << "[AlarmTrigger] MQTT config disabled" << std::endl;
+        return;
+    }
+
+    // Connect to MQTT broker if not connected or config changed
+    if (!m_mqttConnected.load() ||
+        m_currentMQTTConfig.broker != config.broker ||
+        m_currentMQTTConfig.port != config.port) {
+
+        if (!connectMQTTClient(config)) {
+            throw std::runtime_error("Failed to connect to MQTT broker");
+        }
+    }
+
+    std::string jsonPayload = payload.toJson();
+
+    if (!publishMQTTMessage(config.topic, jsonPayload, config.qos, config.retain)) {
+        throw std::runtime_error("Failed to publish MQTT message");
+    }
+
+    std::cout << "[AlarmTrigger] MQTT alarm published to " << config.broker
+              << " topic: " << config.topic << " (QoS " << config.qos << ")" << std::endl;
+#else
+    std::cerr << "[AlarmTrigger] MQTT support not compiled" << std::endl;
+    throw std::runtime_error("MQTT support not available");
+#endif
+}
+
+// MQTT client management
+bool AlarmTrigger::connectMQTTClient(const MQTTAlarmConfig& config) {
+#ifdef HAVE_MQTT
+    try {
+        // Disconnect existing client if any
+        disconnectMQTTClient();
+
+#ifdef USE_SIMPLE_MQTT
+        m_mqttClient = std::make_unique<SimpleMQTTClient>(config.broker, config.port);
+
+        m_mqttClient->setConnectionTimeout(config.connection_timeout_ms);
+        m_mqttClient->setKeepAlive(config.keep_alive_seconds);
+        m_mqttClient->setAutoReconnect(config.auto_reconnect);
+
+        if (m_mqttClient->connect(config.client_id, config.username, config.password)) {
+            m_mqttConnected.store(true);
+            m_currentMQTTConfig = config;
+            std::cout << "[AlarmTrigger] Connected to MQTT broker: " << config.broker
+                      << ":" << config.port << std::endl;
+            return true;
+        } else {
+            std::cerr << "[AlarmTrigger] Failed to connect to MQTT broker: "
+                      << m_mqttClient->getLastError() << std::endl;
+            return false;
+        }
+#else
+        // TODO: Implement Paho MQTT C++ client connection
+        std::cerr << "[AlarmTrigger] Paho MQTT C++ client not yet implemented" << std::endl;
+        return false;
+#endif
+
+    } catch (const std::exception& e) {
+        std::cerr << "[AlarmTrigger] MQTT connection error: " << e.what() << std::endl;
+        return false;
+    }
+#else
+    std::cerr << "[AlarmTrigger] MQTT support not compiled" << std::endl;
+    return false;
+#endif
+}
+
+void AlarmTrigger::disconnectMQTTClient() {
+#ifdef HAVE_MQTT
+    if (m_mqttClient) {
+        m_mqttClient->disconnect();
+        m_mqttClient.reset();
+        m_mqttConnected.store(false);
+        std::cout << "[AlarmTrigger] Disconnected from MQTT broker" << std::endl;
+    }
+#endif
+}
+
+bool AlarmTrigger::publishMQTTMessage(const std::string& topic, const std::string& payload, int qos, bool retain) {
+#ifdef HAVE_MQTT
+    if (!m_mqttClient || !m_mqttConnected.load()) {
+        std::cerr << "[AlarmTrigger] MQTT client not connected" << std::endl;
+        return false;
+    }
+
+    try {
+        return m_mqttClient->publish(topic, payload, qos, retain);
+    } catch (const std::exception& e) {
+        std::cerr << "[AlarmTrigger] MQTT publish error: " << e.what() << std::endl;
+        return false;
+    }
+#else
+    std::cerr << "[AlarmTrigger] MQTT support not compiled" << std::endl;
+    return false;
 #endif
 }

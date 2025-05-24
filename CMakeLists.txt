@@ -176,6 +176,62 @@ if(WEBSOCKETPP_INCLUDE_DIR)
     endif()
 endif()
 
+# Find or install Eclipse Paho MQTT C++ client for MQTT alarm delivery
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(PAHO_MQTT_CPP QUIET paho-mqttpp3)
+endif()
+
+if(NOT PAHO_MQTT_CPP_FOUND)
+    message(STATUS "Paho MQTT C++ not found via pkg-config, checking for manual installation...")
+
+    find_path(PAHO_MQTT_CPP_INCLUDE_DIR mqtt/async_client.h
+        PATHS
+        /usr/include
+        /usr/local/include
+        ${CMAKE_SOURCE_DIR}/third_party/paho.mqtt.cpp/src
+    )
+
+    find_library(PAHO_MQTT_CPP_LIBRARY
+        NAMES paho-mqttpp3 libpaho-mqttpp3
+        PATHS
+        /usr/lib
+        /usr/local/lib
+        ${CMAKE_SOURCE_DIR}/third_party/paho.mqtt.cpp/lib
+    )
+
+    find_library(PAHO_MQTT_C_LIBRARY
+        NAMES paho-mqtt3as libpaho-mqtt3as
+        PATHS
+        /usr/lib
+        /usr/local/lib
+        ${CMAKE_SOURCE_DIR}/third_party/paho.mqtt.c/lib
+    )
+
+    if(PAHO_MQTT_CPP_INCLUDE_DIR AND PAHO_MQTT_CPP_LIBRARY AND PAHO_MQTT_C_LIBRARY)
+        set(PAHO_MQTT_CPP_FOUND TRUE)
+        set(PAHO_MQTT_CPP_INCLUDE_DIRS ${PAHO_MQTT_CPP_INCLUDE_DIR})
+        set(PAHO_MQTT_CPP_LIBRARIES ${PAHO_MQTT_CPP_LIBRARY} ${PAHO_MQTT_C_LIBRARY})
+        message(STATUS "Found Paho MQTT C++: ${PAHO_MQTT_CPP_LIBRARIES}")
+    else()
+        message(STATUS "Paho MQTT C++ not found, will use simple MQTT client")
+
+        # Create a simple MQTT client interface for basic functionality
+        file(MAKE_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/mqtt")
+
+        # Create a minimal MQTT client header (will be implemented in source)
+        set(PAHO_MQTT_CPP_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/third_party/mqtt")
+        set(PAHO_MQTT_CPP_FOUND TRUE)
+        add_definitions(-DUSE_SIMPLE_MQTT)
+    endif()
+endif()
+
+if(PAHO_MQTT_CPP_FOUND)
+    include_directories(${PAHO_MQTT_CPP_INCLUDE_DIRS})
+    message(STATUS "MQTT support enabled")
+    add_definitions(-DHAVE_MQTT)
+endif()
+
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${OpenCV_INCLUDE_DIRS})
@@ -192,6 +248,11 @@ file(GLOB_RECURSE SOURCES
     "src/utils/*.cpp"
     "src/onvif/*.cpp"
 )
+
+# Add MQTT client source if using simple MQTT
+if(PAHO_MQTT_CPP_FOUND AND USE_SIMPLE_MQTT)
+    list(APPEND SOURCES "third_party/mqtt/simple_mqtt.cpp")
+endif()
 
 # Create executable
 add_executable(${PROJECT_NAME}
@@ -241,6 +302,12 @@ if(WEBSOCKETPP_INCLUDE_DIR)
         # Using standalone ASIO, no additional libraries needed
         target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_WEBSOCKETPP ASIO_STANDALONE)
     endif()
+endif()
+
+# Add MQTT dependencies
+if(PAHO_MQTT_CPP_FOUND AND PAHO_MQTT_CPP_LIBRARIES)
+    list(APPEND LINK_LIBRARIES ${PAHO_MQTT_CPP_LIBRARIES})
+    target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_PAHO_MQTT)
 endif()
 
 target_link_libraries(${PROJECT_NAME} ${LINK_LIBRARIES})

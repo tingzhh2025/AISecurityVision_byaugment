@@ -56,6 +56,27 @@ struct WebSocketAlarmConfig {
 };
 
 /**
+ * @brief MQTT alarm configuration
+ */
+struct MQTTAlarmConfig {
+    std::string broker = "localhost";
+    int port = 1883;
+    std::string topic = "aibox/alarms";
+    std::string client_id = "";  // Auto-generated if empty
+    std::string username = "";
+    std::string password = "";
+    int qos = 1;  // Quality of Service (0, 1, or 2)
+    bool retain = false;
+    int keep_alive_seconds = 60;
+    int connection_timeout_ms = 10000;
+    bool auto_reconnect = true;
+    bool enabled = true;
+
+    MQTTAlarmConfig() = default;
+    MQTTAlarmConfig(const std::string& broker_host) : broker(broker_host) {}
+};
+
+/**
  * @brief Alarm configuration structure
  */
 struct AlarmConfig {
@@ -63,6 +84,7 @@ struct AlarmConfig {
     AlarmMethod method;
     HttpAlarmConfig httpConfig;
     WebSocketAlarmConfig webSocketConfig;
+    MQTTAlarmConfig mqttConfig;
     bool enabled = true;
     int priority = 1;  // 1-5 scale
 
@@ -127,6 +149,7 @@ private:
     void deliverAlarm(const AlarmPayload& payload);
     void deliverHttpAlarm(const AlarmPayload& payload, const HttpAlarmConfig& config);
     void deliverWebSocketAlarm(const AlarmPayload& payload, const WebSocketAlarmConfig& config);
+    void deliverMQTTAlarm(const AlarmPayload& payload, const MQTTAlarmConfig& config);
 
     // HTTP client functionality
     bool sendHttpPost(const std::string& url, const std::string& jsonPayload,
@@ -136,6 +159,11 @@ private:
     void startWebSocketServer(int port);
     void stopWebSocketServer();
     void broadcastToWebSocketClients(const std::string& message);
+
+    // MQTT client functionality
+    bool connectMQTTClient(const MQTTAlarmConfig& config);
+    void disconnectMQTTClient();
+    bool publishMQTTMessage(const std::string& topic, const std::string& payload, int qos, bool retain);
 
     // Utility methods
     std::string generateAlarmId() const;
@@ -162,8 +190,14 @@ private:
     std::thread m_webSocketThread;
     std::atomic<bool> m_webSocketRunning{false};
 
+    // MQTT client
+    std::unique_ptr<class SimpleMQTTClient> m_mqttClient;
+    std::atomic<bool> m_mqttConnected{false};
+    MQTTAlarmConfig m_currentMQTTConfig;
+
     // Constants
     static constexpr size_t MAX_QUEUE_SIZE = 1000;
     static constexpr int DEFAULT_HTTP_TIMEOUT_MS = 5000;
     static constexpr int DEFAULT_WEBSOCKET_PORT = 8081;
+    static constexpr int DEFAULT_MQTT_PORT = 1883;
 };

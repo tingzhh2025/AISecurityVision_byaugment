@@ -2322,7 +2322,59 @@ void APIService::handlePostAlarmConfig(const std::string& request, std::string& 
 
         } else if (method == "mqtt") {
             config.method = AlarmMethod::MQTT;
-            // TODO: Add MQTT configuration
+
+            // Parse MQTT configuration
+            std::string broker = parseJsonField(request, "broker");
+            if (broker.empty()) {
+                response = createErrorResponse("broker is required for MQTT method", 400);
+                return;
+            }
+            config.mqttConfig.broker = broker;
+
+            int port = parseJsonInt(request, "port", 1883);
+            if (port < 1 || port > 65535) {
+                response = createErrorResponse("port must be between 1 and 65535", 400);
+                return;
+            }
+            config.mqttConfig.port = port;
+
+            std::string topic = parseJsonField(request, "topic");
+            if (!topic.empty()) {
+                config.mqttConfig.topic = topic;
+            }
+
+            std::string clientId = parseJsonField(request, "client_id");
+            if (!clientId.empty()) {
+                config.mqttConfig.client_id = clientId;
+            }
+
+            std::string username = parseJsonField(request, "username");
+            if (!username.empty()) {
+                config.mqttConfig.username = username;
+            }
+
+            std::string password = parseJsonField(request, "password");
+            if (!password.empty()) {
+                config.mqttConfig.password = password;
+            }
+
+            int qos = parseJsonInt(request, "qos", 1);
+            if (qos < 0 || qos > 2) {
+                response = createErrorResponse("qos must be 0, 1, or 2", 400);
+                return;
+            }
+            config.mqttConfig.qos = qos;
+
+            bool retain = parseJsonField(request, "retain") == "true";
+            config.mqttConfig.retain = retain;
+
+            int keepAlive = parseJsonInt(request, "keep_alive_seconds", 60);
+            if (keepAlive < 10 || keepAlive > 300) {
+                response = createErrorResponse("keep_alive_seconds must be between 10 and 300", 400);
+                return;
+            }
+            config.mqttConfig.keep_alive_seconds = keepAlive;
+
         }
 
         config.enabled = true;
@@ -2367,6 +2419,13 @@ void APIService::handlePostAlarmConfig(const std::string& request, std::string& 
             json << ",\"port\":" << config.webSocketConfig.port << ","
                  << "\"max_connections\":" << config.webSocketConfig.max_connections << ","
                  << "\"ping_interval_ms\":" << config.webSocketConfig.ping_interval_ms;
+        } else if (method == "mqtt") {
+            json << ",\"broker\":\"" << config.mqttConfig.broker << "\","
+                 << "\"port\":" << config.mqttConfig.port << ","
+                 << "\"topic\":\"" << config.mqttConfig.topic << "\","
+                 << "\"qos\":" << config.mqttConfig.qos << ","
+                 << "\"retain\":" << (config.mqttConfig.retain ? "true" : "false") << ","
+                 << "\"keep_alive_seconds\":" << config.mqttConfig.keep_alive_seconds;
         }
 
         json << ",\"created_at\":\"" << getCurrentTimestamp() << "\""
@@ -2415,6 +2474,13 @@ void APIService::handleGetAlarmConfigs(const std::string& request, std::string& 
                 json << ",\"port\":" << config.webSocketConfig.port << ","
                      << "\"max_connections\":" << config.webSocketConfig.max_connections << ","
                      << "\"ping_interval_ms\":" << config.webSocketConfig.ping_interval_ms;
+            } else if (config.method == AlarmMethod::MQTT) {
+                json << ",\"broker\":\"" << config.mqttConfig.broker << "\","
+                     << "\"port\":" << config.mqttConfig.port << ","
+                     << "\"topic\":\"" << config.mqttConfig.topic << "\","
+                     << "\"qos\":" << config.mqttConfig.qos << ","
+                     << "\"retain\":" << (config.mqttConfig.retain ? "true" : "false") << ","
+                     << "\"keep_alive_seconds\":" << config.mqttConfig.keep_alive_seconds;
             }
 
             json << "}";
@@ -2461,6 +2527,13 @@ void APIService::handleGetAlarmConfig(const std::string& request, std::string& r
                     json << ",\"port\":" << config.webSocketConfig.port << ","
                          << "\"max_connections\":" << config.webSocketConfig.max_connections << ","
                          << "\"ping_interval_ms\":" << config.webSocketConfig.ping_interval_ms;
+                } else if (config.method == AlarmMethod::MQTT) {
+                    json << ",\"broker\":\"" << config.mqttConfig.broker << "\","
+                         << "\"port\":" << config.mqttConfig.port << ","
+                         << "\"topic\":\"" << config.mqttConfig.topic << "\","
+                         << "\"qos\":" << config.mqttConfig.qos << ","
+                         << "\"retain\":" << (config.mqttConfig.retain ? "true" : "false") << ","
+                         << "\"keep_alive_seconds\":" << config.mqttConfig.keep_alive_seconds;
                 }
 
                 json << ",\"timestamp\":\"" << getCurrentTimestamp() << "\""
@@ -2566,6 +2639,13 @@ void APIService::handlePutAlarmConfig(const std::string& request, std::string& r
             json << ",\"port\":" << updatedConfig.webSocketConfig.port << ","
                  << "\"max_connections\":" << updatedConfig.webSocketConfig.max_connections << ","
                  << "\"ping_interval_ms\":" << updatedConfig.webSocketConfig.ping_interval_ms;
+        } else if (updatedConfig.method == AlarmMethod::MQTT) {
+            json << ",\"broker\":\"" << updatedConfig.mqttConfig.broker << "\","
+                 << "\"port\":" << updatedConfig.mqttConfig.port << ","
+                 << "\"topic\":\"" << updatedConfig.mqttConfig.topic << "\","
+                 << "\"qos\":" << updatedConfig.mqttConfig.qos << ","
+                 << "\"retain\":" << (updatedConfig.mqttConfig.retain ? "true" : "false") << ","
+                 << "\"keep_alive_seconds\":" << updatedConfig.mqttConfig.keep_alive_seconds;
         }
 
         json << ",\"updated_at\":\"" << getCurrentTimestamp() << "\""
