@@ -1004,7 +1004,26 @@ AISecurityVision/
 
 **所属子史诗**: 10
 
-**状态**: todo
+**状态**: done
+
+**实施完成**:
+✅ 增强ONVIF SOAP通信：实现真实的GetDeviceInformation、GetProfiles、GetStreamUri SOAP请求
+✅ 添加HTTP客户端功能：parseURL和sendHTTPRequest方法，支持HTTP/HTTPS通信
+✅ 增强XML解析：extractXMLAttribute方法用于提取profile token等属性
+✅ 添加WS-Security认证支持：ONVIF设备用户名密码认证
+✅ SOAP请求失败时的回退机制：使用默认值确保系统稳定性
+✅ 自动设备配置：ONVIFManager::configureDevice()方法实现自动配置
+✅ 自动VideoSource创建：从发现的ONVIF设备自动创建视频源
+✅ TaskManager集成：无缝管道创建和视频源管理
+✅ 自动配置触发：设备发现时自动配置（可启用/禁用）
+✅ 手动配置API：POST /api/source/add-discovered端点支持手动配置
+✅ 真实设备信息提取：通过SOAP获取制造商、型号、固件版本
+✅ 媒体配置文件令牌检索：用于正确的流URI请求
+✅ 实际RTSP流URI提取：从ONVIF GetStreamUri响应中提取
+✅ 智能回退机制：SOAP失败时使用标准RTSP URL
+✅ API集成增强：handlePostAddDiscoveredDevice使用自动配置
+✅ 凭据管理：发现设备的用户名密码管理
+✅ 网络通信：HTTP/HTTPS支持、URL解析、超时处理、主机名解析
 
 ---
 
