@@ -248,12 +248,30 @@ void APIService::setupRoutes() {
         res.set_content(content, "text/html");
     });
 
+    m_httpServer->Get("/face-manager", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string content = loadWebFile("web/templates/face_manager.html");
+        res.set_content(content, "text/html");
+    });
+
     // Static file serving
     m_httpServer->Get(R"(/static/(.*))", [this](const httplib::Request& req, httplib::Response& res) {
         std::string path = "web/static/" + req.matches[1].str();
         std::string content = loadWebFile(path);
         std::string mimeType = getMimeType(path);
         res.set_content(content, mimeType.c_str());
+    });
+
+    // Face images serving
+    m_httpServer->Get(R"(/faces/(.*))", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string imagePath = "faces/" + req.matches[1].str();
+        std::string content = loadWebFile(imagePath);
+        if (content.find("404 - File Not Found") != std::string::npos) {
+            res.status = 404;
+            res.set_content("Image not found", "text/plain");
+        } else {
+            std::string mimeType = getMimeType(imagePath);
+            res.set_content(content, mimeType.c_str());
+        }
     });
 
     std::cout << "[APIService] HTTP routes configured successfully" << std::endl;
