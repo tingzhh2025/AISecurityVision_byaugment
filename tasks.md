@@ -1,4 +1,279 @@
-# 任务拆分文档
+# AI Security Vision System - Detailed Development Plan
+
+## Project Overview
+This is a comprehensive C++17 AI Security Visual Analysis System that processes real-time video streams from RTSP/ONVIF/GB28181 sources. The system provides object detection, face recognition, license plate recognition, behavior analysis, and real-time alerting capabilities using GPU-accelerated AI models.
+
+## Development Phases & Timeline
+
+### Phase 1: Foundation & Core Infrastructure (Weeks 1-3)
+**Goal**: Establish basic system architecture and video processing pipeline
+- Set up CMake build system and dependencies
+- Implement basic video input handling
+- Create core AI processing pipeline
+- Establish database schema and basic API structure
+
+### Phase 2: AI Processing & Recognition (Weeks 4-6)
+**Goal**: Implement core AI capabilities
+- Integrate YOLOv8 with TensorRT optimization
+- Implement face and license plate recognition
+- Add object tracking with ByteTracker
+- Create behavior analysis engine
+
+### Phase 3: Advanced Features & Integration (Weeks 7-9)
+**Goal**: Add advanced monitoring and management features
+- Implement event recording system
+- Add real-time streaming outputs
+- Create comprehensive API endpoints
+- Build system monitoring and health checks
+
+### Phase 4: User Interface & Deployment (Weeks 10-12)
+**Goal**: Complete user-facing features and deployment readiness
+- Develop web-based management interface
+- Implement alarm delivery systems
+- Add multi-ROI and cross-camera tracking
+- Performance optimization and testing
+
+## Technical Architecture Summary
+
+### Core Components:
+1. **TaskManager**: Singleton managing multiple VideoPipeline instances
+2. **VideoPipeline**: Per-stream processing chain (decode→detect→track→analyze→output)
+3. **AI Modules**: YOLOv8Detector, FaceRecognizer, LicensePlateRecognizer, BehaviorAnalyzer
+4. **Output Systems**: Recorder, Streamer, AlarmTrigger
+5. **API Service**: RESTful endpoints using httplib
+6. **Database**: SQLite3 with ORM for event storage
+
+### Key Technologies:
+- **C++17** with modern threading and memory management
+- **CUDA/TensorRT** for GPU-accelerated AI inference
+- **FFmpeg** for video processing and streaming
+- **OpenCV** for computer vision operations
+- **SQLite3** for data persistence
+- **httplib** for REST API server
+
+## Development Priorities
+
+### Critical Path Items:
+1. Video input handling (RTSP/ONVIF support)
+2. YOLOv8 + TensorRT integration
+3. Basic behavior analysis (intrusion detection)
+4. Event recording and alerting
+5. API endpoints for system control
+
+### Secondary Features:
+1. Advanced behavior analysis (crowd, loitering, falls)
+2. Cross-camera tracking with ReID
+3. Web interface for configuration
+4. MQTT/WebSocket alarm delivery
+5. Performance monitoring dashboard
+
+## Implementation Roadmap
+
+### Week 1-2: Project Setup & Foundation
+**Deliverables**:
+- CMake build system with all dependencies
+- Basic project structure and core classes
+- SQLite database schema
+- Basic HTTP API server
+
+**Key Tasks**:
+- Set up development environment with CUDA/TensorRT
+- Create CMakeLists.txt with dependency management
+- Implement TaskManager singleton pattern
+- Create basic VideoPipeline class structure
+- Set up SQLite database with ORM
+
+### Week 3-4: Video Input & Processing
+**Deliverables**:
+- RTSP stream input handling
+- FFmpeg integration for video decoding
+- Basic ONVIF device discovery
+- Video source management API
+
+**Key Tasks**:
+- Implement FFmpegDecoder with GPU acceleration
+- Create RTSP stream handler
+- Add ONVIF device discovery using gSOAP
+- Build video source management endpoints
+
+### Week 5-6: Core AI Pipeline
+**Deliverables**:
+- YOLOv8 object detection with TensorRT
+- ByteTracker integration
+- Basic behavior analysis
+- Real-time processing pipeline
+
+**Key Tasks**:
+- Integrate YOLOv8 with TensorRT optimization
+- Implement ByteTracker for object tracking
+- Create BehaviorAnalyzer for intrusion detection
+- Add debug visualization with bounding boxes
+
+### Week 7-8: Recognition & Recording
+**Deliverables**:
+- Face recognition system
+- License plate recognition
+- Event recording with pre/post buffers
+- Database integration for events
+
+**Key Tasks**:
+- Implement face recognition with ResNet
+- Add license plate OCR with Tesseract
+- Create event-triggered recording system
+- Build face/plate management APIs
+
+### Week 9-10: Streaming & Monitoring
+**Deliverables**:
+- Real-time MJPEG/RTMP streaming
+- System monitoring and health checks
+- Advanced behavior analysis
+- ROI configuration system
+
+**Key Tasks**:
+- Implement streaming output modules
+- Add system metrics collection
+- Create advanced behavior rules
+- Build ROI management interface
+
+### Week 11-12: Integration & Deployment
+**Deliverables**:
+- Complete web management interface
+- Alarm delivery systems
+- Cross-camera tracking
+- Production-ready deployment
+
+**Key Tasks**:
+- Develop web dashboard
+- Implement alarm routing (HTTP/MQTT/WebSocket)
+- Add ReID for cross-camera tracking
+- Performance optimization and testing
+
+## Task Priority Matrix
+
+### P0 (Critical - Must Have):
+- Video input handling (Tasks 1-7)
+- Core AI pipeline (Tasks 8-12)
+- Basic behavior analysis (Tasks 13-18)
+- API endpoints (Tasks 19-23)
+- Event recording (Tasks 30-35)
+
+### P1 (High - Should Have):
+- Face/plate recognition (Tasks 24-29)
+- Streaming outputs (Tasks 36-40)
+- System monitoring (Tasks 41-46)
+- Alarm delivery (Tasks 63-67)
+
+### P2 (Medium - Could Have):
+- Advanced ROI management (Tasks 47-51, 68-73)
+- ONVIF discovery (Tasks 52-56)
+- Face database management (Tasks 57-62)
+
+### P3 (Low - Nice to Have):
+- Cross-camera tracking (Tasks 74-78)
+- Advanced behavior analysis
+- Performance optimizations
+
+## Immediate Next Steps (Week 1)
+
+### 1. Development Environment Setup
+**Priority**: P0 - Critical
+**Estimated Time**: 2-3 days
+
+**Tasks**:
+1. Install CUDA Toolkit (11.8+ recommended)
+2. Install TensorRT (8.5+ recommended)
+3. Set up FFmpeg with CUDA support
+4. Install OpenCV with CUDA support
+5. Configure development IDE (VS Code/CLion)
+
+**Verification**:
+- `nvidia-smi` shows GPU information
+- `nvcc --version` shows CUDA compiler
+- FFmpeg shows CUDA encoders: `ffmpeg -encoders | grep nvenc`
+
+### 2. Project Structure Creation
+**Priority**: P0 - Critical
+**Estimated Time**: 1-2 days
+
+**Directory Structure**:
+```
+AISecurityVision/
+├── CMakeLists.txt
+├── src/
+│   ├── core/
+│   │   ├── TaskManager.h/cpp
+│   │   ├── VideoPipeline.h/cpp
+│   │   └── Config.h/cpp
+│   ├── video/
+│   │   ├── FFmpegDecoder.h/cpp
+│   │   └── StreamHandler.h/cpp
+│   ├── ai/
+│   │   ├── YOLOv8Detector.h/cpp
+│   │   ├── ByteTracker.h/cpp
+│   │   └── BehaviorAnalyzer.h/cpp
+│   ├── recognition/
+│   │   ├── FaceRecognizer.h/cpp
+│   │   └── LicensePlateRecognizer.h/cpp
+│   ├── output/
+│   │   ├── Recorder.h/cpp
+│   │   ├── Streamer.h/cpp
+│   │   └── AlarmTrigger.h/cpp
+│   ├── api/
+│   │   └── APIService.h/cpp
+│   ├── database/
+│   │   └── DatabaseManager.h/cpp
+│   └── main.cpp
+├── include/
+├── models/
+├── config/
+├── tests/
+└── docs/
+```
+
+### 3. CMake Build System
+**Priority**: P0 - Critical
+**Estimated Time**: 1 day
+
+**Key Dependencies**:
+- CUDA/TensorRT
+- FFmpeg
+- OpenCV
+- SQLite3
+- httplib
+- gSOAP (for ONVIF)
+
+### 4. Basic Class Interfaces
+**Priority**: P0 - Critical
+**Estimated Time**: 1-2 days
+
+**Core Classes to Define**:
+- TaskManager (singleton)
+- VideoPipeline (main processing chain)
+- FFmpegDecoder (video input)
+- YOLOv8Detector (object detection)
+- APIService (REST endpoints)
+
+## Development Guidelines
+
+### Code Standards:
+- C++17 standard compliance
+- Modern C++ practices (smart pointers, RAII)
+- Thread-safe design patterns
+- Comprehensive error handling
+- Extensive logging for debugging
+
+### Testing Strategy:
+- Unit tests for core components
+- Integration tests for AI pipeline
+- Performance benchmarks
+- Memory leak detection
+- GPU utilization monitoring
+
+### Documentation Requirements:
+- API documentation (OpenAPI/Swagger)
+- Architecture diagrams
+- Deployment guides
+- User manuals
 
 ## 子史诗
 
