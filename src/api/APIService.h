@@ -35,6 +35,24 @@ public:
     void setPort(int port);
     int getPort() const;
 
+    // Enhanced polygon validation with detailed error reporting
+    struct PolygonValidationResult {
+        bool isValid;
+        std::string errorMessage;
+        std::string errorCode;
+        double area;
+        bool isClosed;
+        bool isConvex;
+        bool hasSelfIntersection;
+
+        PolygonValidationResult() : isValid(false), area(0.0), isClosed(false),
+                                  isConvex(false), hasSelfIntersection(false) {}
+    };
+
+    // Public validation methods for testing
+    bool validateROIPolygon(const std::vector<cv::Point>& polygon);
+    PolygonValidationResult validateROIPolygonDetailed(const std::vector<cv::Point>& polygon);
+
 private:
     // HTTP server implementation
     void serverThread();
@@ -101,7 +119,6 @@ private:
     // JSON deserialization for behavior rules
     bool deserializeROI(const std::string& json, ROI& roi);
     bool deserializeIntrusionRule(const std::string& json, IntrusionRule& rule);
-    bool validateROIPolygon(const std::vector<cv::Point>& polygon);
 
     // Member variables
     int m_port;

@@ -1,6 +1,7 @@
 #include "APIService.h"
 #include "../core/TaskManager.h"
 #include "../ai/BehaviorAnalyzer.h"
+#include "../utils/PolygonValidator.h"
 #include <iostream>
 #include <sstream>
 #include <chrono>
@@ -801,8 +802,22 @@ void APIService::handlePostRules(const std::string& request, std::string& respon
             return;
         }
 
-        if (!validateROIPolygon(rule.roi.polygon)) {
-            response = createErrorResponse("Invalid ROI polygon (minimum 3 points required)", 400);
+        // Enhanced polygon validation with detailed error reporting
+        auto validationResult = validateROIPolygonDetailed(rule.roi.polygon);
+        if (!validationResult.isValid) {
+            std::ostringstream errorJson;
+            errorJson << "{"
+                     << "\"error\":\"" << validationResult.errorMessage << "\","
+                     << "\"error_code\":\"" << validationResult.errorCode << "\","
+                     << "\"polygon_points\":" << rule.roi.polygon.size() << ","
+                     << "\"validation_details\":{"
+                     << "\"area\":" << validationResult.area << ","
+                     << "\"is_closed\":" << (validationResult.isClosed ? "true" : "false") << ","
+                     << "\"is_convex\":" << (validationResult.isConvex ? "true" : "false") << ","
+                     << "\"has_self_intersection\":" << (validationResult.hasSelfIntersection ? "true" : "false")
+                     << "}"
+                     << "}";
+            response = createJsonResponse(errorJson.str(), 400);
             return;
         }
 
@@ -950,8 +965,22 @@ void APIService::handlePutRule(const std::string& request, std::string& response
             return;
         }
 
-        if (!validateROIPolygon(rule.roi.polygon)) {
-            response = createErrorResponse("Invalid ROI polygon (minimum 3 points required)", 400);
+        // Enhanced polygon validation with detailed error reporting
+        auto validationResult = validateROIPolygonDetailed(rule.roi.polygon);
+        if (!validationResult.isValid) {
+            std::ostringstream errorJson;
+            errorJson << "{"
+                     << "\"error\":\"" << validationResult.errorMessage << "\","
+                     << "\"error_code\":\"" << validationResult.errorCode << "\","
+                     << "\"polygon_points\":" << rule.roi.polygon.size() << ","
+                     << "\"validation_details\":{"
+                     << "\"area\":" << validationResult.area << ","
+                     << "\"is_closed\":" << (validationResult.isClosed ? "true" : "false") << ","
+                     << "\"is_convex\":" << (validationResult.isConvex ? "true" : "false") << ","
+                     << "\"has_self_intersection\":" << (validationResult.hasSelfIntersection ? "true" : "false")
+                     << "}"
+                     << "}";
+            response = createJsonResponse(errorJson.str(), 400);
             return;
         }
 
@@ -1030,8 +1059,22 @@ void APIService::handlePostROIs(const std::string& request, std::string& respons
             return;
         }
 
-        if (!validateROIPolygon(roi.polygon)) {
-            response = createErrorResponse("Invalid ROI polygon (minimum 3 points required)", 400);
+        // Enhanced polygon validation with detailed error reporting
+        auto validationResult = validateROIPolygonDetailed(roi.polygon);
+        if (!validationResult.isValid) {
+            std::ostringstream errorJson;
+            errorJson << "{"
+                     << "\"error\":\"" << validationResult.errorMessage << "\","
+                     << "\"error_code\":\"" << validationResult.errorCode << "\","
+                     << "\"polygon_points\":" << roi.polygon.size() << ","
+                     << "\"validation_details\":{"
+                     << "\"area\":" << validationResult.area << ","
+                     << "\"is_closed\":" << (validationResult.isClosed ? "true" : "false") << ","
+                     << "\"is_convex\":" << (validationResult.isConvex ? "true" : "false") << ","
+                     << "\"has_self_intersection\":" << (validationResult.hasSelfIntersection ? "true" : "false")
+                     << "}"
+                     << "}";
+            response = createJsonResponse(errorJson.str(), 400);
             return;
         }
 
@@ -1212,24 +1255,39 @@ bool APIService::deserializeIntrusionRule(const std::string& json, IntrusionRule
 }
 
 bool APIService::validateROIPolygon(const std::vector<cv::Point>& polygon) {
-    // Minimum 3 points for a valid polygon
-    if (polygon.size() < 3) {
-        return false;
-    }
+    // Use the enhanced validation for backward compatibility
+    return validateROIPolygonDetailed(polygon).isValid;
+}
 
-    // Check for reasonable coordinate values (0-10000 range)
-    for (const auto& point : polygon) {
-        if (point.x < 0 || point.x > 10000 || point.y < 0 || point.y > 10000) {
-            return false;
-        }
-    }
+APIService::PolygonValidationResult APIService::validateROIPolygonDetailed(const std::vector<cv::Point>& polygon) {
+    // Create polygon validator with appropriate configuration for ROI validation
+    PolygonValidator::ValidationConfig config;
+    config.minPoints = 3;
+    config.maxPoints = 50;  // Reasonable limit for ROI polygons
+    config.minX = 0;
+    config.maxX = 10000;
+    config.minY = 0;
+    config.maxY = 10000;
+    config.minArea = 100.0;  // Minimum 100 square pixels
+    config.maxArea = 1000000.0;  // Maximum 1M square pixels
+    config.requireClosed = false;  // Allow open polygons for flexibility
+    config.allowSelfIntersection = false;  // Disallow self-intersecting polygons
+    config.requireConvex = false;  // Allow non-convex polygons
 
-    // TODO: Add more sophisticated polygon validation
-    // - Check for self-intersections
-    // - Verify clockwise/counter-clockwise ordering
-    // - Ensure minimum area
+    PolygonValidator validator(config);
+    auto result = validator.validate(polygon);
 
-    return true;
+    // Convert to APIService result format
+    PolygonValidationResult apiResult;
+    apiResult.isValid = result.isValid;
+    apiResult.errorMessage = result.errorMessage;
+    apiResult.errorCode = result.errorCode;
+    apiResult.area = result.area;
+    apiResult.isClosed = result.isClosed;
+    apiResult.isConvex = result.isConvex;
+    apiResult.hasSelfIntersection = result.hasSelfIntersection;
+
+    return apiResult;
 }
 
 // Web dashboard handlers
