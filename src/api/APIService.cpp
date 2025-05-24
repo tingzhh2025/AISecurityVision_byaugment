@@ -199,6 +199,30 @@ void APIService::setupRoutes() {
         res.set_content(response, "application/json");
     });
 
+    // Web interface routes
+    m_httpServer->Get("/", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string content = loadWebFile("web/templates/dashboard.html");
+        res.set_content(content, "text/html");
+    });
+
+    m_httpServer->Get("/dashboard", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string content = loadWebFile("web/templates/dashboard.html");
+        res.set_content(content, "text/html");
+    });
+
+    m_httpServer->Get("/onvif-discovery", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string content = loadWebFile("web/templates/onvif_discovery.html");
+        res.set_content(content, "text/html");
+    });
+
+    // Static file serving
+    m_httpServer->Get(R"(/static/(.*))", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string path = "web/static/" + req.matches[1].str();
+        std::string content = loadWebFile(path);
+        std::string mimeType = getMimeType(path);
+        res.set_content(content, mimeType.c_str());
+    });
+
     std::cout << "[APIService] HTTP routes configured successfully" << std::endl;
 }
 
@@ -1698,3 +1722,20 @@ bool APIService::fileExists(const std::string& filePath) {
     std::ifstream file(filePath);
     return file.good();
 }
+
+std::string APIService::loadWebFile(const std::string& filePath) {
+    std::ifstream file(filePath);
+    if (!file.is_open()) {
+        return "<html><body><h1>404 - File Not Found</h1><p>The requested file could not be found.</p></body></html>";
+    }
+
+    std::string content;
+    std::string line;
+    while (std::getline(file, line)) {
+        content += line + "\n";
+    }
+
+    return content;
+}
+
+

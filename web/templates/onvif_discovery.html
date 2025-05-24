@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ONVIF Device Discovery - AI Security Vision System</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="stylesheet" href="/static/css/onvif_discovery.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Header -->
+        <header class="dashboard-header">
+            <div class="header-content">
+                <h1>🔍 ONVIF Device Discovery</h1>
+                <div class="system-status">
+                    <span id="system-status" class="status-indicator">●</span>
+                    <span id="system-status-text">Ready</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="dashboard-main">
+            <!-- Discovery Control Panel -->
+            <section class="discovery-panel">
+                <div class="panel-header">
+                    <h3>📡 Network Discovery</h3>
+                    <div class="discovery-status">
+                        <span id="discovery-status">Ready to scan</span>
+                    </div>
+                </div>
+                
+                <div class="panel-content">
+                    <div class="discovery-controls">
+                        <button id="scan-btn" class="scan-button">
+                            <span class="btn-icon">🔍</span>
+                            <span class="btn-text">Scan for ONVIF Devices</span>
+                        </button>
+                        
+                        <div class="scan-options">
+                            <label for="scan-timeout">Scan Timeout:</label>
+                            <select id="scan-timeout">
+                                <option value="5000">5 seconds</option>
+                                <option value="10000" selected>10 seconds</option>
+                                <option value="15000">15 seconds</option>
+                                <option value="30000">30 seconds</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="discovery-progress" id="discovery-progress" style="display: none;">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progress-fill"></div>
+                        </div>
+                        <div class="progress-text" id="progress-text">Scanning network...</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Discovery Results -->
+            <section class="results-section">
+                <div class="section-header">
+                    <h3>📹 Discovered Devices</h3>
+                    <div class="results-summary">
+                        <span id="device-count">0 devices found</span>
+                        <button id="refresh-btn" class="control-btn" style="display: none;">🔄 Refresh</button>
+                    </div>
+                </div>
+                
+                <div class="devices-container" id="devices-container">
+                    <div class="no-devices" id="no-devices">
+                        <div class="no-devices-icon">📷</div>
+                        <div class="no-devices-text">No ONVIF devices discovered</div>
+                        <div class="no-devices-hint">Click "Scan for ONVIF Devices" to search your network</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Device Configuration Modal -->
+            <div id="config-modal" class="modal" style="display: none;">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>⚙️ Configure ONVIF Device</h3>
+                        <button class="modal-close" id="modal-close">&times;</button>
+                    </div>
+                    
+                    <div class="modal-body">
+                        <div class="device-info" id="modal-device-info">
+                            <!-- Device information will be populated here -->
+                        </div>
+                        
+                        <form id="config-form">
+                            <div class="form-group">
+                                <label for="device-username">Username:</label>
+                                <input type="text" id="device-username" placeholder="admin" autocomplete="username">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="device-password">Password:</label>
+                                <input type="password" id="device-password" placeholder="Enter device password" autocomplete="current-password">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="auto-start" checked>
+                                    Start monitoring immediately
+                                </label>
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button type="button" class="btn-secondary" id="cancel-btn">Cancel</button>
+                        <button type="button" class="btn-primary" id="configure-btn">Configure Device</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="dashboard-footer">
+            <div class="footer-content">
+                <span>AI Security Vision System v1.0</span>
+                <span><a href="/dashboard">← Back to Dashboard</a></span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Processing...</div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/js/onvif_discovery.js"></script>
+</body>
+</html>

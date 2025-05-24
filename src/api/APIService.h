@@ -125,6 +125,9 @@ private:
     bool deserializeROI(const std::string& json, ROI& roi);
     bool deserializeIntrusionRule(const std::string& json, IntrusionRule& rule);
 
+    // Web interface utilities
+    std::string loadWebFile(const std::string& filePath);
+
     // Member variables
     int m_port;
     std::atomic<bool> m_running{false};
