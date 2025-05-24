@@ -25,11 +25,13 @@ static size_t WriteCallback(void* contents, size_t size, size_t nmemb, std::stri
 std::string AlarmPayload::toJson() const {
     std::ostringstream json;
     json << "{"
+         << "\"alarm_id\":\"" << alarm_id << "\","
          << "\"event_type\":\"" << event_type << "\","
          << "\"camera_id\":\"" << camera_id << "\","
          << "\"rule_id\":\"" << rule_id << "\","
          << "\"object_id\":\"" << object_id << "\","
          << "\"confidence\":" << std::fixed << std::setprecision(3) << confidence << ","
+         << "\"priority\":" << priority << ","
          << "\"timestamp\":\"" << timestamp << "\","
          << "\"metadata\":\"" << metadata << "\","
          << "\"bounding_box\":{"
@@ -105,11 +107,15 @@ void AlarmTrigger::triggerAlarm(const FrameResult& result) {
     for (const auto& event : result.events) {
         AlarmPayload payload = createAlarmPayload(result, event);
 
+        // Determine priority based on event type and confidence
+        payload.priority = calculateAlarmPriority(event.eventType, payload.confidence);
+        payload.alarm_id = generateAlarmId();
+
         std::lock_guard<std::mutex> lock(m_queueMutex);
 
         // Check queue size limit
         if (m_alarmQueue.size() >= MAX_QUEUE_SIZE) {
-            std::cerr << "[AlarmTrigger] Alarm queue full, dropping oldest alarm" << std::endl;
+            std::cerr << "[AlarmTrigger] Alarm queue full, dropping lowest priority alarm" << std::endl;
             m_alarmQueue.pop();
         }
 
@@ -117,7 +123,9 @@ void AlarmTrigger::triggerAlarm(const FrameResult& result) {
         m_queueCondition.notify_one();
 
         std::cout << "[AlarmTrigger] Queued alarm: " << event.eventType
-                  << " for camera: " << payload.camera_id << std::endl;
+                  << " for camera: " << payload.camera_id
+                  << " (Priority: " << payload.priority
+                  << ", ID: " << payload.alarm_id << ")" << std::endl;
     }
 }
 
@@ -136,13 +144,17 @@ void AlarmTrigger::triggerTestAlarm(const std::string& eventType, const std::str
     payload.metadata = "Test alarm generated via API";
     payload.bounding_box = cv::Rect(100, 100, 200, 200);
     payload.test_mode = true;
+    payload.priority = 3;  // Medium priority for test alarms
+    payload.alarm_id = generateAlarmId();
 
     std::lock_guard<std::mutex> lock(m_queueMutex);
     m_alarmQueue.push(payload);
     m_queueCondition.notify_one();
 
     std::cout << "[AlarmTrigger] Queued test alarm: " << eventType
-              << " for camera: " << cameraId << std::endl;
+              << " for camera: " << cameraId
+              << " (Priority: " << payload.priority
+              << ", ID: " << payload.alarm_id << ")" << std::endl;
 }
 
 // Configuration management methods
@@ -231,14 +243,25 @@ void AlarmTrigger::processAlarmQueue() {
             break;
         }
 
-        // Process all pending alarms
+        // Process all pending alarms (highest priority first)
         while (!m_alarmQueue.empty()) {
-            AlarmPayload payload = m_alarmQueue.front();
+            AlarmPayload payload = m_alarmQueue.top();
             m_alarmQueue.pop();
             lock.unlock();
 
-            // Deliver alarm to all configured destinations
-            deliverAlarm(payload);
+            // Deliver alarm to all configured destinations with routing
+            AlarmRoutingResult result = deliverAlarm(payload);
+
+            // Store routing result in history
+            {
+                std::lock_guard<std::mutex> historyLock(m_routingHistoryMutex);
+                m_routingHistory.push_back(result);
+
+                // Limit history size
+                if (m_routingHistory.size() > MAX_ROUTING_HISTORY) {
+                    m_routingHistory.erase(m_routingHistory.begin());
+                }
+            }
 
             lock.lock();
         }
@@ -247,47 +270,88 @@ void AlarmTrigger::processAlarmQueue() {
     std::cout << "[AlarmTrigger] Alarm processing thread stopped" << std::endl;
 }
 
-void AlarmTrigger::deliverAlarm(const AlarmPayload& payload) {
-    std::lock_guard<std::mutex> lock(m_configMutex);
+AlarmRoutingResult AlarmTrigger::deliverAlarm(const AlarmPayload& payload) {
+    auto startTime = std::chrono::high_resolution_clock::now();
+    AlarmRoutingResult routingResult(payload.alarm_id);
 
-    bool delivered = false;
+    std::vector<AlarmConfig> configs;
+    {
+        std::lock_guard<std::mutex> lock(m_configMutex);
+        configs = m_alarmConfigs;  // Copy configs to avoid holding lock during delivery
+    }
 
-    for (const auto& config : m_alarmConfigs) {
-        if (!config.enabled) {
-            continue;
+    // Filter enabled configs
+    std::vector<AlarmConfig> enabledConfigs;
+    for (const auto& config : configs) {
+        if (config.enabled) {
+            enabledConfigs.push_back(config);
         }
+    }
 
+    if (enabledConfigs.empty()) {
+        std::cerr << "[AlarmTrigger] No enabled alarm configurations found" << std::endl;
+        m_failedCount.fetch_add(1);
+        return routingResult;
+    }
+
+    std::cout << "[AlarmTrigger] Delivering alarm " << payload.alarm_id
+              << " to " << enabledConfigs.size() << " channels simultaneously" << std::endl;
+
+    // Prepare futures for parallel delivery
+    std::vector<std::future<DeliveryResult>> futures;
+    std::vector<std::promise<DeliveryResult>> promises(enabledConfigs.size());
+
+    // Launch parallel delivery tasks
+    for (size_t i = 0; i < enabledConfigs.size(); ++i) {
+        futures.push_back(promises[i].get_future());
+
+        std::thread deliveryThread(&AlarmTrigger::deliverToChannelAsync, this,
+                                 payload, enabledConfigs[i], std::ref(promises[i]));
+        deliveryThread.detach();
+    }
+
+    // Collect results from all delivery attempts
+    for (auto& future : futures) {
         try {
-            switch (config.method) {
-                case AlarmMethod::HTTP_POST:
-                    deliverHttpAlarm(payload, config.httpConfig);
-                    delivered = true;
-                    break;
+            // Wait for delivery with timeout (max 10 seconds per channel)
+            if (future.wait_for(std::chrono::seconds(10)) == std::future_status::ready) {
+                DeliveryResult result = future.get();
+                routingResult.delivery_results.push_back(result);
 
-                case AlarmMethod::WEBSOCKET:
-                    deliverWebSocketAlarm(payload, config.webSocketConfig);
-                    delivered = true;
-                    break;
-
-                case AlarmMethod::MQTT:
-                    deliverMQTTAlarm(payload, config.mqttConfig);
-                    delivered = true;
-                    break;
+                if (result.success) {
+                    routingResult.successful_deliveries++;
+                    m_deliveredCount.fetch_add(1);
+                } else {
+                    routingResult.failed_deliveries++;
+                    m_failedCount.fetch_add(1);
+                }
+            } else {
+                // Timeout occurred
+                routingResult.delivery_results.emplace_back("timeout", AlarmMethod::HTTP_POST,
+                                                          false, std::chrono::milliseconds(10000),
+                                                          "Delivery timeout");
+                routingResult.failed_deliveries++;
+                m_failedCount.fetch_add(1);
             }
         } catch (const std::exception& e) {
-            std::cerr << "[AlarmTrigger] Failed to deliver alarm via config "
-                      << config.id << ": " << e.what() << std::endl;
+            std::cerr << "[AlarmTrigger] Exception during delivery: " << e.what() << std::endl;
+            routingResult.delivery_results.emplace_back("exception", AlarmMethod::HTTP_POST,
+                                                      false, std::chrono::milliseconds(0),
+                                                      e.what());
+            routingResult.failed_deliveries++;
             m_failedCount.fetch_add(1);
         }
     }
 
-    if (delivered) {
-        m_deliveredCount.fetch_add(1);
-        std::cout << "[AlarmTrigger] Successfully delivered alarm: " << payload.event_type << std::endl;
-    } else {
-        std::cerr << "[AlarmTrigger] No enabled alarm configurations found" << std::endl;
-        m_failedCount.fetch_add(1);
-    }
+    auto endTime = std::chrono::high_resolution_clock::now();
+    routingResult.total_time = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+
+    std::cout << "[AlarmTrigger] Alarm " << payload.alarm_id << " routing complete: "
+              << routingResult.successful_deliveries << " successful, "
+              << routingResult.failed_deliveries << " failed, "
+              << routingResult.total_time.count() << "ms total" << std::endl;
+
+    return routingResult;
 }
 
 void AlarmTrigger::deliverHttpAlarm(const AlarmPayload& payload, const HttpAlarmConfig& config) {
@@ -592,4 +656,276 @@ bool AlarmTrigger::publishMQTTMessage(const std::string& topic, const std::strin
     std::cerr << "[AlarmTrigger] MQTT support not compiled" << std::endl;
     return false;
 #endif
+}
+
+// New routing system helper methods
+void AlarmTrigger::deliverToChannelAsync(const AlarmPayload& payload, const AlarmConfig& config,
+                                        std::promise<DeliveryResult>& promise) {
+    try {
+        DeliveryResult result("unknown", config.method, false, std::chrono::milliseconds(0));
+
+        switch (config.method) {
+            case AlarmMethod::HTTP_POST:
+                result = deliverHttpAlarm(payload, config);
+                break;
+            case AlarmMethod::WEBSOCKET:
+                result = deliverWebSocketAlarm(payload, config);
+                break;
+            case AlarmMethod::MQTT:
+                result = deliverMQTTAlarm(payload, config);
+                break;
+        }
+
+        promise.set_value(result);
+    } catch (const std::exception& e) {
+        DeliveryResult errorResult(config.id, config.method, false,
+                                 std::chrono::milliseconds(0), e.what());
+        promise.set_value(errorResult);
+    }
+}
+
+DeliveryResult AlarmTrigger::deliverHttpAlarm(const AlarmPayload& payload, const AlarmConfig& config) {
+    auto startTime = std::chrono::high_resolution_clock::now();
+
+    if (!config.httpConfig.enabled || config.httpConfig.url.empty()) {
+        auto endTime = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+        return DeliveryResult(config.id, AlarmMethod::HTTP_POST, false, duration,
+                            "HTTP config disabled or invalid URL");
+    }
+
+    std::string jsonPayload = payload.toJson();
+    bool success = sendHttpPost(config.httpConfig.url, jsonPayload,
+                               config.httpConfig.headers, config.httpConfig.timeout_ms);
+
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+
+    if (success) {
+        std::cout << "[AlarmTrigger] HTTP alarm delivered to: " << config.httpConfig.url
+                  << " (" << duration.count() << "ms)" << std::endl;
+        return DeliveryResult(config.id, AlarmMethod::HTTP_POST, true, duration);
+    } else {
+        std::cerr << "[AlarmTrigger] Failed to deliver HTTP alarm to: " << config.httpConfig.url << std::endl;
+        return DeliveryResult(config.id, AlarmMethod::HTTP_POST, false, duration, "HTTP delivery failed");
+    }
+}
+
+DeliveryResult AlarmTrigger::deliverWebSocketAlarm(const AlarmPayload& payload, const AlarmConfig& config) {
+    auto startTime = std::chrono::high_resolution_clock::now();
+
+#ifdef HAVE_WEBSOCKETPP
+    if (!config.webSocketConfig.enabled) {
+        auto endTime = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+        return DeliveryResult(config.id, AlarmMethod::WEBSOCKET, false, duration,
+                            "WebSocket config disabled");
+    }
+
+    if (!m_webSocketServer || !m_webSocketServer->isRunning()) {
+        auto endTime = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+        return DeliveryResult(config.id, AlarmMethod::WEBSOCKET, false, duration,
+                            "WebSocket server not running");
+    }
+
+    std::string jsonPayload = payload.toJson();
+    m_webSocketServer->broadcast(jsonPayload);
+
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+
+    std::cout << "[AlarmTrigger] WebSocket alarm broadcasted to "
+              << m_webSocketServer->getConnectionCount() << " clients ("
+              << duration.count() << "ms)" << std::endl;
+
+    return DeliveryResult(config.id, AlarmMethod::WEBSOCKET, true, duration);
+#else
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+    return DeliveryResult(config.id, AlarmMethod::WEBSOCKET, false, duration,
+                        "WebSocket support not compiled");
+#endif
+}
+
+DeliveryResult AlarmTrigger::deliverMQTTAlarm(const AlarmPayload& payload, const AlarmConfig& config) {
+    auto startTime = std::chrono::high_resolution_clock::now();
+
+#ifdef HAVE_MQTT
+    if (!config.mqttConfig.enabled) {
+        auto endTime = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+        return DeliveryResult(config.id, AlarmMethod::MQTT, false, duration,
+                            "MQTT config disabled");
+    }
+
+    // Connect to MQTT broker if not connected or config changed
+    if (!m_mqttConnected.load() ||
+        m_currentMQTTConfig.broker != config.mqttConfig.broker ||
+        m_currentMQTTConfig.port != config.mqttConfig.port) {
+
+        if (!connectMQTTClient(config.mqttConfig)) {
+            auto endTime = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+            return DeliveryResult(config.id, AlarmMethod::MQTT, false, duration,
+                                "Failed to connect to MQTT broker");
+        }
+    }
+
+    std::string jsonPayload = payload.toJson();
+
+    if (!publishMQTTMessage(config.mqttConfig.topic, jsonPayload,
+                           config.mqttConfig.qos, config.mqttConfig.retain)) {
+        auto endTime = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+        return DeliveryResult(config.id, AlarmMethod::MQTT, false, duration,
+                            "Failed to publish MQTT message");
+    }
+
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+
+    std::cout << "[AlarmTrigger] MQTT alarm published to " << config.mqttConfig.broker
+              << " topic: " << config.mqttConfig.topic << " (QoS " << config.mqttConfig.qos
+              << ", " << duration.count() << "ms)" << std::endl;
+
+    return DeliveryResult(config.id, AlarmMethod::MQTT, true, duration);
+#else
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+    return DeliveryResult(config.id, AlarmMethod::MQTT, false, duration,
+                        "MQTT support not compiled");
+#endif
+}
+
+// Priority calculation helper
+int AlarmTrigger::calculateAlarmPriority(const std::string& eventType, double confidence) const {
+    // Priority calculation based on event type and confidence
+    int basePriority = 1;
+
+    if (eventType == "intrusion" || eventType == "unauthorized_access") {
+        basePriority = 5;  // Highest priority
+    } else if (eventType == "motion_detected" || eventType == "object_detected") {
+        basePriority = 3;  // Medium priority
+    } else if (eventType == "loitering" || eventType == "abandoned_object") {
+        basePriority = 2;  // Low-medium priority
+    } else {
+        basePriority = 1;  // Default priority
+    }
+
+    // Adjust based on confidence (higher confidence = higher priority)
+    if (confidence >= 0.9) {
+        basePriority = std::min(5, basePriority + 1);
+    } else if (confidence < 0.5) {
+        basePriority = std::max(1, basePriority - 1);
+    }
+
+    return basePriority;
+}
+
+// Routing system status methods
+AlarmRoutingResult AlarmTrigger::getLastRoutingResult() const {
+    std::lock_guard<std::mutex> lock(m_routingHistoryMutex);
+
+    if (m_routingHistory.empty()) {
+        return AlarmRoutingResult("no_results");
+    }
+
+    return m_routingHistory.back();
+}
+
+std::vector<AlarmRoutingResult> AlarmTrigger::getRecentRoutingResults(size_t count) const {
+    std::lock_guard<std::mutex> lock(m_routingHistoryMutex);
+
+    std::vector<AlarmRoutingResult> results;
+
+    if (m_routingHistory.empty()) {
+        return results;
+    }
+
+    size_t startIndex = m_routingHistory.size() > count ? m_routingHistory.size() - count : 0;
+
+    for (size_t i = startIndex; i < m_routingHistory.size(); ++i) {
+        results.push_back(m_routingHistory[i]);
+    }
+
+    return results;
+}
+
+void AlarmTrigger::clearRoutingHistory() {
+    std::lock_guard<std::mutex> lock(m_routingHistoryMutex);
+    m_routingHistory.clear();
+    std::cout << "[AlarmTrigger] Routing history cleared" << std::endl;
+}
+
+// Performance monitoring methods
+double AlarmTrigger::getAverageDeliveryTime() const {
+    std::lock_guard<std::mutex> lock(m_routingHistoryMutex);
+
+    if (m_routingHistory.empty()) {
+        return 0.0;
+    }
+
+    double totalTime = 0.0;
+    size_t totalDeliveries = 0;
+
+    for (const auto& result : m_routingHistory) {
+        for (const auto& delivery : result.delivery_results) {
+            totalTime += delivery.delivery_time.count();
+            totalDeliveries++;
+        }
+    }
+
+    return totalDeliveries > 0 ? totalTime / totalDeliveries : 0.0;
+}
+
+std::map<AlarmMethod, double> AlarmTrigger::getDeliveryTimesByMethod() const {
+    std::lock_guard<std::mutex> lock(m_routingHistoryMutex);
+
+    std::map<AlarmMethod, double> methodTimes;
+    std::map<AlarmMethod, size_t> methodCounts;
+
+    for (const auto& result : m_routingHistory) {
+        for (const auto& delivery : result.delivery_results) {
+            methodTimes[delivery.method] += delivery.delivery_time.count();
+            methodCounts[delivery.method]++;
+        }
+    }
+
+    // Calculate averages
+    for (auto& pair : methodTimes) {
+        if (methodCounts[pair.first] > 0) {
+            pair.second /= methodCounts[pair.first];
+        }
+    }
+
+    return methodTimes;
+}
+
+std::map<AlarmMethod, double> AlarmTrigger::getSuccessRatesByMethod() const {
+    std::lock_guard<std::mutex> lock(m_routingHistoryMutex);
+
+    std::map<AlarmMethod, size_t> methodSuccesses;
+    std::map<AlarmMethod, size_t> methodTotals;
+    std::map<AlarmMethod, double> successRates;
+
+    for (const auto& result : m_routingHistory) {
+        for (const auto& delivery : result.delivery_results) {
+            methodTotals[delivery.method]++;
+            if (delivery.success) {
+                methodSuccesses[delivery.method]++;
+            }
+        }
+    }
+
+    // Calculate success rates
+    for (const auto& pair : methodTotals) {
+        AlarmMethod method = pair.first;
+        size_t total = pair.second;
+        size_t successes = methodSuccesses[method];
+
+        successRates[method] = total > 0 ? (double)successes / total * 100.0 : 0.0;
+    }
+
+    return successRates;
 }

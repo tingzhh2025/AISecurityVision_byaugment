@@ -9,6 +9,8 @@
 #include <condition_variable>
 #include <atomic>
 #include <map>
+#include <chrono>
+#include <future>
 #include <opencv2/opencv.hpp>
 
 // Forward declarations
@@ -92,7 +94,7 @@ struct AlarmConfig {
 };
 
 /**
- * @brief Alarm delivery payload
+ * @brief Alarm delivery payload with priority support
  */
 struct AlarmPayload {
     std::string event_type;
@@ -104,20 +106,57 @@ struct AlarmPayload {
     std::string metadata;
     cv::Rect bounding_box;
     bool test_mode = false;
+    int priority = 1;  // 1-5 scale (5 = highest priority)
+    std::string alarm_id;  // Unique alarm identifier
 
     // Convert to JSON string
     std::string toJson() const;
+
+    // Priority comparison for priority queue (higher priority first)
+    bool operator<(const AlarmPayload& other) const {
+        return priority < other.priority;  // Reverse for max-heap
+    }
 };
 
 /**
- * @brief Enhanced alarm trigger system with HTTP POST delivery
+ * @brief Delivery result for individual alarm channels
+ */
+struct DeliveryResult {
+    std::string config_id;
+    AlarmMethod method;
+    bool success;
+    std::chrono::milliseconds delivery_time;
+    std::string error_message;
+
+    DeliveryResult(const std::string& id, AlarmMethod m, bool s,
+                  std::chrono::milliseconds time, const std::string& error = "")
+        : config_id(id), method(m), success(s), delivery_time(time), error_message(error) {}
+};
+
+/**
+ * @brief Alarm routing result containing all delivery attempts
+ */
+struct AlarmRoutingResult {
+    std::string alarm_id;
+    std::vector<DeliveryResult> delivery_results;
+    std::chrono::milliseconds total_time;
+    size_t successful_deliveries;
+    size_t failed_deliveries;
+
+    AlarmRoutingResult(const std::string& id)
+        : alarm_id(id), total_time(0), successful_deliveries(0), failed_deliveries(0) {}
+};
+
+/**
+ * @brief Enhanced alarm trigger system with multi-channel routing
  *
  * This class provides:
- * - HTTP POST alarm delivery with JSON payloads
- * - Configurable alarm destinations
- * - Asynchronous alarm processing
- * - Test alarm generation
- * - Alarm delivery status tracking
+ * - Multi-channel alarm delivery (HTTP, WebSocket, MQTT)
+ * - Priority-based alarm processing with priority queue
+ * - Simultaneous delivery to multiple channels
+ * - Parallel delivery with performance monitoring
+ * - Configurable alarm destinations with priority levels
+ * - Comprehensive delivery statistics and routing results
  */
 class AlarmTrigger {
 public:
@@ -143,13 +182,29 @@ public:
     size_t getDeliveredAlarmsCount() const;
     size_t getFailedAlarmsCount() const;
 
+    // Routing system methods
+    AlarmRoutingResult getLastRoutingResult() const;
+    std::vector<AlarmRoutingResult> getRecentRoutingResults(size_t count = 10) const;
+    void clearRoutingHistory();
+
+    // Performance monitoring
+    double getAverageDeliveryTime() const;
+    std::map<AlarmMethod, double> getDeliveryTimesByMethod() const;
+    std::map<AlarmMethod, double> getSuccessRatesByMethod() const;
+
 private:
     // Alarm processing
     void processAlarmQueue();
-    void deliverAlarm(const AlarmPayload& payload);
-    void deliverHttpAlarm(const AlarmPayload& payload, const HttpAlarmConfig& config);
-    void deliverWebSocketAlarm(const AlarmPayload& payload, const WebSocketAlarmConfig& config);
-    void deliverMQTTAlarm(const AlarmPayload& payload, const MQTTAlarmConfig& config);
+    AlarmRoutingResult deliverAlarm(const AlarmPayload& payload);
+
+    // Individual delivery methods with timing
+    DeliveryResult deliverHttpAlarm(const AlarmPayload& payload, const AlarmConfig& config);
+    DeliveryResult deliverWebSocketAlarm(const AlarmPayload& payload, const AlarmConfig& config);
+    DeliveryResult deliverMQTTAlarm(const AlarmPayload& payload, const AlarmConfig& config);
+
+    // Parallel delivery support
+    void deliverToChannelAsync(const AlarmPayload& payload, const AlarmConfig& config,
+                              std::promise<DeliveryResult>& promise);
 
     // HTTP client functionality
     bool sendHttpPost(const std::string& url, const std::string& jsonPayload,
@@ -169,10 +224,16 @@ private:
     std::string generateAlarmId() const;
     std::string getCurrentTimestamp() const;
     AlarmPayload createAlarmPayload(const FrameResult& result, const BehaviorEvent& event) const;
+    int calculateAlarmPriority(const std::string& eventType, double confidence) const;
 
     // Member variables
     std::vector<AlarmConfig> m_alarmConfigs;
-    std::queue<AlarmPayload> m_alarmQueue;
+    std::priority_queue<AlarmPayload> m_alarmQueue;  // Priority queue for alarm routing
+
+    // Routing history and statistics
+    std::vector<AlarmRoutingResult> m_routingHistory;
+    mutable std::mutex m_routingHistoryMutex;
+    static constexpr size_t MAX_ROUTING_HISTORY = 100;
 
     // Threading
     std::thread m_processingThread;
