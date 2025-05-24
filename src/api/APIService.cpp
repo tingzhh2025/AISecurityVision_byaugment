@@ -5,6 +5,7 @@
 #include "../utils/PolygonValidator.h"
 #include "../onvif/ONVIFDiscovery.h"
 #include "../output/Streamer.h"
+#include "../database/DatabaseManager.h"
 #include <iostream>
 #include <sstream>
 #include <chrono>
@@ -192,6 +193,38 @@ void APIService::setupRoutes() {
     m_httpServer->Post("/api/source/add-discovered", [this](const httplib::Request& req, httplib::Response& res) {
         std::string response;
         handlePostAddDiscoveredDevice(req.body, response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    // Face management endpoints
+    m_httpServer->Post("/api/faces/add", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handlePostFaceAdd(req, response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Get("/api/faces", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handleGetFaces("", response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Delete(R"(/api/faces/(\d+))", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        std::string faceId = req.matches[1].str();
+        handleDeleteFace("", response, faceId);
         size_t contentStart = response.find("\r\n\r\n");
         if (contentStart != std::string::npos) {
             response = response.substr(contentStart + 4);
@@ -1769,4 +1802,215 @@ std::string APIService::loadWebFile(const std::string& filePath) {
     return content;
 }
 
+// Face management handlers
+void APIService::handlePostFaceAdd(const httplib::Request& request, std::string& response) {
+    try {
+        // Check if request has multipart form data
+        if (!request.has_file("image")) {
+            response = createErrorResponse("Image file is required", 400);
+            return;
+        }
+
+        // Get the uploaded image file
+        auto imageFile = request.get_file_value("image");
+        if (imageFile.content.empty()) {
+            response = createErrorResponse("Image file is empty", 400);
+            return;
+        }
+
+        // Get the name parameter
+        std::string name;
+        if (request.has_param("name")) {
+            name = request.get_param_value("name");
+        } else {
+            response = createErrorResponse("Name parameter is required", 400);
+            return;
+        }
+
+        if (name.empty()) {
+            response = createErrorResponse("Name cannot be empty", 400);
+            return;
+        }
+
+        // Validate image file type
+        std::string filename = imageFile.filename;
+        std::string extension = filename.substr(filename.find_last_of(".") + 1);
+        std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+
+        if (extension != "jpg" && extension != "jpeg" && extension != "png" && extension != "bmp") {
+            response = createErrorResponse("Unsupported image format. Use JPG, PNG, or BMP", 400);
+            return;
+        }
+
+        // Create faces directory if it doesn't exist
+        std::string facesDir = "faces";
+        if (system(("mkdir -p " + facesDir).c_str()) != 0) {
+            std::cerr << "[APIService] Warning: Could not create faces directory" << std::endl;
+        }
+
+        // Generate unique filename
+        auto now = std::chrono::system_clock::now();
+        auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+        std::string imagePath = facesDir + "/" + name + "_" + std::to_string(timestamp) + "." + extension;
+
+        // Save the uploaded image
+        std::ofstream outFile(imagePath, std::ios::binary);
+        if (!outFile.is_open()) {
+            response = createErrorResponse("Failed to save image file", 500);
+            return;
+        }
+        outFile.write(imageFile.content.data(), imageFile.content.size());
+        outFile.close();
+
+        std::cout << "[APIService] Saved face image: " << imagePath << std::endl;
+
+        // TODO: Extract face embedding using face recognition module
+        // For now, create a dummy embedding
+        std::vector<float> embedding;
+        for (int i = 0; i < 128; i++) {
+            embedding.push_back(static_cast<float>(rand()) / RAND_MAX);
+        }
+
+        // Create face record
+        FaceRecord faceRecord(name, imagePath);
+        faceRecord.embedding = embedding;
+
+        // Create database manager instance
+        DatabaseManager db;
+        if (!db.initialize()) {
+            response = createErrorResponse("Database not available", 503);
+            return;
+        }
+
+        // Insert face into database
+        if (!db.insertFace(faceRecord)) {
+            response = createErrorResponse("Failed to save face to database: " + db.getErrorMessage(), 500);
+            return;
+        }
+
+        // Get the inserted face ID
+        int faceId = db.getLastInsertId();
+
+        // Create success response
+        std::ostringstream json;
+        json << "{"
+             << "\"status\":\"success\","
+             << "\"face_id\":" << faceId << ","
+             << "\"name\":\"" << name << "\","
+             << "\"image_path\":\"" << imagePath << "\","
+             << "\"embedding_size\":" << embedding.size() << ","
+             << "\"created_at\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str(), 201);
+
+        std::cout << "[APIService] Face added successfully: " << name
+                  << " (ID: " << faceId << ")" << std::endl;
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to add face: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handleGetFaces(const std::string& request, std::string& response) {
+    try {
+        // Create database manager instance
+        DatabaseManager db;
+        if (!db.initialize()) {
+            response = createErrorResponse("Database not available", 503);
+            return;
+        }
+
+        // Get all faces from database
+        auto faces = db.getFaces();
+
+        // Create JSON response
+        std::ostringstream json;
+        json << "{\"faces\":[";
+
+        for (size_t i = 0; i < faces.size(); ++i) {
+            if (i > 0) json << ",";
+
+            const auto& face = faces[i];
+            json << "{"
+                 << "\"id\":" << face.id << ","
+                 << "\"name\":\"" << face.name << "\","
+                 << "\"image_path\":\"" << face.image_path << "\","
+                 << "\"embedding_size\":" << face.embedding.size() << ","
+                 << "\"created_at\":\"" << face.created_at << "\""
+                 << "}";
+        }
+
+        json << "],"
+             << "\"count\":" << faces.size() << ","
+             << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+
+        std::cout << "[APIService] Retrieved " << faces.size() << " faces" << std::endl;
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to get faces: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handleDeleteFace(const std::string& request, std::string& response, const std::string& faceId) {
+    try {
+        // Validate face ID
+        int id;
+        try {
+            id = std::stoi(faceId);
+        } catch (const std::exception&) {
+            response = createErrorResponse("Invalid face ID", 400);
+            return;
+        }
+
+        // Create database manager instance
+        DatabaseManager db;
+        if (!db.initialize()) {
+            response = createErrorResponse("Database not available", 503);
+            return;
+        }
+
+        // Check if face exists
+        auto face = db.getFaceById(id);
+        if (face.id == 0) {
+            response = createErrorResponse("Face not found", 404);
+            return;
+        }
+
+        // Delete face from database
+        if (!db.deleteFace(id)) {
+            response = createErrorResponse("Failed to delete face: " + db.getErrorMessage(), 500);
+            return;
+        }
+
+        // Try to delete the image file (optional - don't fail if it doesn't exist)
+        if (!face.image_path.empty()) {
+            if (remove(face.image_path.c_str()) == 0) {
+                std::cout << "[APIService] Deleted face image: " << face.image_path << std::endl;
+            } else {
+                std::cout << "[APIService] Warning: Could not delete face image: " << face.image_path << std::endl;
+            }
+        }
+
+        // Create success response
+        std::ostringstream json;
+        json << "{"
+             << "\"status\":\"success\","
+             << "\"message\":\"Face deleted successfully\","
+             << "\"deleted_face_id\":" << id << ","
+             << "\"deleted_at\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str(), 204);
+
+        std::cout << "[APIService] Face deleted successfully: " << face.name
+                  << " (ID: " << id << ")" << std::endl;
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to delete face: " + std::string(e.what()), 500);
+    }
+}
 

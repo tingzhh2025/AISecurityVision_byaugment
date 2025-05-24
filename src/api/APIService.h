@@ -102,6 +102,11 @@ private:
     void handleGetDashboard(const std::string& request, std::string& response);
     void handleStaticFile(const std::string& request, std::string& response, const std::string& filePath);
 
+    // Face management handlers
+    void handlePostFaceAdd(const httplib::Request& request, std::string& response);
+    void handleGetFaces(const std::string& request, std::string& response);
+    void handleDeleteFace(const std::string& request, std::string& response, const std::string& faceId);
+
     // Utility methods
     std::string createJsonResponse(const std::string& data, int statusCode = 200);
     std::string createErrorResponse(const std::string& error, int statusCode = 400);
