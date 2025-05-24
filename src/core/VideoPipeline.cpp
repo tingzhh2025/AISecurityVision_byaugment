@@ -244,6 +244,9 @@ void VideoPipeline::processFrame(const cv::Mat& frame, int64_t timestamp) {
     if (m_behaviorAnalyzer) {
         result.events = m_behaviorAnalyzer->analyze(frame, result.detections, result.trackIds);
         result.hasAlarm = !result.events.empty();
+
+        // Task 73: Include active ROIs for visualization
+        result.activeROIs = m_behaviorAnalyzer->getActiveROIs();
     }
 
     // Output processing

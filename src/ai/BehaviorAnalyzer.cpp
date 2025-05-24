@@ -282,6 +282,22 @@ std::vector<ROI> BehaviorAnalyzer::getROIs() const {
     return rois;
 }
 
+std::vector<ROI> BehaviorAnalyzer::getActiveROIs() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    std::vector<ROI> activeROIs;
+    for (const auto& pair : m_rois) {
+        const ROI& roi = pair.second;
+
+        // Only include ROIs that are enabled and currently active based on time rules
+        if (roi.enabled && isROIActiveNow(roi)) {
+            activeROIs.push_back(roi);
+        }
+    }
+
+    return activeROIs;
+}
+
 void BehaviorAnalyzer::setMinObjectSize(int minWidth, int minHeight) {
     std::lock_guard<std::mutex> lock(m_mutex);
     m_minObjectSize = cv::Size(minWidth, minHeight);

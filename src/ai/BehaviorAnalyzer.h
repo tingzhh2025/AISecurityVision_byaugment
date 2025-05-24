@@ -112,6 +112,7 @@ public:
     bool addROI(const ROI& roi);
     bool removeROI(const std::string& roiId);
     std::vector<ROI> getROIs() const;
+    std::vector<ROI> getActiveROIs() const;  // Task 73: Get only currently active ROIs
 
     // Configuration
     void setMinObjectSize(int minWidth, int minHeight);

@@ -993,36 +993,91 @@ void Streamer::drawCornerMarkers(cv::Mat& frame, const cv::Rect& bbox, const cv:
 }
 
 void Streamer::drawROIs(cv::Mat& frame, const FrameResult& result) {
-    // TODO: Get ROIs from BehaviorAnalyzer through result
-    // For now, draw placeholder ROIs to demonstrate functionality
+    // Task 73: Draw active ROIs with priority-based color coding
+    if (result.activeROIs.empty()) {
+        return;
+    }
 
-    // Draw semi-transparent ROI polygons
+    // Create overlay for semi-transparent fill
     cv::Mat overlay = frame.clone();
 
-    // Example ROI polygon (this would come from actual ROI data)
-    std::vector<cv::Point> roiPoints = {
-        cv::Point(100, 100),
-        cv::Point(300, 100),
-        cv::Point(350, 200),
-        cv::Point(250, 300),
-        cv::Point(50, 250)
-    };
+    for (const auto& roi : result.activeROIs) {
+        if (roi.polygon.size() < 3) {
+            continue; // Skip invalid polygons
+        }
 
-    if (!roiPoints.empty()) {
-        // Fill ROI with semi-transparent color
-        std::vector<std::vector<cv::Point>> contours = {roiPoints};
-        cv::fillPoly(overlay, contours, cv::Scalar(0, 255, 255, 100)); // Yellow with transparency
+        // Get priority-based color (BGR format for OpenCV)
+        cv::Scalar borderColor, fillColor;
+        std::string priorityText;
+
+        switch (roi.priority) {
+            case 1:
+                borderColor = cv::Scalar(0, 255, 0);      // Green
+                fillColor = cv::Scalar(0, 255, 0, 80);    // Green with transparency
+                priorityText = "Low";
+                break;
+            case 2:
+                borderColor = cv::Scalar(0, 255, 255);    // Yellow
+                fillColor = cv::Scalar(0, 255, 255, 80);  // Yellow with transparency
+                priorityText = "Med-Low";
+                break;
+            case 3:
+                borderColor = cv::Scalar(0, 165, 255);    // Orange
+                fillColor = cv::Scalar(0, 165, 255, 80);  // Orange with transparency
+                priorityText = "Medium";
+                break;
+            case 4:
+                borderColor = cv::Scalar(0, 100, 255);    // Red-Orange
+                fillColor = cv::Scalar(0, 100, 255, 80);  // Red-Orange with transparency
+                priorityText = "High";
+                break;
+            case 5:
+                borderColor = cv::Scalar(0, 0, 255);      // Red
+                fillColor = cv::Scalar(0, 0, 255, 80);    // Red with transparency
+                priorityText = "Critical";
+                break;
+            default:
+                borderColor = cv::Scalar(255, 255, 255);  // White
+                fillColor = cv::Scalar(255, 255, 255, 80); // White with transparency
+                priorityText = "Default";
+                break;
+        }
+
+        // Fill ROI polygon with semi-transparent color
+        std::vector<std::vector<cv::Point>> contours = {roi.polygon};
+        cv::fillPoly(overlay, contours, fillColor);
 
         // Draw ROI border
-        cv::polylines(frame, roiPoints, true, cv::Scalar(0, 255, 255), 2);
+        cv::polylines(frame, roi.polygon, true, borderColor, 2);
 
-        // Blend overlay with original frame
-        cv::addWeighted(frame, 0.8, overlay, 0.2, 0, frame);
+        // Find top-left point for label placement
+        cv::Point labelPos = roi.polygon[0];
+        for (const auto& point : roi.polygon) {
+            if (point.y < labelPos.y || (point.y == labelPos.y && point.x < labelPos.x)) {
+                labelPos = point;
+            }
+        }
 
-        // Add ROI label
-        cv::putText(frame, "ROI: Intrusion Zone", cv::Point(roiPoints[0].x, roiPoints[0].y - 10),
-                   cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 255, 255), 2);
+        // Draw ROI name and priority
+        std::string roiLabel = roi.name + " (P" + std::to_string(roi.priority) + " - " + priorityText + ")";
+        cv::putText(frame, roiLabel, cv::Point(labelPos.x, labelPos.y - 10),
+                   cv::FONT_HERSHEY_SIMPLEX, 0.6, borderColor, 2);
+
+        // Draw time restriction info if applicable
+        if (!roi.start_time.empty() && !roi.end_time.empty()) {
+            std::string timeInfo = "Active: " + roi.start_time + "-" + roi.end_time;
+            cv::putText(frame, timeInfo, cv::Point(labelPos.x, labelPos.y - 30),
+                       cv::FONT_HERSHEY_SIMPLEX, 0.5, borderColor, 1);
+        }
+
+        // Draw ROI ID for debugging
+        std::string idInfo = "ID: " + roi.id;
+        cv::putText(frame, idInfo, cv::Point(labelPos.x, labelPos.y + 20),
+                   cv::FONT_HERSHEY_SIMPLEX, 0.4, borderColor, 1);
     }
+
+    // Blend overlay with original frame for semi-transparent effect
+    cv::addWeighted(frame, 0.7, overlay, 0.3, 0, frame);
 }
 
 void Streamer::drawFaceRecognition(cv::Mat& frame, const std::vector<cv::Rect>& detections,

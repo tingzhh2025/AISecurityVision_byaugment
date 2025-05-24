@@ -177,5 +177,6 @@ struct FrameResult {
     std::vector<std::string> faceIds;
     std::vector<std::string> plateNumbers;
     std::vector<BehaviorEvent> events;  // Changed from std::string to BehaviorEvent
+    std::vector<ROI> activeROIs;  // Task 73: Active ROIs for visualization
     bool hasAlarm = false;
 };
