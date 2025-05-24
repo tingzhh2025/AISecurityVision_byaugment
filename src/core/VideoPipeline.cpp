@@ -11,8 +11,9 @@
 #include "../output/AlarmTrigger.h"
 #include <iostream>
 #include <chrono>
+#include <sstream>
 
-VideoPipeline::VideoPipeline(const VideoSource& source) 
+VideoPipeline::VideoPipeline(const VideoSource& source)
     : m_source(source) {
     std::cout << "[VideoPipeline] Creating pipeline for: " << source.id << std::endl;
 }
@@ -23,63 +24,63 @@ VideoPipeline::~VideoPipeline() {
 
 bool VideoPipeline::initialize() {
     std::lock_guard<std::mutex> lock(m_mutex);
-    
+
     try {
         std::cout << "[VideoPipeline] Initializing pipeline: " << m_source.id << std::endl;
-        
+
         // Initialize decoder
         m_decoder = std::make_unique<FFmpegDecoder>();
         if (!m_decoder->initialize(m_source)) {
             handleError("Failed to initialize decoder");
             return false;
         }
-        
+
         // Initialize AI modules
         m_detector = std::make_unique<YOLOv8Detector>();
         if (!m_detector->initialize()) {
             handleError("Failed to initialize YOLOv8 detector");
             return false;
         }
-        
+
         m_tracker = std::make_unique<ByteTracker>();
         if (!m_tracker->initialize()) {
             handleError("Failed to initialize ByteTracker");
             return false;
         }
-        
+
         // Initialize recognition modules
         m_faceRecognizer = std::make_unique<FaceRecognizer>();
         if (!m_faceRecognizer->initialize()) {
             std::cout << "[VideoPipeline] Warning: Face recognizer initialization failed" << std::endl;
         }
-        
+
         m_plateRecognizer = std::make_unique<LicensePlateRecognizer>();
         if (!m_plateRecognizer->initialize()) {
             std::cout << "[VideoPipeline] Warning: License plate recognizer initialization failed" << std::endl;
         }
-        
+
         // Initialize behavior analyzer
         m_behaviorAnalyzer = std::make_unique<BehaviorAnalyzer>();
         if (!m_behaviorAnalyzer->initialize()) {
             handleError("Failed to initialize behavior analyzer");
             return false;
         }
-        
+
         // Initialize output modules
         m_recorder = std::make_unique<Recorder>();
         m_streamer = std::make_unique<Streamer>();
         m_alarmTrigger = std::make_unique<AlarmTrigger>();
-        
+
         if (!m_recorder->initialize(m_source.id) ||
             !m_streamer->initialize(m_source.id) ||
             !m_alarmTrigger->initialize()) {
             handleError("Failed to initialize output modules");
             return false;
         }
-        
+
         std::cout << "[VideoPipeline] Pipeline initialized successfully: " << m_source.id << std::endl;
         return true;
-        
+
     } catch (const std::exception& e) {
         handleError("Exception during initialization: " + std::string(e.what()));
         return false;
@@ -91,13 +92,13 @@ void VideoPipeline::start() {
         std::cout << "[VideoPipeline] Pipeline already running: " << m_source.id << std::endl;
         return;
     }
-    
+
     m_running.store(true);
     m_healthy.store(true);
     m_startTime = std::chrono::steady_clock::now();
-    
+
     m_processingThread = std::thread(&VideoPipeline::processingThread, this);
-    
+
     std::cout << "[VideoPipeline] Pipeline started: " << m_source.id << std::endl;
 }
 
@@ -105,15 +106,15 @@ void VideoPipeline::stop() {
     if (!m_running.load()) {
         return;
     }
-    
+
     std::cout << "[VideoPipeline] Stopping pipeline: " << m_source.id << std::endl;
-    
+
     m_running.store(false);
-    
+
     if (m_processingThread.joinable()) {
         m_processingThread.join();
     }
-    
+
     std::cout << "[VideoPipeline] Pipeline stopped: " << m_source.id << std::endl;
 }
 
@@ -127,19 +128,19 @@ bool VideoPipeline::isHealthy() const {
 
 void VideoPipeline::processingThread() {
     std::cout << "[VideoPipeline] Processing thread started: " << m_source.id << std::endl;
-    
+
     cv::Mat frame;
     int64_t timestamp;
     int reconnectAttempts = 0;
-    
+
     while (m_running.load()) {
         try {
             // Decode frame
             if (!m_decoder->getNextFrame(frame, timestamp)) {
                 if (shouldReconnect() && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-                    std::cout << "[VideoPipeline] Attempting reconnection: " << m_source.id 
+                    std::cout << "[VideoPipeline] Attempting reconnection: " << m_source.id
                               << " (attempt " << (reconnectAttempts + 1) << ")" << std::endl;
-                    
+
                     attemptReconnection();
                     reconnectAttempts++;
                     std::this_thread::sleep_for(std::chrono::milliseconds(RECONNECT_DELAY_MS));
@@ -149,16 +150,16 @@ void VideoPipeline::processingThread() {
                     break;
                 }
             }
-            
+
             // Reset reconnect counter on successful frame
             reconnectAttempts = 0;
-            
+
             // Process frame through pipeline
             processFrame(frame, timestamp);
-            
+
             // Update statistics
             m_processedFrames.fetch_add(1);
-            
+
             // Calculate frame rate
             auto now = std::chrono::steady_clock::now();
             if (m_lastFrameTime.time_since_epoch().count() > 0) {
@@ -168,13 +169,13 @@ void VideoPipeline::processingThread() {
                 }
             }
             m_lastFrameTime = now;
-            
+
         } catch (const std::exception& e) {
             handleError("Exception in processing thread: " + std::string(e.what()));
             m_droppedFrames.fetch_add(1);
         }
     }
-    
+
     std::cout << "[VideoPipeline] Processing thread stopped: " << m_source.id << std::endl;
 }
 
@@ -182,46 +183,46 @@ void VideoPipeline::processFrame(const cv::Mat& frame, int64_t timestamp) {
     if (frame.empty()) {
         return;
     }
-    
+
     FrameResult result;
     result.frame = frame.clone();
     result.timestamp = timestamp;
-    
+
     // Object detection
     if (m_detectionEnabled.load() && m_detector) {
         result.detections = m_detector->detect(frame);
     }
-    
+
     // Object tracking
     if (m_tracker && !result.detections.empty()) {
         result.trackIds = m_tracker->update(result.detections);
     }
-    
+
     // Face recognition
     if (m_faceRecognizer) {
         result.faceIds = m_faceRecognizer->recognize(frame, result.detections);
     }
-    
+
     // License plate recognition
     if (m_plateRecognizer) {
         result.plateNumbers = m_plateRecognizer->recognize(frame, result.detections);
     }
-    
+
     // Behavior analysis
     if (m_behaviorAnalyzer) {
         result.events = m_behaviorAnalyzer->analyze(frame, result.detections, result.trackIds);
         result.hasAlarm = !result.events.empty();
     }
-    
+
     // Output processing
     if (m_recordingEnabled.load() && m_recorder) {
         m_recorder->processFrame(result);
     }
-    
+
     if (m_streamingEnabled.load() && m_streamer) {
         m_streamer->processFrame(result);
     }
-    
+
     if (result.hasAlarm && m_alarmTrigger) {
         m_alarmTrigger->triggerAlarm(result);
     }
@@ -274,4 +275,32 @@ void VideoPipeline::setRecordingEnabled(bool enabled) {
 
 void VideoPipeline::setStreamingEnabled(bool enabled) {
     m_streamingEnabled.store(enabled);
+}
+
+// VideoSource implementation
+bool VideoSource::isValid() const {
+    if (id.empty() || url.empty()) {
+        return false;
+    }
+
+    if (protocol != "rtsp" && protocol != "onvif" && protocol != "gb28181") {
+        return false;
+    }
+
+    if (width <= 0 || height <= 0 || fps <= 0) {
+        return false;
+    }
+
+    return true;
+}
+
+std::string VideoSource::toString() const {
+    std::ostringstream oss;
+    oss << "VideoSource{id=" << id
+        << ", protocol=" << protocol
+        << ", url=" << url
+        << ", resolution=" << width << "x" << height
+        << ", fps=" << fps
+        << ", enabled=" << (enabled ? "true" : "false") << "}";
+    return oss.str();
 }

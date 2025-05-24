@@ -31,22 +31,22 @@ void TaskManager::start() {
         std::cout << "[TaskManager] Already running" << std::endl;
         return;
     }
-    
+
     m_running.store(true);
     m_monitoringThread = std::thread(&TaskManager::monitoringThread, this);
-    
+
     std::cout << "[TaskManager] Started successfully" << std::endl;
 }
 
 void TaskManager::stop() {
     std::cout << "[TaskManager] Stopping..." << std::endl;
-    
+
     m_running.store(false);
-    
+
     if (m_monitoringThread.joinable()) {
         m_monitoringThread.join();
     }
-    
+
     // Stop all pipelines
     std::lock_guard<std::mutex> lock(m_mutex);
     for (auto& [id, pipeline] : m_pipelines) {
@@ -55,7 +55,7 @@ void TaskManager::stop() {
         }
     }
     m_pipelines.clear();
-    
+
     std::cout << "[TaskManager] Stopped successfully" << std::endl;
 }
 
@@ -68,26 +68,26 @@ bool TaskManager::addVideoSource(const VideoSource& source) {
         std::cerr << "[TaskManager] Invalid video source: " << source.toString() << std::endl;
         return false;
     }
-    
+
     std::lock_guard<std::mutex> lock(m_mutex);
-    
+
     if (m_pipelines.size() >= MAX_PIPELINES) {
         std::cerr << "[TaskManager] Maximum pipeline limit reached: " << MAX_PIPELINES << std::endl;
         return false;
     }
-    
+
     if (m_pipelines.find(source.id) != m_pipelines.end()) {
         std::cerr << "[TaskManager] Pipeline already exists for source: " << source.id << std::endl;
         return false;
     }
-    
+
     try {
         auto pipeline = std::make_shared<VideoPipeline>(source);
         if (pipeline->initialize()) {
             m_pipelines[source.id] = pipeline;
             pipeline->start();
-            
-            std::cout << "[TaskManager] Added video source: " << source.id 
+
+            std::cout << "[TaskManager] Added video source: " << source.id
                       << " (" << source.protocol << ")" << std::endl;
             return true;
         } else {
@@ -102,26 +102,26 @@ bool TaskManager::addVideoSource(const VideoSource& source) {
 
 bool TaskManager::removeVideoSource(const std::string& sourceId) {
     std::lock_guard<std::mutex> lock(m_mutex);
-    
+
     auto it = m_pipelines.find(sourceId);
     if (it == m_pipelines.end()) {
         std::cerr << "[TaskManager] Pipeline not found: " << sourceId << std::endl;
         return false;
     }
-    
+
     // Stop and cleanup pipeline
     if (it->second) {
         it->second->stop();
     }
     m_pipelines.erase(it);
-    
+
     std::cout << "[TaskManager] Removed video source: " << sourceId << std::endl;
     return true;
 }
 
 std::vector<std::string> TaskManager::getActivePipelines() const {
     std::lock_guard<std::mutex> lock(m_mutex);
-    
+
     std::vector<std::string> active;
     for (const auto& [id, pipeline] : m_pipelines) {
         if (pipeline && pipeline->isRunning()) {
@@ -147,27 +147,27 @@ std::string TaskManager::getGpuMemoryUsage() const {
 
 std::shared_ptr<VideoPipeline> TaskManager::getPipeline(const std::string& sourceId) const {
     std::lock_guard<std::mutex> lock(m_mutex);
-    
+
     auto it = m_pipelines.find(sourceId);
     return (it != m_pipelines.end()) ? it->second : nullptr;
 }
 
 void TaskManager::monitoringThread() {
     std::cout << "[TaskManager] Monitoring thread started" << std::endl;
-    
+
     while (m_running.load()) {
         try {
             // Update CPU usage
             // TODO: Implement proper CPU monitoring
             m_cpuUsage.store(0.0);
-            
+
             // Update GPU memory usage
             // TODO: Implement NVML GPU monitoring
             {
                 std::lock_guard<std::mutex> lock(m_mutex);
                 m_gpuMemUsage = "0MB / 0MB";
             }
-            
+
             // Check pipeline health
             std::vector<std::string> failedPipelines;
             {
@@ -178,47 +178,21 @@ void TaskManager::monitoringThread() {
                     }
                 }
             }
-            
+
             // Cleanup failed pipelines
             for (const auto& id : failedPipelines) {
                 std::cout << "[TaskManager] Cleaning up failed pipeline: " << id << std::endl;
                 removeVideoSource(id);
             }
-            
+
         } catch (const std::exception& e) {
             std::cerr << "[TaskManager] Monitoring error: " << e.what() << std::endl;
         }
-        
+
         std::this_thread::sleep_for(std::chrono::milliseconds(MONITORING_INTERVAL_MS));
     }
-    
+
     std::cout << "[TaskManager] Monitoring thread stopped" << std::endl;
 }
 
-// VideoSource implementation
-bool VideoSource::isValid() const {
-    if (id.empty() || url.empty()) {
-        return false;
-    }
-    
-    if (protocol != "rtsp" && protocol != "onvif" && protocol != "gb28181") {
-        return false;
-    }
-    
-    if (width <= 0 || height <= 0 || fps <= 0) {
-        return false;
-    }
-    
-    return true;
-}
-
-std::string VideoSource::toString() const {
-    std::ostringstream oss;
-    oss << "VideoSource{id=" << id 
-        << ", protocol=" << protocol
-        << ", url=" << url
-        << ", resolution=" << width << "x" << height
-        << ", fps=" << fps
-        << ", enabled=" << (enabled ? "true" : "false") << "}";
-    return oss.str();
-}
+// VideoSource implementation is now in VideoPipeline.cpp
