@@ -374,6 +374,17 @@ void APIService::setupRoutes() {
         res.set_content(response, "application/json");
     });
 
+    // Bulk ROI operations endpoint - Task 72
+    m_httpServer->Post("/api/rois/bulk", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handlePostBulkROIs(req.body, response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
     // Web interface routes
     m_httpServer->Get("/", [this](const httplib::Request& req, httplib::Response& res) {
         std::string content = loadWebFile("web/templates/dashboard.html");
@@ -1909,6 +1920,357 @@ void APIService::handleDeleteROI(const std::string& request, std::string& respon
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to delete ROI: " + std::string(e.what()), 500);
+    }
+}
+
+// Bulk ROI operations handler - Task 72
+void APIService::handlePostBulkROIs(const std::string& request, std::string& response) {
+    try {
+        // Parse the JSON request to extract the operations array
+        std::regex operationsRegex(R"("operations"\s*:\s*\[(.*)\])");
+        std::smatch operationsMatch;
+
+        if (!std::regex_search(request, operationsMatch, operationsRegex)) {
+            response = createErrorResponse("operations array is required", 400);
+            return;
+        }
+
+        std::string operationsStr = operationsMatch[1].str();
+
+        // Parse individual operations
+        std::vector<std::string> operations;
+        std::regex operationRegex(R"(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})");
+        std::sregex_iterator operationIter(operationsStr.begin(), operationsStr.end(), operationRegex);
+        std::sregex_iterator operationEnd;
+
+        for (; operationIter != operationEnd; ++operationIter) {
+            operations.push_back(operationIter->str());
+        }
+
+        if (operations.empty()) {
+            response = createErrorResponse("At least one operation is required", 400);
+            return;
+        }
+
+        // Validate all operations before executing any
+        std::vector<ROI> roisToInsert;
+        std::vector<ROI> roisToUpdate;
+        std::vector<std::string> roisToDelete;
+        std::vector<std::string> validationErrors;
+
+        for (size_t i = 0; i < operations.size(); ++i) {
+            const std::string& operation = operations[i];
+            std::string operationType = parseJsonField(operation, "operation");
+
+            if (operationType == "create") {
+                ROI roi;
+                if (!deserializeROI(operation, roi)) {
+                    validationErrors.push_back("Operation " + std::to_string(i) + ": Invalid ROI format");
+                    continue;
+                }
+
+                std::string cameraId = parseJsonField(operation, "camera_id");
+                if (cameraId.empty()) {
+                    validationErrors.push_back("Operation " + std::to_string(i) + ": camera_id is required");
+                    continue;
+                }
+
+                // Validate ROI fields
+                if (roi.id.empty()) {
+                    validationErrors.push_back("Operation " + std::to_string(i) + ": ROI ID is required");
+                    continue;
+                }
+
+                if (roi.name.empty()) {
+                    validationErrors.push_back("Operation " + std::to_string(i) + ": ROI name is required");
+                    continue;
+                }
+
+                // Validate priority level (1-5 scale)
+                if (roi.priority < 1 || roi.priority > 5) {
+                    validationErrors.push_back("Operation " + std::to_string(i) + ": Priority must be between 1 and 5");
+                    continue;
+                }
+
+                // Validate time format if provided
+                if (!BehaviorAnalyzer::isValidTimeFormat(roi.start_time)) {
+                    validationErrors.push_back("Operation " + std::to_string(i) + ": Invalid start_time format");
+                    continue;
+                }
+
+                if (!BehaviorAnalyzer::isValidTimeFormat(roi.end_time)) {
+                    validationErrors.push_back("Operation " + std::to_string(i) + ": Invalid end_time format");
+                    continue;
+                }
+
+                // Enhanced polygon validation
+                auto validationResult = validateROIPolygonDetailed(roi.polygon);
+                if (!validationResult.isValid) {
+                    validationErrors.push_back("Operation " + std::to_string(i) + ": " + validationResult.errorMessage);
+                    continue;
+                }
+
+                roisToInsert.push_back(roi);
+
+            } else if (operationType == "update") {
+                ROI roi;
+                if (!deserializeROI(operation, roi)) {
+                    validationErrors.push_back("Operation " + std::to_string(i) + ": Invalid ROI format");
+                    continue;
+                }
+
+                std::string cameraId = parseJsonField(operation, "camera_id");
+                if (cameraId.empty()) {
+                    validationErrors.push_back("Operation " + std::to_string(i) + ": camera_id is required");
+                    continue;
+                }
+
+                // Similar validation as create
+                if (roi.id.empty()) {
+                    validationErrors.push_back("Operation " + std::to_string(i) + ": ROI ID is required");
+                    continue;
+                }
+
+                if (roi.name.empty()) {
+                    validationErrors.push_back("Operation " + std::to_string(i) + ": ROI name is required");
+                    continue;
+                }
+
+                if (roi.priority < 1 || roi.priority > 5) {
+                    validationErrors.push_back("Operation " + std::to_string(i) + ": Priority must be between 1 and 5");
+                    continue;
+                }
+
+                if (!BehaviorAnalyzer::isValidTimeFormat(roi.start_time)) {
+                    validationErrors.push_back("Operation " + std::to_string(i) + ": Invalid start_time format");
+                    continue;
+                }
+
+                if (!BehaviorAnalyzer::isValidTimeFormat(roi.end_time)) {
+                    validationErrors.push_back("Operation " + std::to_string(i) + ": Invalid end_time format");
+                    continue;
+                }
+
+                auto validationResult = validateROIPolygonDetailed(roi.polygon);
+                if (!validationResult.isValid) {
+                    validationErrors.push_back("Operation " + std::to_string(i) + ": " + validationResult.errorMessage);
+                    continue;
+                }
+
+                roisToUpdate.push_back(roi);
+
+            } else if (operationType == "delete") {
+                std::string roiId = parseJsonField(operation, "roi_id");
+                if (roiId.empty()) {
+                    validationErrors.push_back("Operation " + std::to_string(i) + ": roi_id is required for delete operation");
+                    continue;
+                }
+
+                roisToDelete.push_back(roiId);
+
+            } else {
+                validationErrors.push_back("Operation " + std::to_string(i) + ": Invalid operation type. Must be 'create', 'update', or 'delete'");
+            }
+        }
+
+        // If there are validation errors, return them without executing any operations
+        if (!validationErrors.empty()) {
+            std::ostringstream errorJson;
+            errorJson << "{"
+                     << "\"error\":\"Validation failed\","
+                     << "\"error_code\":\"BULK_VALIDATION_FAILED\","
+                     << "\"validation_errors\":[";
+
+            for (size_t i = 0; i < validationErrors.size(); ++i) {
+                if (i > 0) errorJson << ",";
+                errorJson << "\"" << validationErrors[i] << "\"";
+            }
+
+            errorJson << "],"
+                     << "\"total_errors\":" << validationErrors.size() << ","
+                     << "\"message\":\"All operations must be valid before any can be executed\""
+                     << "}";
+
+            response = createJsonResponse(errorJson.str(), 400);
+            return;
+        }
+
+        // All validations passed, now execute operations atomically
+        DatabaseManager dbManager;
+        if (!dbManager.initialize()) {
+            response = createErrorResponse("Database not available", 503);
+            return;
+        }
+
+        // Begin transaction for atomic operations
+        if (!dbManager.beginTransaction()) {
+            response = createErrorResponse("Failed to begin transaction: " + dbManager.getErrorMessage(), 500);
+            return;
+        }
+
+        bool transactionSuccess = true;
+        std::string transactionError;
+
+        // Execute operations in order
+        try {
+            // Process insertions
+            for (const auto& roi : roisToInsert) {
+                // Convert polygon to JSON string for database storage
+                std::ostringstream polygonJson;
+                polygonJson << "[";
+                for (size_t i = 0; i < roi.polygon.size(); ++i) {
+                    if (i > 0) polygonJson << ",";
+                    polygonJson << "{\"x\":" << roi.polygon[i].x << ",\"y\":" << roi.polygon[i].y << "}";
+                }
+                polygonJson << "]";
+
+                // Create ROI record for database
+                ROIRecord roiRecord(roi.id, parseJsonField(operations[0], "camera_id"), roi.name, polygonJson.str());
+                roiRecord.enabled = roi.enabled;
+                roiRecord.priority = roi.priority;
+                roiRecord.start_time = roi.start_time;
+                roiRecord.end_time = roi.end_time;
+
+                if (!dbManager.insertROI(roiRecord)) {
+                    transactionSuccess = false;
+                    transactionError = "Failed to insert ROI " + roi.id + ": " + dbManager.getErrorMessage();
+                    break;
+                }
+            }
+
+            // Process updates
+            if (transactionSuccess) {
+                for (const auto& roi : roisToUpdate) {
+                    // Get existing ROI to preserve database ID
+                    auto existingROI = dbManager.getROIById(roi.id);
+                    if (existingROI.roi_id.empty()) {
+                        transactionSuccess = false;
+                        transactionError = "ROI not found for update: " + roi.id;
+                        break;
+                    }
+
+                    // Convert polygon to JSON string
+                    std::ostringstream polygonJson;
+                    polygonJson << "[";
+                    for (size_t i = 0; i < roi.polygon.size(); ++i) {
+                        if (i > 0) polygonJson << ",";
+                        polygonJson << "{\"x\":" << roi.polygon[i].x << ",\"y\":" << roi.polygon[i].y << "}";
+                    }
+                    polygonJson << "]";
+
+                    // Update ROI record
+                    ROIRecord roiRecord = existingROI;
+                    roiRecord.name = roi.name;
+                    roiRecord.polygon_data = polygonJson.str();
+                    roiRecord.enabled = roi.enabled;
+                    roiRecord.priority = roi.priority;
+                    roiRecord.start_time = roi.start_time;
+                    roiRecord.end_time = roi.end_time;
+                    roiRecord.updated_at = getCurrentTimestamp();
+
+                    if (!dbManager.updateROI(roiRecord)) {
+                        transactionSuccess = false;
+                        transactionError = "Failed to update ROI " + roi.id + ": " + dbManager.getErrorMessage();
+                        break;
+                    }
+                }
+            }
+
+            // Process deletions
+            if (transactionSuccess) {
+                for (const auto& roiId : roisToDelete) {
+                    // Check if ROI exists
+                    auto existingROI = dbManager.getROIById(roiId);
+                    if (existingROI.roi_id.empty()) {
+                        transactionSuccess = false;
+                        transactionError = "ROI not found for deletion: " + roiId;
+                        break;
+                    }
+
+                    if (!dbManager.deleteROI(roiId)) {
+                        transactionSuccess = false;
+                        transactionError = "Failed to delete ROI " + roiId + ": " + dbManager.getErrorMessage();
+                        break;
+                    }
+                }
+            }
+
+        } catch (const std::exception& e) {
+            transactionSuccess = false;
+            transactionError = "Exception during bulk operation: " + std::string(e.what());
+        }
+
+        // Commit or rollback transaction
+        if (transactionSuccess) {
+            if (!dbManager.commitTransaction()) {
+                response = createErrorResponse("Failed to commit transaction: " + dbManager.getErrorMessage(), 500);
+                return;
+            }
+
+            // Update active pipelines if operations succeeded
+            TaskManager& taskManager = TaskManager::getInstance();
+
+            // Add new ROIs to active pipelines
+            for (const auto& roi : roisToInsert) {
+                std::string cameraId = parseJsonField(operations[0], "camera_id"); // Get from first operation
+                auto pipeline = taskManager.getPipeline(cameraId);
+                if (pipeline) {
+                    pipeline->addROI(roi);
+                }
+            }
+
+            // Update ROIs in active pipelines
+            for (const auto& roi : roisToUpdate) {
+                std::string cameraId = parseJsonField(operations[0], "camera_id"); // Get from first operation
+                auto pipeline = taskManager.getPipeline(cameraId);
+                if (pipeline) {
+                    pipeline->removeROI(roi.id);
+                    pipeline->addROI(roi);
+                }
+            }
+
+            // Remove ROIs from active pipelines
+            for (const auto& roiId : roisToDelete) {
+                // Find which camera this ROI belonged to by checking all pipelines
+                auto activePipelines = taskManager.getActivePipelines();
+                for (const auto& cameraId : activePipelines) {
+                    auto pipeline = taskManager.getPipeline(cameraId);
+                    if (pipeline) {
+                        pipeline->removeROI(roiId);
+                    }
+                }
+            }
+
+            // Create success response
+            std::ostringstream json;
+            json << "{"
+                 << "\"status\":\"success\","
+                 << "\"message\":\"Bulk ROI operations completed successfully\","
+                 << "\"operations_executed\":" << operations.size() << ","
+                 << "\"created\":" << roisToInsert.size() << ","
+                 << "\"updated\":" << roisToUpdate.size() << ","
+                 << "\"deleted\":" << roisToDelete.size() << ","
+                 << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
+                 << "}";
+
+            response = createJsonResponse(json.str(), 200);
+
+            std::cout << "[APIService] Bulk ROI operations completed successfully: "
+                      << roisToInsert.size() << " created, "
+                      << roisToUpdate.size() << " updated, "
+                      << roisToDelete.size() << " deleted" << std::endl;
+
+        } else {
+            // Rollback transaction
+            dbManager.rollbackTransaction();
+
+            response = createErrorResponse("Bulk operation failed: " + transactionError + ". All changes have been rolled back.", 500);
+
+            std::cout << "[APIService] Bulk ROI operation failed and rolled back: " << transactionError << std::endl;
+        }
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to process bulk ROI operations: " + std::string(e.what()), 500);
     }
 }
 

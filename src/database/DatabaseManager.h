@@ -158,10 +158,20 @@ public:
     bool deleteROI(const std::string& roiId);
     bool deleteROIsByCameraId(const std::string& cameraId);
 
+    // Bulk ROI operations with transaction support - Task 72
+    bool insertROIsBulk(const std::vector<ROIRecord>& rois);
+    bool updateROIsBulk(const std::vector<ROIRecord>& rois);
+    bool deleteROIsBulk(const std::vector<std::string>& roiIds);
+
     // Utility operations
     bool executeQuery(const std::string& query);
     int getLastInsertId();
     std::string getErrorMessage() const;
+
+    // Transaction support - Task 72
+    bool beginTransaction();
+    bool commitTransaction();
+    bool rollbackTransaction();
 
 private:
     // Internal methods

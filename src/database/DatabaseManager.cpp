@@ -922,3 +922,104 @@ bool DatabaseManager::deleteROIsByCameraId(const std::string& cameraId) {
 
     return true;
 }
+
+// Transaction support implementation - Task 72
+bool DatabaseManager::beginTransaction() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    char* errMsg = nullptr;
+    int rc = sqlite3_exec(m_db, "BEGIN TRANSACTION;", nullptr, nullptr, &errMsg);
+
+    if (rc != SQLITE_OK) {
+        m_lastError = "Failed to begin transaction: " + std::string(errMsg);
+        sqlite3_free(errMsg);
+        return false;
+    }
+
+    return true;
+}
+
+bool DatabaseManager::commitTransaction() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    char* errMsg = nullptr;
+    int rc = sqlite3_exec(m_db, "COMMIT;", nullptr, nullptr, &errMsg);
+
+    if (rc != SQLITE_OK) {
+        m_lastError = "Failed to commit transaction: " + std::string(errMsg);
+        sqlite3_free(errMsg);
+        return false;
+    }
+
+    return true;
+}
+
+bool DatabaseManager::rollbackTransaction() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    char* errMsg = nullptr;
+    int rc = sqlite3_exec(m_db, "ROLLBACK;", nullptr, nullptr, &errMsg);
+
+    if (rc != SQLITE_OK) {
+        m_lastError = "Failed to rollback transaction: " + std::string(errMsg);
+        sqlite3_free(errMsg);
+        return false;
+    }
+
+    return true;
+}
+
+// Bulk ROI operations implementation - Task 72
+bool DatabaseManager::insertROIsBulk(const std::vector<ROIRecord>& rois) {
+    if (rois.empty()) {
+        return true;  // Nothing to insert
+    }
+
+    // Note: Transaction management is handled by the caller
+    // This allows for better error handling and rollback control
+
+    for (const auto& roi : rois) {
+        if (!insertROI(roi)) {
+            // Error message is already set by insertROI
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool DatabaseManager::updateROIsBulk(const std::vector<ROIRecord>& rois) {
+    if (rois.empty()) {
+        return true;  // Nothing to update
+    }
+
+    // Note: Transaction management is handled by the caller
+    // This allows for better error handling and rollback control
+
+    for (const auto& roi : rois) {
+        if (!updateROI(roi)) {
+            // Error message is already set by updateROI
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool DatabaseManager::deleteROIsBulk(const std::vector<std::string>& roiIds) {
+    if (roiIds.empty()) {
+        return true;  // Nothing to delete
+    }
+
+    // Note: Transaction management is handled by the caller
+    // This allows for better error handling and rollback control
+
+    for (const auto& roiId : roiIds) {
+        if (!deleteROI(roiId)) {
+            // Error message is already set by deleteROI
+            return false;
+        }
+    }
+
+    return true;
+}

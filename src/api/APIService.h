@@ -102,6 +102,9 @@ private:
     void handlePutROI(const std::string& request, std::string& response, const std::string& roiId);
     void handleDeleteROI(const std::string& request, std::string& response, const std::string& roiId);
 
+    // Bulk ROI operations handler - Task 72
+    void handlePostBulkROIs(const std::string& request, std::string& response);
+
     // Web dashboard handlers
     void handleGetDashboard(const std::string& request, std::string& response);
     void handleStaticFile(const std::string& request, std::string& response, const std::string& filePath);

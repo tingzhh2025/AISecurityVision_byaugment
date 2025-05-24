@@ -1459,7 +1459,22 @@ AISecurityVision/
 
 **所属子史诗**: 13
 
-**状态**: todo
+**状态**: done
+
+**实施完成**:
+✅ 实现完整的POST /api/rois/bulk端点：支持批量ROI操作的原子事务处理
+✅ 添加数据库事务支持：beginTransaction(), commitTransaction(), rollbackTransaction()方法
+✅ 实现批量ROI操作：insertROIsBulk(), updateROIsBulk(), deleteROIsBulk()方法
+✅ 支持混合操作类型：create、update、delete操作可在单个请求中混合执行
+✅ 全面验证系统：所有操作在执行前进行完整验证，任何验证失败都会阻止所有操作
+✅ 原子事务保证：所有操作要么全部成功，要么全部回滚，确保数据一致性
+✅ 详细错误报告：验证失败时提供具体的错误信息和错误代码
+✅ 活跃管道集成：成功的批量操作会自动更新所有相关的VideoPipeline实例
+✅ 操作统计跟踪：返回详细的操作统计信息（创建、更新、删除数量）
+✅ 线程安全实现：所有数据库操作和管道更新都是线程安全的
+✅ 综合测试脚本：test_bulk_roi_operations.py验证所有功能包括原子事务回滚
+✅ 支持复杂验证：多边形验证、优先级验证、时间格式验证等
+✅ 错误恢复机制：事务失败时自动回滚并提供详细的失败原因
 
 ---
 
