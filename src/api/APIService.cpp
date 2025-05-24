@@ -4,6 +4,7 @@
 #include "../ai/BehaviorAnalyzer.h"
 #include "../utils/PolygonValidator.h"
 #include "../onvif/ONVIFDiscovery.h"
+#include "../output/Streamer.h"
 #include <iostream>
 #include <sstream>
 #include <chrono>
@@ -13,7 +14,7 @@
 #include <algorithm>
 #include <fstream>
 
-APIService::APIService(int port) : m_port(port), m_httpServer(nullptr), m_onvifManager(std::make_unique<ONVIFManager>()) {
+APIService::APIService(int port) : m_port(port), m_httpServer(std::make_unique<httplib::Server>()), m_onvifManager(std::make_unique<ONVIFManager>()) {
     std::cout << "[APIService] Initializing API service on port " << port << std::endl;
 
     // Initialize ONVIF manager
@@ -23,6 +24,9 @@ APIService::APIService(int port) : m_port(port), m_httpServer(nullptr), m_onvifM
     } else {
         std::cout << "[APIService] ONVIF discovery manager initialized" << std::endl;
     }
+
+    // Setup HTTP routes
+    setupRoutes();
 }
 
 APIService::~APIService() {
@@ -61,6 +65,11 @@ void APIService::stop() {
 
     m_running.store(false);
 
+    // Stop the HTTP server
+    if (m_httpServer) {
+        m_httpServer->stop();
+    }
+
     if (m_serverThread.joinable()) {
         m_serverThread.join();
     }
@@ -81,54 +90,116 @@ int APIService::getPort() const {
 }
 
 void APIService::serverThread() {
-    std::cout << "[APIService] Server thread started" << std::endl;
+    std::cout << "[APIService] Server thread started on port " << m_port << std::endl;
 
-    // TODO: Implement actual HTTP server using httplib
-    // For now, this is a placeholder that simulates a running server
-
-    while (m_running.load()) {
-        // Simulate server processing
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-        // In a real implementation, this would:
-        // 1. Listen for HTTP requests
-        // 2. Parse request paths and methods
-        // 3. Route to appropriate handlers
-        // 4. Send responses back to clients
+    try {
+        // Start the HTTP server
+        if (!m_httpServer->listen("0.0.0.0", m_port)) {
+            std::cerr << "[APIService] Failed to start HTTP server on port " << m_port << std::endl;
+            m_running.store(false);
+            return;
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "[APIService] HTTP server error: " << e.what() << std::endl;
+        m_running.store(false);
     }
 
     std::cout << "[APIService] Server thread stopped" << std::endl;
 }
 
 void APIService::setupRoutes() {
-    // TODO: Setup HTTP routes
+    if (!m_httpServer) {
+        std::cerr << "[APIService] HTTP server not initialized" << std::endl;
+        return;
+    }
+
+    std::cout << "[APIService] Setting up HTTP routes..." << std::endl;
 
     // System endpoints
-    // GET /api/system/status - Basic system status
-    // GET /api/system/metrics - Detailed system metrics
+    m_httpServer->Get("/api/system/status", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handleGetStatus("", response);
+        // Extract JSON content from HTTP response
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Get("/api/system/metrics", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handleGetSystemMetrics("", response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Get("/api/system/pipeline-stats", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handleGetPipelineStats("", response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Get("/api/system/stats", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handleGetSystemStats("", response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
 
     // Video source management
-    // POST /api/source/add - Add new video source
-    // DELETE /api/source/{id} - Remove video source
-    // GET /api/source/list - List all video sources
-    // POST /api/source/discover - Discover ONVIF devices
+    m_httpServer->Post("/api/source/add", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handlePostVideoSource(req.body, response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
 
-    // Recording management
-    // POST /api/record/start - Start manual recording
-    // POST /api/record/stop - Stop manual recording
-    // POST /api/record/config - Update recording configuration
-    // GET /api/record/status - Get recording status
+    m_httpServer->Get("/api/source/list", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handleGetVideoSources("", response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
 
-    // Face management
-    // GET /api/faces - List all faces
-    // POST /api/faces/add - Add new face
-    // DELETE /api/faces/{id} - Delete face
+    // ONVIF discovery endpoints
+    m_httpServer->Get("/api/source/discover", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handleGetDiscoverDevices("", response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
 
-    // Behavior rules management
-    // POST /api/rules - Create new rule
-    // GET /api/rules - List all rules
-    // PUT /api/rules/{id} - Update rule
-    // DELETE /api/rules/{id} - Delete rule
+    m_httpServer->Post("/api/source/add-discovered", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handlePostAddDiscoveredDevice(req.body, response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    std::cout << "[APIService] HTTP routes configured successfully" << std::endl;
 }
 
 void APIService::handleGetStatus(const std::string& request, std::string& response) {
@@ -602,15 +673,6 @@ void APIService::handlePostStreamConfig(const std::string& request, std::string&
 
         if (protocol == "rtmp" && rtmpUrl.empty()) {
             response = createErrorResponse("rtmp_url is required for RTMP protocol", 400);
-            return;
-        }
-
-        // Get the pipeline and configure streaming
-        TaskManager& taskManager = TaskManager::getInstance();
-        auto pipeline = taskManager.getPipeline(cameraId);
-
-        if (!pipeline) {
-            response = createErrorResponse("Camera not found: " + cameraId, 404);
             return;
         }
 

@@ -5,6 +5,7 @@
 #include <atomic>
 #include <vector>
 #include <opencv2/opencv.hpp>
+#include <httplib.h>
 
 // Forward declarations
 struct ROI;
@@ -132,6 +133,6 @@ private:
     std::unique_ptr<class ONVIFManager> m_onvifManager;
     std::thread m_serverThread;
 
-    // HTTP server implementation (placeholder)
-    void* m_httpServer; // Will be replaced with actual HTTP library
+    // HTTP server implementation
+    std::unique_ptr<httplib::Server> m_httpServer;
 };

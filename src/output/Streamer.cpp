@@ -1,5 +1,6 @@
 #include "Streamer.h"
 #include "../core/VideoPipeline.h"
+#include "../ai/BehaviorAnalyzer.h"
 #include <iostream>
 #include <sstream>
 #include <iomanip>

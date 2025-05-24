@@ -20,6 +20,7 @@ extern "C" {
 }
 
 struct FrameResult;
+struct BehaviorEvent;
 
 /**
  * @brief Streaming protocol types

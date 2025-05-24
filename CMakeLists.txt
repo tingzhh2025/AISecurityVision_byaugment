@@ -19,6 +19,29 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
 find_package(PkgConfig REQUIRED)
 find_package(OpenCV REQUIRED)
 
+# Find or download httplib
+find_path(HTTPLIB_INCLUDE_DIR httplib.h
+    PATHS
+    /usr/include
+    /usr/local/include
+    ${CMAKE_SOURCE_DIR}/third_party/httplib
+)
+
+if(NOT HTTPLIB_INCLUDE_DIR)
+    message(STATUS "httplib not found, downloading...")
+    file(DOWNLOAD
+        "https://raw.githubusercontent.com/yhirose/cpp-httplib/v0.14.1/httplib.h"
+        "${CMAKE_SOURCE_DIR}/third_party/httplib/httplib.h"
+        SHOW_PROGRESS
+    )
+    set(HTTPLIB_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/third_party/httplib")
+endif()
+
+if(HTTPLIB_INCLUDE_DIR)
+    include_directories(${HTTPLIB_INCLUDE_DIR})
+    message(STATUS "httplib found at: ${HTTPLIB_INCLUDE_DIR}")
+endif()
+
 # Try to find SQLite3
 find_package(PkgConfig QUIET)
 if(PkgConfig_FOUND)

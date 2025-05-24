@@ -96,6 +96,7 @@ public:
     size_t getProcessedFrames() const;
     size_t getDroppedFrames() const;
     std::string getLastError() const;
+    bool isStreamStable() const;
 
     // Access methods
     const VideoSource& getSource() const;
@@ -112,7 +113,6 @@ private:
     void attemptReconnection();
     void updateHealthMetrics();
     void checkStreamHealth();
-    bool isStreamStable() const;
 
     // Member variables
     VideoSource m_source;
