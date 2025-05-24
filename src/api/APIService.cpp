@@ -595,8 +595,41 @@ void APIService::handlePostStreamConfig(const std::string& request, std::string&
             return;
         }
 
-        // TODO: Configure streaming for the pipeline
-        // For now, simulate success
+        // Get the pipeline and configure streaming
+        TaskManager& taskManager = TaskManager::getInstance();
+        auto pipeline = taskManager.getPipeline(cameraId);
+
+        if (!pipeline) {
+            response = createErrorResponse("Camera not found: " + cameraId, 404);
+            return;
+        }
+
+        // Create stream configuration
+        StreamConfig streamConfig;
+        streamConfig.width = width;
+        streamConfig.height = height;
+        streamConfig.fps = fps;
+        streamConfig.enableOverlays = true;
+
+        if (protocol == "mjpeg") {
+            streamConfig.protocol = StreamProtocol::MJPEG;
+            streamConfig.quality = quality;
+            streamConfig.port = port;
+            streamConfig.endpoint = endpoint.empty() ? "/stream.mjpg" : endpoint;
+        } else if (protocol == "rtmp") {
+            streamConfig.protocol = StreamProtocol::RTMP;
+            streamConfig.bitrate = bitrate;
+            streamConfig.rtmpUrl = rtmpUrl;
+        }
+
+        // Configure streaming in the pipeline
+        if (!pipeline->configureStreaming(streamConfig)) {
+            response = createErrorResponse("Failed to configure streaming for pipeline", 500);
+            return;
+        }
+
+        // Get the actual stream URL from the pipeline
+        std::string streamUrl = pipeline->getStreamUrl();
 
         std::ostringstream json;
         json << "{"
@@ -609,16 +642,15 @@ void APIService::handlePostStreamConfig(const std::string& request, std::string&
 
         if (protocol == "mjpeg") {
             json << ",\"quality\":" << quality
-                 << ",\"port\":" << port;
-            if (!endpoint.empty()) {
-                json << ",\"endpoint\":\"" << endpoint << "\"";
-            }
+                 << ",\"port\":" << port
+                 << ",\"endpoint\":\"" << streamConfig.endpoint << "\"";
         } else if (protocol == "rtmp") {
             json << ",\"bitrate\":" << bitrate
                  << ",\"rtmp_url\":\"" << rtmpUrl << "\"";
         }
 
-        json << ",\"configured_at\":\"" << getCurrentTimestamp() << "\""
+        json << ",\"stream_url\":\"" << streamUrl << "\""
+             << ",\"configured_at\":\"" << getCurrentTimestamp() << "\""
              << "}";
 
         response = createJsonResponse(json.str());
@@ -647,21 +679,25 @@ void APIService::handleGetStreamConfig(const std::string& request, std::string& 
             return;
         }
 
-        // TODO: Get actual streaming configuration from pipeline
-        // For now, return default configuration
+        // Get actual streaming configuration from pipeline
+        StreamConfig config = pipeline->getStreamConfig();
+        std::string streamUrl = pipeline->getStreamUrl();
+        bool isStreaming = pipeline->isStreamingEnabled();
 
         std::ostringstream json;
         json << "{"
              << "\"camera_id\":\"" << cameraId << "\","
-             << "\"protocol\":\"mjpeg\","
-             << "\"width\":640,"
-             << "\"height\":480,"
-             << "\"fps\":15,"
-             << "\"quality\":80,"
-             << "\"port\":8000,"
-             << "\"endpoint\":\"/stream.mjpg\","
-             << "\"enabled\":true,"
-             << "\"stream_url\":\"http://localhost:8000/stream.mjpg\","
+             << "\"protocol\":\"" << (config.protocol == StreamProtocol::MJPEG ? "mjpeg" : "rtmp") << "\","
+             << "\"width\":" << config.width << ","
+             << "\"height\":" << config.height << ","
+             << "\"fps\":" << config.fps << ","
+             << "\"quality\":" << config.quality << ","
+             << "\"port\":" << config.port << ","
+             << "\"endpoint\":\"" << config.endpoint << "\","
+             << "\"enabled\":" << (isStreaming ? "true" : "false") << ","
+             << "\"stream_url\":\"" << streamUrl << "\","
+             << "\"bitrate\":" << config.bitrate << ","
+             << "\"rtmp_url\":\"" << config.rtmpUrl << "\","
              << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
              << "}";
 
@@ -689,14 +725,19 @@ void APIService::handlePostStreamStart(const std::string& request, std::string& 
             return;
         }
 
-        // TODO: Start streaming for the pipeline
-        // For now, simulate success
+        // Start streaming for the pipeline
+        if (!pipeline->startStreaming()) {
+            response = createErrorResponse("Failed to start streaming for pipeline", 500);
+            return;
+        }
+
+        std::string streamUrl = pipeline->getStreamUrl();
 
         std::ostringstream json;
         json << "{"
              << "\"status\":\"streaming_started\","
              << "\"camera_id\":\"" << cameraId << "\","
-             << "\"stream_url\":\"http://localhost:8000/stream.mjpg\","
+             << "\"stream_url\":\"" << streamUrl << "\","
              << "\"started_at\":\"" << getCurrentTimestamp() << "\""
              << "}";
 
@@ -726,8 +767,11 @@ void APIService::handlePostStreamStop(const std::string& request, std::string& r
             return;
         }
 
-        // TODO: Stop streaming for the pipeline
-        // For now, simulate success
+        // Stop streaming for the pipeline
+        if (!pipeline->stopStreaming()) {
+            response = createErrorResponse("Failed to stop streaming for pipeline", 500);
+            return;
+        }
 
         std::ostringstream json;
         json << "{"
@@ -759,15 +803,34 @@ void APIService::handleGetStreamStatus(const std::string& request, std::string& 
             const std::string& cameraId = activePipelines[i];
             auto pipeline = taskManager.getPipeline(cameraId);
 
-            json << "{"
-                 << "\"camera_id\":\"" << cameraId << "\","
-                 << "\"protocol\":\"mjpeg\","
-                 << "\"is_streaming\":true,"
-                 << "\"stream_url\":\"http://localhost:8000/stream.mjpg\","
-                 << "\"connected_clients\":0,"
-                 << "\"stream_fps\":15.0,"
-                 << "\"health\":\"healthy\""
-                 << "}";
+            if (pipeline) {
+                StreamConfig config = pipeline->getStreamConfig();
+                std::string streamUrl = pipeline->getStreamUrl();
+                bool isStreaming = pipeline->isStreamingEnabled();
+                size_t connectedClients = pipeline->getConnectedClients();
+                double streamFps = pipeline->getStreamFps();
+                bool isHealthy = pipeline->isHealthy();
+
+                json << "{"
+                     << "\"camera_id\":\"" << cameraId << "\","
+                     << "\"protocol\":\"" << (config.protocol == StreamProtocol::MJPEG ? "mjpeg" : "rtmp") << "\","
+                     << "\"is_streaming\":" << (isStreaming ? "true" : "false") << ","
+                     << "\"stream_url\":\"" << streamUrl << "\","
+                     << "\"connected_clients\":" << connectedClients << ","
+                     << "\"stream_fps\":" << streamFps << ","
+                     << "\"health\":\"" << (isHealthy ? "healthy" : "unhealthy") << "\""
+                     << "}";
+            } else {
+                json << "{"
+                     << "\"camera_id\":\"" << cameraId << "\","
+                     << "\"protocol\":\"unknown\","
+                     << "\"is_streaming\":false,"
+                     << "\"stream_url\":\"\","
+                     << "\"connected_clients\":0,"
+                     << "\"stream_fps\":0.0,"
+                     << "\"health\":\"error\""
+                     << "}";
+            }
         }
 
         json << "],"

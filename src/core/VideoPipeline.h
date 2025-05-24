@@ -26,6 +26,9 @@ struct BehaviorEvent;
 struct ROI;
 struct IntrusionRule;
 
+// Forward declarations for streaming types
+struct StreamConfig;
+
 // VideoSource definition (moved from TaskManager.h to avoid circular dependency)
 struct VideoSource {
     std::string id;
@@ -68,6 +71,16 @@ public:
     void setDetectionEnabled(bool enabled);
     void setRecordingEnabled(bool enabled);
     void setStreamingEnabled(bool enabled);
+
+    // Streaming configuration
+    bool configureStreaming(const StreamConfig& config);
+    StreamConfig getStreamConfig() const;
+    bool startStreaming();
+    bool stopStreaming();
+    bool isStreamingEnabled() const;
+    std::string getStreamUrl() const;
+    size_t getConnectedClients() const;
+    double getStreamFps() const;
 
     // Behavior analysis rule management
     bool addIntrusionRule(const IntrusionRule& rule);

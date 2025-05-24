@@ -11,6 +11,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <cctype>
 
 // FFmpeg includes for RTMP streaming
 extern "C" {
@@ -451,7 +452,10 @@ void Streamer::frameProcessingThread() {
 cv::Mat Streamer::renderOverlays(const cv::Mat& frame, const FrameResult& result) {
     cv::Mat overlayFrame = frame.clone();
 
-    // Draw detections
+    // Draw ROIs first (background layer)
+    drawROIs(overlayFrame, result);
+
+    // Draw detections with enhanced information
     if (!result.detections.empty()) {
         drawDetections(overlayFrame, result.detections, result.labels);
     }
@@ -461,8 +465,26 @@ cv::Mat Streamer::renderOverlays(const cv::Mat& frame, const FrameResult& result
         drawTrackingIds(overlayFrame, result.detections, result.trackIds);
     }
 
-    // Draw timestamp
+    // Draw face recognition results
+    if (!result.faceIds.empty()) {
+        drawFaceRecognition(overlayFrame, result.detections, result.faceIds);
+    }
+
+    // Draw license plate recognition results
+    if (!result.plateNumbers.empty()) {
+        drawLicensePlates(overlayFrame, result.detections, result.plateNumbers);
+    }
+
+    // Draw behavior events and alarms
+    if (!result.events.empty()) {
+        drawBehaviorEvents(overlayFrame, result.events);
+    }
+
+    // Draw timestamp (top layer)
     drawTimestamp(overlayFrame);
+
+    // Draw system info overlay
+    drawSystemInfo(overlayFrame, result);
 
     return overlayFrame;
 }
@@ -472,23 +494,42 @@ void Streamer::drawDetections(cv::Mat& frame, const std::vector<cv::Rect>& detec
     for (size_t i = 0; i < detections.size(); ++i) {
         const cv::Rect& bbox = detections[i];
 
-        // Draw bounding box
-        cv::rectangle(frame, bbox, cv::Scalar(0, 255, 0), 2);
+        // Use different colors for different object types
+        cv::Scalar bboxColor = getDetectionColor(i, labels.size() > i ? labels[i] : "");
 
-        // Draw label if available
+        // Draw bounding box with thicker line for better visibility
+        cv::rectangle(frame, bbox, bboxColor, 3);
+
+        // Draw corner markers for better visibility
+        int cornerSize = 15;
+        drawCornerMarkers(frame, bbox, bboxColor, cornerSize);
+
+        // Draw label with confidence if available
         if (i < labels.size() && !labels[i].empty()) {
             std::string label = labels[i];
+
+            // Extract confidence if present (format: "class:confidence")
+            std::string displayText = label;
+            if (label.find(':') != std::string::npos) {
+                size_t colonPos = label.find(':');
+                std::string className = label.substr(0, colonPos);
+                std::string confidence = label.substr(colonPos + 1);
+                displayText = className + " (" + confidence + ")";
+            }
+
             int baseline = 0;
-            cv::Size textSize = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
+            cv::Size textSize = cv::getTextSize(displayText, cv::FONT_HERSHEY_SIMPLEX, 0.6, 1, &baseline);
 
-            cv::Point textOrg(bbox.x, bbox.y - 5);
-            cv::rectangle(frame,
-                         cv::Point(textOrg.x, textOrg.y - textSize.height - baseline),
-                         cv::Point(textOrg.x + textSize.width, textOrg.y + baseline),
-                         cv::Scalar(0, 255, 0), -1);
+            cv::Point textOrg(bbox.x, bbox.y - 8);
 
-            cv::putText(frame, label, textOrg, cv::FONT_HERSHEY_SIMPLEX, 0.5,
-                       cv::Scalar(0, 0, 0), 1);
+            // Draw background rectangle with rounded corners effect
+            cv::Rect textRect(textOrg.x - 3, textOrg.y - textSize.height - baseline - 3,
+                             textSize.width + 6, textSize.height + baseline + 6);
+            cv::rectangle(frame, textRect, bboxColor, -1);
+            cv::rectangle(frame, textRect, cv::Scalar(0, 0, 0), 1);
+
+            cv::putText(frame, displayText, textOrg, cv::FONT_HERSHEY_SIMPLEX, 0.6,
+                       cv::Scalar(255, 255, 255), 1, cv::LINE_AA);
         }
     }
 }
@@ -897,4 +938,240 @@ void Streamer::rtmpStreamingThread() {
     }
 
     std::cout << "[Streamer] RTMP streaming thread stopped" << std::endl;
+}
+
+// Enhanced overlay methods for Task 39
+cv::Scalar Streamer::getDetectionColor(size_t index, const std::string& label) {
+    // Define colors for different object types
+    static const std::vector<cv::Scalar> colors = {
+        cv::Scalar(0, 255, 0),    // Green - person
+        cv::Scalar(255, 0, 0),    // Blue - vehicle
+        cv::Scalar(0, 0, 255),    // Red - face
+        cv::Scalar(255, 255, 0),  // Cyan - bicycle
+        cv::Scalar(255, 0, 255),  // Magenta - motorcycle
+        cv::Scalar(0, 255, 255),  // Yellow - bus/truck
+        cv::Scalar(128, 0, 128),  // Purple - animal
+        cv::Scalar(255, 165, 0),  // Orange - other
+    };
+
+    // Color based on object type if available
+    if (!label.empty()) {
+        std::string lowerLabel = label;
+        std::transform(lowerLabel.begin(), lowerLabel.end(), lowerLabel.begin(), ::tolower);
+
+        if (lowerLabel.find("person") != std::string::npos) return colors[0];
+        if (lowerLabel.find("car") != std::string::npos || lowerLabel.find("vehicle") != std::string::npos) return colors[1];
+        if (lowerLabel.find("face") != std::string::npos) return colors[2];
+        if (lowerLabel.find("bicycle") != std::string::npos) return colors[3];
+        if (lowerLabel.find("motorcycle") != std::string::npos) return colors[4];
+        if (lowerLabel.find("bus") != std::string::npos || lowerLabel.find("truck") != std::string::npos) return colors[5];
+    }
+
+    // Fallback to index-based color
+    return colors[index % colors.size()];
+}
+
+void Streamer::drawCornerMarkers(cv::Mat& frame, const cv::Rect& bbox, const cv::Scalar& color, int size) {
+    int thickness = 3;
+
+    // Top-left corner
+    cv::line(frame, cv::Point(bbox.x, bbox.y), cv::Point(bbox.x + size, bbox.y), color, thickness);
+    cv::line(frame, cv::Point(bbox.x, bbox.y), cv::Point(bbox.x, bbox.y + size), color, thickness);
+
+    // Top-right corner
+    cv::line(frame, cv::Point(bbox.x + bbox.width, bbox.y), cv::Point(bbox.x + bbox.width - size, bbox.y), color, thickness);
+    cv::line(frame, cv::Point(bbox.x + bbox.width, bbox.y), cv::Point(bbox.x + bbox.width, bbox.y + size), color, thickness);
+
+    // Bottom-left corner
+    cv::line(frame, cv::Point(bbox.x, bbox.y + bbox.height), cv::Point(bbox.x + size, bbox.y + bbox.height), color, thickness);
+    cv::line(frame, cv::Point(bbox.x, bbox.y + bbox.height), cv::Point(bbox.x, bbox.y + bbox.height - size), color, thickness);
+
+    // Bottom-right corner
+    cv::line(frame, cv::Point(bbox.x + bbox.width, bbox.y + bbox.height), cv::Point(bbox.x + bbox.width - size, bbox.y + bbox.height), color, thickness);
+    cv::line(frame, cv::Point(bbox.x + bbox.width, bbox.y + bbox.height), cv::Point(bbox.x + bbox.width, bbox.y + bbox.height - size), color, thickness);
+}
+
+void Streamer::drawROIs(cv::Mat& frame, const FrameResult& result) {
+    // TODO: Get ROIs from BehaviorAnalyzer through result
+    // For now, draw placeholder ROIs to demonstrate functionality
+
+    // Draw semi-transparent ROI polygons
+    cv::Mat overlay = frame.clone();
+
+    // Example ROI polygon (this would come from actual ROI data)
+    std::vector<cv::Point> roiPoints = {
+        cv::Point(100, 100),
+        cv::Point(300, 100),
+        cv::Point(350, 200),
+        cv::Point(250, 300),
+        cv::Point(50, 250)
+    };
+
+    if (!roiPoints.empty()) {
+        // Fill ROI with semi-transparent color
+        std::vector<std::vector<cv::Point>> contours = {roiPoints};
+        cv::fillPoly(overlay, contours, cv::Scalar(0, 255, 255, 100)); // Yellow with transparency
+
+        // Draw ROI border
+        cv::polylines(frame, roiPoints, true, cv::Scalar(0, 255, 255), 2);
+
+        // Blend overlay with original frame
+        cv::addWeighted(frame, 0.8, overlay, 0.2, 0, frame);
+
+        // Add ROI label
+        cv::putText(frame, "ROI: Intrusion Zone", cv::Point(roiPoints[0].x, roiPoints[0].y - 10),
+                   cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 255, 255), 2);
+    }
+}
+
+void Streamer::drawFaceRecognition(cv::Mat& frame, const std::vector<cv::Rect>& detections,
+                                  const std::vector<std::string>& faceIds) {
+    for (size_t i = 0; i < std::min(detections.size(), faceIds.size()); ++i) {
+        if (!faceIds[i].empty() && faceIds[i] != "unknown") {
+            const cv::Rect& bbox = detections[i];
+
+            // Draw face recognition result below the detection box
+            std::string faceText = "Face: " + faceIds[i];
+            cv::Point textPos(bbox.x, bbox.y + bbox.height + 20);
+
+            // Background for face text
+            int baseline = 0;
+            cv::Size textSize = cv::getTextSize(faceText, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
+            cv::rectangle(frame,
+                         cv::Point(textPos.x - 2, textPos.y - textSize.height - baseline - 2),
+                         cv::Point(textPos.x + textSize.width + 2, textPos.y + baseline + 2),
+                         cv::Scalar(255, 0, 0), -1);
+
+            cv::putText(frame, faceText, textPos, cv::FONT_HERSHEY_SIMPLEX, 0.5,
+                       cv::Scalar(255, 255, 255), 1);
+        }
+    }
+}
+
+void Streamer::drawLicensePlates(cv::Mat& frame, const std::vector<cv::Rect>& detections,
+                                const std::vector<std::string>& plateNumbers) {
+    for (size_t i = 0; i < std::min(detections.size(), plateNumbers.size()); ++i) {
+        if (!plateNumbers[i].empty()) {
+            const cv::Rect& bbox = detections[i];
+
+            // Draw license plate result below the detection box
+            std::string plateText = "Plate: " + plateNumbers[i];
+            cv::Point textPos(bbox.x, bbox.y + bbox.height + 40);
+
+            // Background for plate text
+            int baseline = 0;
+            cv::Size textSize = cv::getTextSize(plateText, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
+            cv::rectangle(frame,
+                         cv::Point(textPos.x - 2, textPos.y - textSize.height - baseline - 2),
+                         cv::Point(textPos.x + textSize.width + 2, textPos.y + baseline + 2),
+                         cv::Scalar(0, 255, 0), -1);
+
+            cv::putText(frame, plateText, textPos, cv::FONT_HERSHEY_SIMPLEX, 0.5,
+                       cv::Scalar(0, 0, 0), 1);
+        }
+    }
+}
+
+void Streamer::drawBehaviorEvents(cv::Mat& frame, const std::vector<BehaviorEvent>& events) {
+    for (size_t i = 0; i < events.size(); ++i) {
+        const auto& event = events[i];
+
+        // Draw alarm indicator in top-right corner
+        cv::Point alarmPos(frame.cols - 200, 30 + i * 30);
+
+        // Choose color based on event type
+        cv::Scalar eventColor;
+        std::string eventText;
+
+        // TODO: Use actual event type from BehaviorEvent structure
+        // For now, use placeholder event types
+        eventText = "ALARM: Intrusion Detected";
+        eventColor = cv::Scalar(0, 0, 255); // Red for alarm
+
+        // Draw alarm background
+        int baseline = 0;
+        cv::Size textSize = cv::getTextSize(eventText, cv::FONT_HERSHEY_SIMPLEX, 0.7, 2, &baseline);
+        cv::rectangle(frame,
+                     cv::Point(alarmPos.x - 5, alarmPos.y - textSize.height - baseline - 5),
+                     cv::Point(alarmPos.x + textSize.width + 5, alarmPos.y + baseline + 5),
+                     eventColor, -1);
+
+        // Draw alarm text
+        cv::putText(frame, eventText, alarmPos, cv::FONT_HERSHEY_SIMPLEX, 0.7,
+                   cv::Scalar(255, 255, 255), 2);
+
+        // Draw blinking effect for active alarms
+        static int blinkCounter = 0;
+        blinkCounter = (blinkCounter + 1) % 20;
+        if (blinkCounter < 10) {
+            // Draw border around entire frame for alarm
+            cv::rectangle(frame, cv::Point(0, 0), cv::Point(frame.cols-1, frame.rows-1),
+                         eventColor, 8);
+        }
+    }
+}
+
+void Streamer::drawSystemInfo(cv::Mat& frame, const FrameResult& result) {
+    // Draw system information in top-left corner
+    std::vector<std::string> infoLines;
+
+    // Add detection count
+    infoLines.push_back("Detections: " + std::to_string(result.detections.size()));
+
+    // Add tracking count
+    if (!result.trackIds.empty()) {
+        infoLines.push_back("Tracked: " + std::to_string(result.trackIds.size()));
+    }
+
+    // Add face recognition count
+    int recognizedFaces = 0;
+    for (const auto& faceId : result.faceIds) {
+        if (!faceId.empty() && faceId != "unknown") {
+            recognizedFaces++;
+        }
+    }
+    if (recognizedFaces > 0) {
+        infoLines.push_back("Faces: " + std::to_string(recognizedFaces));
+    }
+
+    // Add license plate count
+    int recognizedPlates = 0;
+    for (const auto& plate : result.plateNumbers) {
+        if (!plate.empty()) {
+            recognizedPlates++;
+        }
+    }
+    if (recognizedPlates > 0) {
+        infoLines.push_back("Plates: " + std::to_string(recognizedPlates));
+    }
+
+    // Add stream info
+    infoLines.push_back("Stream: " + m_sourceId);
+    infoLines.push_back("FPS: " + std::to_string(static_cast<int>(m_streamFps.load())));
+
+    // Draw info background
+    if (!infoLines.empty()) {
+        int maxWidth = 0;
+        int totalHeight = 0;
+        int lineHeight = 25;
+
+        for (const auto& line : infoLines) {
+            int baseline = 0;
+            cv::Size textSize = cv::getTextSize(line, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
+            maxWidth = std::max(maxWidth, textSize.width);
+            totalHeight += lineHeight;
+        }
+
+        // Draw semi-transparent background
+        cv::rectangle(frame, cv::Point(5, 5),
+                     cv::Point(maxWidth + 15, totalHeight + 15),
+                     cv::Scalar(0, 0, 0, 128), -1);
+
+        // Draw info lines
+        for (size_t i = 0; i < infoLines.size(); ++i) {
+            cv::Point textPos(10, 25 + i * lineHeight);
+            cv::putText(frame, infoLines[i], textPos, cv::FONT_HERSHEY_SIMPLEX, 0.5,
+                       cv::Scalar(255, 255, 255), 1);
+        }
+    }
 }

@@ -437,3 +437,154 @@ std::string VideoSource::toString() const {
         << ", enabled=" << (enabled ? "true" : "false") << "}";
     return oss.str();
 }
+
+// Streaming configuration methods
+bool VideoPipeline::configureStreaming(const StreamConfig& config) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_streamer) {
+        std::cerr << "[VideoPipeline] Streamer not initialized" << std::endl;
+        return false;
+    }
+
+    try {
+        // Update streamer configuration
+        m_streamer->setConfig(config);
+
+        // Restart streaming if it was running
+        if (m_streamingEnabled.load()) {
+            m_streamer->stopServer();
+            m_streamer->stopRtmpStream();
+
+            if (config.protocol == StreamProtocol::MJPEG) {
+                if (!m_streamer->startServer()) {
+                    std::cerr << "[VideoPipeline] Failed to restart MJPEG server" << std::endl;
+                    return false;
+                }
+            } else if (config.protocol == StreamProtocol::RTMP) {
+                if (!m_streamer->startRtmpStream()) {
+                    std::cerr << "[VideoPipeline] Failed to restart RTMP stream" << std::endl;
+                    return false;
+                }
+            }
+        }
+
+        std::cout << "[VideoPipeline] Streaming configured for " << m_source.id
+                  << " - " << (config.protocol == StreamProtocol::MJPEG ? "MJPEG" : "RTMP")
+                  << " " << config.width << "x" << config.height << "@" << config.fps << "fps" << std::endl;
+
+        return true;
+
+    } catch (const std::exception& e) {
+        std::cerr << "[VideoPipeline] Failed to configure streaming: " << e.what() << std::endl;
+        return false;
+    }
+}
+
+StreamConfig VideoPipeline::getStreamConfig() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_streamer) {
+        return StreamConfig{}; // Return default config
+    }
+
+    return m_streamer->getConfig();
+}
+
+bool VideoPipeline::startStreaming() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_streamer) {
+        std::cerr << "[VideoPipeline] Streamer not initialized" << std::endl;
+        return false;
+    }
+
+    if (m_streamingEnabled.load()) {
+        std::cout << "[VideoPipeline] Streaming already enabled for " << m_source.id << std::endl;
+        return true;
+    }
+
+    try {
+        StreamConfig config = m_streamer->getConfig();
+
+        bool success = false;
+        if (config.protocol == StreamProtocol::MJPEG) {
+            success = m_streamer->startServer();
+        } else if (config.protocol == StreamProtocol::RTMP) {
+            success = m_streamer->startRtmpStream();
+        }
+
+        if (success) {
+            m_streamingEnabled.store(true);
+            std::cout << "[VideoPipeline] Streaming started for " << m_source.id
+                      << " at " << m_streamer->getStreamUrl() << std::endl;
+        }
+
+        return success;
+
+    } catch (const std::exception& e) {
+        std::cerr << "[VideoPipeline] Failed to start streaming: " << e.what() << std::endl;
+        return false;
+    }
+}
+
+bool VideoPipeline::stopStreaming() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_streamer) {
+        std::cerr << "[VideoPipeline] Streamer not initialized" << std::endl;
+        return false;
+    }
+
+    if (!m_streamingEnabled.load()) {
+        std::cout << "[VideoPipeline] Streaming already disabled for " << m_source.id << std::endl;
+        return true;
+    }
+
+    try {
+        m_streamer->stopServer();
+        m_streamer->stopRtmpStream();
+        m_streamingEnabled.store(false);
+
+        std::cout << "[VideoPipeline] Streaming stopped for " << m_source.id << std::endl;
+        return true;
+
+    } catch (const std::exception& e) {
+        std::cerr << "[VideoPipeline] Failed to stop streaming: " << e.what() << std::endl;
+        return false;
+    }
+}
+
+bool VideoPipeline::isStreamingEnabled() const {
+    return m_streamingEnabled.load();
+}
+
+std::string VideoPipeline::getStreamUrl() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_streamer) {
+        return "";
+    }
+
+    return m_streamer->getStreamUrl();
+}
+
+size_t VideoPipeline::getConnectedClients() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_streamer) {
+        return 0;
+    }
+
+    return m_streamer->getConnectedClients();
+}
+
+double VideoPipeline::getStreamFps() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_streamer) {
+        return 0.0;
+    }
+
+    return m_streamer->getStreamFps();
+}

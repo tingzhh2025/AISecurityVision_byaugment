@@ -133,6 +133,17 @@ private:
                         const std::vector<int>& trackIds);
     void drawTimestamp(cv::Mat& frame);
 
+    // Enhanced overlay methods for Task 39
+    cv::Scalar getDetectionColor(size_t index, const std::string& label);
+    void drawCornerMarkers(cv::Mat& frame, const cv::Rect& bbox, const cv::Scalar& color, int size);
+    void drawROIs(cv::Mat& frame, const FrameResult& result);
+    void drawFaceRecognition(cv::Mat& frame, const std::vector<cv::Rect>& detections,
+                            const std::vector<std::string>& faceIds);
+    void drawLicensePlates(cv::Mat& frame, const std::vector<cv::Rect>& detections,
+                          const std::vector<std::string>& plateNumbers);
+    void drawBehaviorEvents(cv::Mat& frame, const std::vector<BehaviorEvent>& events);
+    void drawSystemInfo(cv::Mat& frame, const FrameResult& result);
+
     std::vector<uint8_t> encodeJpeg(const cv::Mat& frame);
     cv::Mat resizeFrame(const cv::Mat& frame, int targetWidth, int targetHeight);
 

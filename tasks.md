@@ -683,7 +683,21 @@ AISecurityVision/
 
 **所属子史诗**: 7
 
-**状态**: todo
+**状态**: done
+
+**实施完成**:
+✅ 实现完整的流媒体配置API端点集成到APIService
+✅ 替换所有TODO占位符为实际的VideoPipeline流媒体配置调用
+✅ 实现POST /api/stream/config端点支持MJPEG和RTMP协议配置
+✅ 实现GET /api/stream/config端点获取实际流媒体配置
+✅ 实现POST /api/stream/start和/api/stream/stop端点控制流媒体启停
+✅ 实现GET /api/stream/status端点获取实时流媒体状态
+✅ 扩展VideoPipeline类添加流媒体配置方法：configureStreaming, getStreamConfig, startStreaming, stopStreaming
+✅ 添加流媒体状态查询方法：isStreamingEnabled, getStreamUrl, getConnectedClients, getStreamFps
+✅ 实现完整的参数验证：分辨率范围、帧率限制、协议验证、RTMP URL要求
+✅ 增强错误处理：摄像头不存在、配置失败、启停失败等场景
+✅ 创建综合测试脚本验证所有流媒体配置功能(test_streaming_api.sh)
+✅ 支持动态流媒体参数更新和实时配置重载
 
 ---
 
@@ -693,7 +707,22 @@ AISecurityVision/
 
 **所属子史诗**: 7
 
-**状态**: todo
+**状态**: done
+
+**实施完成**:
+✅ 增强Streamer类的renderOverlays方法支持多层次覆盖渲染
+✅ 实现增强的检测框绘制：置信度分数、类别标签、颜色编码
+✅ 添加角标记和改进的边界框样式提高可视性
+✅ 实现ROI多边形可视化：半透明填充、边界线、标签
+✅ 集成人脸识别结果覆盖：识别姓名、置信度显示
+✅ 集成车牌识别结果覆盖：车牌号码、区域信息
+✅ 实现行为事件和报警覆盖：实时警报指示器、闪烁效果
+✅ 添加系统信息覆盖：检测计数、跟踪统计、流媒体信息
+✅ 增强时间戳覆盖：高精度时间显示、背景样式
+✅ 实现基于对象类型的智能颜色分配系统
+✅ 支持覆盖层的动态启用/禁用配置
+✅ 创建综合测试脚本验证所有覆盖功能(test_bbox_overlays.sh)
+✅ 优化覆盖渲染性能和视觉效果
 
 ---
 
@@ -855,7 +884,24 @@ AISecurityVision/
 
 **所属子史诗**: 9
 
-**状态**: todo
+**状态**: done
+
+**实施完成**:
+✅ 创建完整的ROI管理器Web界面(roi_manager.html)
+✅ 实现HTML5 Canvas多边形绘制功能：点击式多边形创建、实时预览、自动闭合
+✅ 开发交互式绘图控制：绘制模式切换、撤销点、清除画布、完成多边形
+✅ 集成摄像头选择和视频流加载作为绘图背景参考
+✅ 实现ROI配置表单：名称、类型、优先级、持续时间、置信度阈值
+✅ 创建ROI列表管理界面：查看、选择、删除已配置的ROI
+✅ 添加键盘快捷键支持：ESC退出、Enter完成、Backspace撤销
+✅ 实现网格覆盖层提供精确定位辅助
+✅ 开发实时坐标显示和绘图状态监控
+✅ 集成API调用实现ROI持久化存储和检索
+✅ 实现多边形可视化：填充、边框、点标记、选中高亮
+✅ 添加响应式设计支持不同屏幕尺寸
+✅ 创建通知系统提供用户操作反馈
+✅ 实现完整的ROI生命周期管理：创建、查看、编辑、删除
+✅ 创建综合测试脚本验证所有绘图功能(test_roi_drawing.sh)
 
 ---
 

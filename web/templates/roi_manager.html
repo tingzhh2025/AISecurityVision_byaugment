@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ROI Manager - AI Security Vision System</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="stylesheet" href="/static/css/roi_manager.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Header -->
+        <header class="dashboard-header">
+            <div class="header-content">
+                <h1>🎯 ROI Manager - AI Security Vision System</h1>
+                <div class="header-actions">
+                    <a href="/dashboard" class="nav-btn">📊 Dashboard</a>
+                    <div class="system-status">
+                        <span id="system-status" class="status-indicator">●</span>
+                        <span id="system-status-text">Connecting...</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="roi-main">
+            <!-- Camera Selection -->
+            <section class="camera-section">
+                <div class="section-header">
+                    <h3>📹 Camera Selection</h3>
+                </div>
+                <div class="camera-controls">
+                    <select id="camera-select" class="form-select">
+                        <option value="">Select a camera...</option>
+                    </select>
+                    <button id="refresh-cameras" class="control-btn">🔄 Refresh</button>
+                    <button id="load-stream" class="control-btn primary">📺 Load Stream</button>
+                </div>
+            </section>
+
+            <!-- Video Stream and Canvas -->
+            <section class="canvas-section">
+                <div class="canvas-container">
+                    <div class="canvas-header">
+                        <h3>🖼️ Video Stream & ROI Drawing</h3>
+                        <div class="canvas-controls">
+                            <button id="draw-mode-btn" class="control-btn">✏️ Draw Mode</button>
+                            <button id="clear-canvas" class="control-btn">🗑️ Clear</button>
+                            <button id="undo-point" class="control-btn">↶ Undo Point</button>
+                            <button id="complete-polygon" class="control-btn success">✅ Complete</button>
+                        </div>
+                    </div>
+                    <div class="canvas-wrapper">
+                        <img id="video-stream" src="" alt="Video Stream" style="display: none;">
+                        <canvas id="roi-canvas" width="1280" height="720"></canvas>
+                        <div id="canvas-info" class="canvas-info">
+                            <div>Resolution: <span id="canvas-resolution">1280x720</span></div>
+                            <div>Mode: <span id="canvas-mode">View</span></div>
+                            <div>Points: <span id="point-count">0</span></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ROI Configuration -->
+            <section class="roi-config-section">
+                <div class="config-container">
+                    <div class="config-header">
+                        <h3>⚙️ ROI Configuration</h3>
+                    </div>
+                    <form id="roi-form" class="roi-form">
+                        <div class="form-group">
+                            <label for="roi-name">ROI Name:</label>
+                            <input type="text" id="roi-name" class="form-input" placeholder="Enter ROI name..." required>
+                        </div>
+                        <div class="form-group">
+                            <label for="roi-type">ROI Type:</label>
+                            <select id="roi-type" class="form-select" required>
+                                <option value="intrusion">Intrusion Detection</option>
+                                <option value="loitering">Loitering Detection</option>
+                                <option value="crowd">Crowd Detection</option>
+                                <option value="restricted">Restricted Area</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="roi-priority">Priority:</label>
+                            <select id="roi-priority" class="form-select">
+                                <option value="1">High (1)</option>
+                                <option value="2">Medium (2)</option>
+                                <option value="3">Low (3)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="min-duration">Min Duration (seconds):</label>
+                            <input type="number" id="min-duration" class="form-input" value="5.0" step="0.1" min="0.1">
+                        </div>
+                        <div class="form-group">
+                            <label for="confidence-threshold">Confidence Threshold:</label>
+                            <input type="number" id="confidence-threshold" class="form-input" value="0.7" step="0.1" min="0.1" max="1.0">
+                        </div>
+                        <div class="form-group checkbox-group">
+                            <label>
+                                <input type="checkbox" id="roi-enabled" checked>
+                                <span class="checkmark"></span>
+                                Enable ROI
+                            </label>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" id="save-roi" class="control-btn success">💾 Save ROI</button>
+                            <button type="button" id="cancel-roi" class="control-btn">❌ Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <!-- ROI List -->
+            <section class="roi-list-section">
+                <div class="section-header">
+                    <h3>📋 Configured ROIs</h3>
+                    <button id="refresh-rois" class="control-btn">🔄 Refresh</button>
+                </div>
+                <div class="roi-list-container">
+                    <div id="roi-list" class="roi-list">
+                        <div class="no-rois">No ROIs configured</div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="dashboard-footer">
+            <div class="footer-content">
+                <span>AI Security Vision System v1.0</span>
+                <span>ROI Management Interface</span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading ROI Manager...</div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/js/roi_manager.js"></script>
+</body>
+</html>
