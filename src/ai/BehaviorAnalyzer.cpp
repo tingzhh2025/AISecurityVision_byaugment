@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <set>
 #include <chrono>
+#include <regex>
+#include <cstdio>
 
 BehaviorAnalyzer::BehaviorAnalyzer()
     : m_minObjectSize(DEFAULT_MIN_WIDTH, DEFAULT_MIN_HEIGHT),
@@ -128,6 +130,11 @@ std::vector<BehaviorEvent> BehaviorAnalyzer::checkIntrusionRules() {
 
             auto roiEntryIt = state.roiEntryTimes.find(rule.roi.id);
             if (roiEntryIt != state.roiEntryTimes.end()) {
+                // Check if ROI is currently active based on time rules
+                if (!isROIActiveNow(rule.roi)) {
+                    continue; // ROI is not active during current time
+                }
+
                 // Object is in ROI, check duration
                 double duration = std::chrono::duration<double>(now - roiEntryIt->second).count();
 
@@ -403,6 +410,11 @@ std::vector<BehaviorEvent> BehaviorAnalyzer::checkIntrusionRulesWithPriority() {
             continue; // No active rule for this ROI
         }
 
+        // Check if ROI is currently active based on time rules
+        if (!isROIActiveNow(activeRule->roi)) {
+            continue; // ROI is not active during current time
+        }
+
         // Check if object has been in this ROI long enough
         auto roiEntryIt = state.roiEntryTimes.find(activeRule->roi.id);
         if (roiEntryIt != state.roiEntryTimes.end()) {
@@ -455,7 +467,7 @@ std::vector<std::string> BehaviorAnalyzer::getOverlappingROIs(const cv::Point2f&
 
     for (const auto& roiPair : m_rois) {
         const ROI& roi = roiPair.second;
-        if (roi.enabled && isPointInROI(point, roi)) {
+        if (roi.enabled && isROIActiveNow(roi) && isPointInROI(point, roi)) {
             overlappingROIs.push_back(roi.id);
         }
     }
@@ -483,4 +495,70 @@ std::string BehaviorAnalyzer::getHighestPriorityROI(const std::vector<std::strin
     }
 
     return highestPriorityROIId;
+}
+
+// Time-based validation methods
+bool BehaviorAnalyzer::isValidTimeFormat(const std::string& timeStr) {
+    if (timeStr.empty()) {
+        return true; // Empty time is valid (no time restriction)
+    }
+
+    // Check for HH:MM format
+    std::regex timeRegex1(R"(^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$)");
+    if (std::regex_match(timeStr, timeRegex1)) {
+        return true;
+    }
+
+    // Check for HH:MM:SS format
+    std::regex timeRegex2(R"(^([0-1]?[0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])$)");
+    if (std::regex_match(timeStr, timeRegex2)) {
+        return true;
+    }
+
+    return false;
+}
+
+bool BehaviorAnalyzer::isCurrentTimeInRange(const std::string& startTime, const std::string& endTime) {
+    if (startTime.empty() || endTime.empty()) {
+        return true; // No time restriction if either time is empty
+    }
+
+    // Get current time
+    auto now = std::chrono::system_clock::now();
+    auto time_t = std::chrono::system_clock::to_time_t(now);
+    auto tm = *std::localtime(&time_t);
+
+    // Parse start time
+    int startHour, startMin, startSec = 0;
+    if (sscanf(startTime.c_str(), "%d:%d:%d", &startHour, &startMin, &startSec) < 2) {
+        return true; // Invalid format, allow by default
+    }
+
+    // Parse end time
+    int endHour, endMin, endSec = 0;
+    if (sscanf(endTime.c_str(), "%d:%d:%d", &endHour, &endMin, &endSec) < 2) {
+        return true; // Invalid format, allow by default
+    }
+
+    // Convert current time to seconds since midnight
+    int currentSeconds = tm.tm_hour * 3600 + tm.tm_min * 60 + tm.tm_sec;
+    int startSeconds = startHour * 3600 + startMin * 60 + startSec;
+    int endSeconds = endHour * 3600 + endMin * 60 + endSec;
+
+    // Handle cases where end time is next day (e.g., 22:00-06:00)
+    if (endSeconds <= startSeconds) {
+        // Time range crosses midnight
+        return (currentSeconds >= startSeconds) || (currentSeconds <= endSeconds);
+    } else {
+        // Normal time range within same day
+        return (currentSeconds >= startSeconds) && (currentSeconds <= endSeconds);
+    }
+}
+
+bool BehaviorAnalyzer::isROIActiveNow(const ROI& roi) const {
+    if (!roi.enabled) {
+        return false;
+    }
+
+    return isCurrentTimeInRange(roi.start_time, roi.end_time);
 }

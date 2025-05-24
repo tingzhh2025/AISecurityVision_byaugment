@@ -104,6 +104,8 @@ bool DatabaseManager::createTables() {
             polygon_data TEXT NOT NULL,
             enabled BOOLEAN DEFAULT 1,
             priority INTEGER DEFAULT 1,
+            start_time TEXT,
+            end_time TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
@@ -194,8 +196,8 @@ bool DatabaseManager::prepareStatements() {
 
     // Prepare insert ROI statement
     const char* insertROISql = R"(
-        INSERT INTO rois (roi_id, camera_id, name, polygon_data, enabled, priority, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+        INSERT INTO rois (roi_id, camera_id, name, polygon_data, enabled, priority, start_time, end_time, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
     )";
 
     if (sqlite3_prepare_v2(m_db, insertROISql, -1, &m_insertROIStmt, nullptr) != SQLITE_OK) {
@@ -675,8 +677,22 @@ bool DatabaseManager::insertROI(const ROIRecord& roi) {
     sqlite3_bind_text(m_insertROIStmt, 4, roi.polygon_data.c_str(), -1, SQLITE_STATIC);
     sqlite3_bind_int(m_insertROIStmt, 5, roi.enabled ? 1 : 0);
     sqlite3_bind_int(m_insertROIStmt, 6, roi.priority);
-    sqlite3_bind_text(m_insertROIStmt, 7, roi.created_at.c_str(), -1, SQLITE_STATIC);
-    sqlite3_bind_text(m_insertROIStmt, 8, roi.updated_at.c_str(), -1, SQLITE_STATIC);
+
+    // Bind time fields (can be NULL)
+    if (!roi.start_time.empty()) {
+        sqlite3_bind_text(m_insertROIStmt, 7, roi.start_time.c_str(), -1, SQLITE_STATIC);
+    } else {
+        sqlite3_bind_null(m_insertROIStmt, 7);
+    }
+
+    if (!roi.end_time.empty()) {
+        sqlite3_bind_text(m_insertROIStmt, 8, roi.end_time.c_str(), -1, SQLITE_STATIC);
+    } else {
+        sqlite3_bind_null(m_insertROIStmt, 8);
+    }
+
+    sqlite3_bind_text(m_insertROIStmt, 9, roi.created_at.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(m_insertROIStmt, 10, roi.updated_at.c_str(), -1, SQLITE_STATIC);
 
     // Execute
     int rc = sqlite3_step(m_insertROIStmt);
@@ -692,7 +708,7 @@ std::vector<ROIRecord> DatabaseManager::getROIs(const std::string& cameraId) {
     std::lock_guard<std::mutex> lock(m_mutex);
     std::vector<ROIRecord> rois;
 
-    std::string query = "SELECT id, roi_id, camera_id, name, polygon_data, enabled, priority, created_at, updated_at FROM rois";
+    std::string query = "SELECT id, roi_id, camera_id, name, polygon_data, enabled, priority, start_time, end_time, created_at, updated_at FROM rois";
 
     if (!cameraId.empty()) {
         query += " WHERE camera_id = '" + cameraId + "'";
@@ -716,10 +732,16 @@ std::vector<ROIRecord> DatabaseManager::getROIs(const std::string& cameraId) {
         roi.enabled = sqlite3_column_int(stmt, 5) != 0;
         roi.priority = sqlite3_column_int(stmt, 6);
 
-        const char* createdAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 7));
+        const char* startTime = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 7));
+        if (startTime) roi.start_time = startTime;
+
+        const char* endTime = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 8));
+        if (endTime) roi.end_time = endTime;
+
+        const char* createdAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
         if (createdAt) roi.created_at = createdAt;
 
-        const char* updatedAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 8));
+        const char* updatedAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 10));
         if (updatedAt) roi.updated_at = updatedAt;
 
         rois.push_back(roi);
@@ -733,7 +755,7 @@ ROIRecord DatabaseManager::getROIById(const std::string& roiId) {
     std::lock_guard<std::mutex> lock(m_mutex);
     ROIRecord roi;
 
-    const char* query = "SELECT id, roi_id, camera_id, name, polygon_data, enabled, priority, created_at, updated_at FROM rois WHERE roi_id = ?";
+    const char* query = "SELECT id, roi_id, camera_id, name, polygon_data, enabled, priority, start_time, end_time, created_at, updated_at FROM rois WHERE roi_id = ?";
 
     sqlite3_stmt* stmt;
     if (sqlite3_prepare_v2(m_db, query, -1, &stmt, nullptr) != SQLITE_OK) {
@@ -752,10 +774,16 @@ ROIRecord DatabaseManager::getROIById(const std::string& roiId) {
         roi.enabled = sqlite3_column_int(stmt, 5) != 0;
         roi.priority = sqlite3_column_int(stmt, 6);
 
-        const char* createdAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 7));
+        const char* startTime = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 7));
+        if (startTime) roi.start_time = startTime;
+
+        const char* endTime = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 8));
+        if (endTime) roi.end_time = endTime;
+
+        const char* createdAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
         if (createdAt) roi.created_at = createdAt;
 
-        const char* updatedAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 8));
+        const char* updatedAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 10));
         if (updatedAt) roi.updated_at = updatedAt;
     }
 
@@ -767,7 +795,7 @@ ROIRecord DatabaseManager::getROIByDatabaseId(int id) {
     std::lock_guard<std::mutex> lock(m_mutex);
     ROIRecord roi;
 
-    const char* query = "SELECT id, roi_id, camera_id, name, polygon_data, enabled, priority, created_at, updated_at FROM rois WHERE id = ?";
+    const char* query = "SELECT id, roi_id, camera_id, name, polygon_data, enabled, priority, start_time, end_time, created_at, updated_at FROM rois WHERE id = ?";
 
     sqlite3_stmt* stmt;
     if (sqlite3_prepare_v2(m_db, query, -1, &stmt, nullptr) != SQLITE_OK) {
@@ -786,10 +814,16 @@ ROIRecord DatabaseManager::getROIByDatabaseId(int id) {
         roi.enabled = sqlite3_column_int(stmt, 5) != 0;
         roi.priority = sqlite3_column_int(stmt, 6);
 
-        const char* createdAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 7));
+        const char* startTime = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 7));
+        if (startTime) roi.start_time = startTime;
+
+        const char* endTime = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 8));
+        if (endTime) roi.end_time = endTime;
+
+        const char* createdAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
         if (createdAt) roi.created_at = createdAt;
 
-        const char* updatedAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 8));
+        const char* updatedAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 10));
         if (updatedAt) roi.updated_at = updatedAt;
     }
 
@@ -800,7 +834,7 @@ ROIRecord DatabaseManager::getROIByDatabaseId(int id) {
 bool DatabaseManager::updateROI(const ROIRecord& roi) {
     std::lock_guard<std::mutex> lock(m_mutex);
 
-    const char* query = "UPDATE rois SET camera_id = ?, name = ?, polygon_data = ?, enabled = ?, priority = ?, updated_at = ? WHERE roi_id = ?";
+    const char* query = "UPDATE rois SET camera_id = ?, name = ?, polygon_data = ?, enabled = ?, priority = ?, start_time = ?, end_time = ?, updated_at = ? WHERE roi_id = ?";
 
     sqlite3_stmt* stmt;
     if (sqlite3_prepare_v2(m_db, query, -1, &stmt, nullptr) != SQLITE_OK) {
@@ -813,8 +847,22 @@ bool DatabaseManager::updateROI(const ROIRecord& roi) {
     sqlite3_bind_text(stmt, 3, roi.polygon_data.c_str(), -1, SQLITE_STATIC);
     sqlite3_bind_int(stmt, 4, roi.enabled ? 1 : 0);
     sqlite3_bind_int(stmt, 5, roi.priority);
-    sqlite3_bind_text(stmt, 6, roi.updated_at.c_str(), -1, SQLITE_STATIC);
-    sqlite3_bind_text(stmt, 7, roi.roi_id.c_str(), -1, SQLITE_STATIC);
+
+    // Bind time fields (can be NULL)
+    if (!roi.start_time.empty()) {
+        sqlite3_bind_text(stmt, 6, roi.start_time.c_str(), -1, SQLITE_STATIC);
+    } else {
+        sqlite3_bind_null(stmt, 6);
+    }
+
+    if (!roi.end_time.empty()) {
+        sqlite3_bind_text(stmt, 7, roi.end_time.c_str(), -1, SQLITE_STATIC);
+    } else {
+        sqlite3_bind_null(stmt, 7);
+    }
+
+    sqlite3_bind_text(stmt, 8, roi.updated_at.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 9, roi.roi_id.c_str(), -1, SQLITE_STATIC);
 
     int rc = sqlite3_step(stmt);
     sqlite3_finalize(stmt);

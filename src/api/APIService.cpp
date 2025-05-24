@@ -1471,6 +1471,35 @@ void APIService::handlePostROIs(const std::string& request, std::string& respons
             return;
         }
 
+        // Validate time format if provided - Task 70
+        if (!BehaviorAnalyzer::isValidTimeFormat(roi.start_time)) {
+            std::ostringstream errorJson;
+            errorJson << "{"
+                     << "\"error\":\"Invalid start_time format\","
+                     << "\"error_code\":\"INVALID_TIME_FORMAT\","
+                     << "\"provided_time\":\"" << roi.start_time << "\","
+                     << "\"valid_formats\":[\"HH:MM\", \"HH:MM:SS\"],"
+                     << "\"examples\":[\"09:00\", \"09:00:00\", \"17:30\", \"17:30:45\"],"
+                     << "\"description\":\"Time must be in ISO 8601 format (HH:MM or HH:MM:SS)\""
+                     << "}";
+            response = createJsonResponse(errorJson.str(), 400);
+            return;
+        }
+
+        if (!BehaviorAnalyzer::isValidTimeFormat(roi.end_time)) {
+            std::ostringstream errorJson;
+            errorJson << "{"
+                     << "\"error\":\"Invalid end_time format\","
+                     << "\"error_code\":\"INVALID_TIME_FORMAT\","
+                     << "\"provided_time\":\"" << roi.end_time << "\","
+                     << "\"valid_formats\":[\"HH:MM\", \"HH:MM:SS\"],"
+                     << "\"examples\":[\"09:00\", \"09:00:00\", \"17:30\", \"17:30:45\"],"
+                     << "\"description\":\"Time must be in ISO 8601 format (HH:MM or HH:MM:SS)\""
+                     << "}";
+            response = createJsonResponse(errorJson.str(), 400);
+            return;
+        }
+
         // Enhanced polygon validation with detailed error reporting
         auto validationResult = validateROIPolygonDetailed(roi.polygon);
         if (!validationResult.isValid) {
@@ -1503,6 +1532,8 @@ void APIService::handlePostROIs(const std::string& request, std::string& respons
         ROIRecord roiRecord(roi.id, cameraId, roi.name, polygonJson.str());
         roiRecord.enabled = roi.enabled;
         roiRecord.priority = roi.priority;
+        roiRecord.start_time = roi.start_time;
+        roiRecord.end_time = roi.end_time;
 
         // Store in database
         DatabaseManager dbManager;
@@ -1532,8 +1563,17 @@ void APIService::handlePostROIs(const std::string& request, std::string& respons
              << "\"name\":\"" << roi.name << "\","
              << "\"polygon_points\":" << roi.polygon.size() << ","
              << "\"enabled\":" << (roi.enabled ? "true" : "false") << ","
-             << "\"priority\":" << roi.priority << ","
-             << "\"created_at\":\"" << getCurrentTimestamp() << "\""
+             << "\"priority\":" << roi.priority;
+
+        // Add time fields if they exist
+        if (!roi.start_time.empty()) {
+            json << ",\"start_time\":\"" << roi.start_time << "\"";
+        }
+        if (!roi.end_time.empty()) {
+            json << ",\"end_time\":\"" << roi.end_time << "\"";
+        }
+
+        json << ",\"created_at\":\"" << getCurrentTimestamp() << "\""
              << "}";
 
         response = createJsonResponse(json.str(), 201);
@@ -1570,8 +1610,17 @@ void APIService::handleGetROIs(const std::string& cameraId, std::string& respons
                  << "\"name\":\"" << roi.name << "\","
                  << "\"polygon\":" << roi.polygon_data << ","
                  << "\"enabled\":" << (roi.enabled ? "true" : "false") << ","
-                 << "\"priority\":" << roi.priority << ","
-                 << "\"created_at\":\"" << roi.created_at << "\","
+                 << "\"priority\":" << roi.priority;
+
+            // Add time fields if they exist
+            if (!roi.start_time.empty()) {
+                json << ",\"start_time\":\"" << roi.start_time << "\"";
+            }
+            if (!roi.end_time.empty()) {
+                json << ",\"end_time\":\"" << roi.end_time << "\"";
+            }
+
+            json << ",\"created_at\":\"" << roi.created_at << "\","
                  << "\"updated_at\":\"" << roi.updated_at << "\""
                  << "}";
         }
@@ -1619,8 +1668,17 @@ void APIService::handleGetROI(const std::string& request, std::string& response,
              << "\"name\":\"" << roi.name << "\","
              << "\"polygon\":" << roi.polygon_data << ","
              << "\"enabled\":" << (roi.enabled ? "true" : "false") << ","
-             << "\"priority\":" << roi.priority << ","
-             << "\"created_at\":\"" << roi.created_at << "\","
+             << "\"priority\":" << roi.priority;
+
+        // Add time fields if they exist
+        if (!roi.start_time.empty()) {
+            json << ",\"start_time\":\"" << roi.start_time << "\"";
+        }
+        if (!roi.end_time.empty()) {
+            json << ",\"end_time\":\"" << roi.end_time << "\"";
+        }
+
+        json << ",\"created_at\":\"" << roi.created_at << "\","
              << "\"updated_at\":\"" << roi.updated_at << "\""
              << "}";
 
@@ -1677,6 +1735,35 @@ void APIService::handlePutROI(const std::string& request, std::string& response,
             return;
         }
 
+        // Validate time format if provided - Task 70
+        if (!BehaviorAnalyzer::isValidTimeFormat(roi.start_time)) {
+            std::ostringstream errorJson;
+            errorJson << "{"
+                     << "\"error\":\"Invalid start_time format\","
+                     << "\"error_code\":\"INVALID_TIME_FORMAT\","
+                     << "\"provided_time\":\"" << roi.start_time << "\","
+                     << "\"valid_formats\":[\"HH:MM\", \"HH:MM:SS\"],"
+                     << "\"examples\":[\"09:00\", \"09:00:00\", \"17:30\", \"17:30:45\"],"
+                     << "\"description\":\"Time must be in ISO 8601 format (HH:MM or HH:MM:SS)\""
+                     << "}";
+            response = createJsonResponse(errorJson.str(), 400);
+            return;
+        }
+
+        if (!BehaviorAnalyzer::isValidTimeFormat(roi.end_time)) {
+            std::ostringstream errorJson;
+            errorJson << "{"
+                     << "\"error\":\"Invalid end_time format\","
+                     << "\"error_code\":\"INVALID_TIME_FORMAT\","
+                     << "\"provided_time\":\"" << roi.end_time << "\","
+                     << "\"valid_formats\":[\"HH:MM\", \"HH:MM:SS\"],"
+                     << "\"examples\":[\"09:00\", \"09:00:00\", \"17:30\", \"17:30:45\"],"
+                     << "\"description\":\"Time must be in ISO 8601 format (HH:MM or HH:MM:SS)\""
+                     << "}";
+            response = createJsonResponse(errorJson.str(), 400);
+            return;
+        }
+
         // Enhanced polygon validation with detailed error reporting
         auto validationResult = validateROIPolygonDetailed(roi.polygon);
         if (!validationResult.isValid) {
@@ -1725,6 +1812,8 @@ void APIService::handlePutROI(const std::string& request, std::string& response,
         roiRecord.polygon_data = polygonJson.str();
         roiRecord.enabled = roi.enabled;
         roiRecord.priority = roi.priority;
+        roiRecord.start_time = roi.start_time;
+        roiRecord.end_time = roi.end_time;
         roiRecord.updated_at = getCurrentTimestamp();
 
         if (!dbManager.updateROI(roiRecord)) {
@@ -1750,8 +1839,17 @@ void APIService::handlePutROI(const std::string& request, std::string& response,
              << "\"name\":\"" << roi.name << "\","
              << "\"polygon_points\":" << roi.polygon.size() << ","
              << "\"enabled\":" << (roi.enabled ? "true" : "false") << ","
-             << "\"priority\":" << roi.priority << ","
-             << "\"updated_at\":\"" << roiRecord.updated_at << "\""
+             << "\"priority\":" << roi.priority;
+
+        // Add time fields if they exist
+        if (!roi.start_time.empty()) {
+            json << ",\"start_time\":\"" << roi.start_time << "\"";
+        }
+        if (!roi.end_time.empty()) {
+            json << ",\"end_time\":\"" << roi.end_time << "\"";
+        }
+
+        json << ",\"updated_at\":\"" << roiRecord.updated_at << "\""
              << "}";
 
         response = createJsonResponse(json.str());
@@ -1829,8 +1927,17 @@ std::string APIService::serializeROI(const ROI& roi) {
 
     json << "],"
          << "\"enabled\":" << (roi.enabled ? "true" : "false") << ","
-         << "\"priority\":" << roi.priority
-         << "}";
+         << "\"priority\":" << roi.priority;
+
+    // Add time fields if they exist
+    if (!roi.start_time.empty()) {
+        json << ",\"start_time\":\"" << roi.start_time << "\"";
+    }
+    if (!roi.end_time.empty()) {
+        json << ",\"end_time\":\"" << roi.end_time << "\"";
+    }
+
+    json << "}";
 
     return json.str();
 }
@@ -1882,6 +1989,8 @@ bool APIService::deserializeROI(const std::string& json, ROI& roi) {
         roi.name = parseJsonField(json, "name");
         roi.enabled = parseJsonField(json, "enabled") != "false";
         roi.priority = parseJsonInt(json, "priority", 1);
+        roi.start_time = parseJsonField(json, "start_time");
+        roi.end_time = parseJsonField(json, "end_time");
 
         // Parse polygon points
         std::regex polygonRegex(R"("polygon"\s*:\s*\[(.*?)\])");

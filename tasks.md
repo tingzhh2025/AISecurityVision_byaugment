@@ -1409,7 +1409,23 @@ AISecurityVision/
 
 **所属子史诗**: 13
 
-**状态**: todo
+**状态**: done
+
+**实施完成**:
+✅ 扩展数据库架构添加start_time和end_time字段到ROIs表
+✅ 更新ROI和ROIRecord结构体包含时间字段(ISO 8601格式)
+✅ 实现时间格式验证：支持HH:MM和HH:MM:SS格式，范围验证(0-23小时，0-59分钟/秒)
+✅ 添加时间范围检查逻辑：支持跨午夜时间窗口(如22:00-06:00)
+✅ 集成时间验证到BehaviorAnalyzer：isValidTimeFormat(), isCurrentTimeInRange(), isROIActiveNow()
+✅ 更新入侵检测逻辑考虑时间规则：只在ROI活跃时间内触发报警
+✅ 增强API端点支持时间字段：POST/PUT/GET /api/rois包含start_time/end_time
+✅ 实现详细时间验证错误响应：INVALID_TIME_FORMAT错误代码和示例
+✅ 更新数据库操作：插入、更新、查询包含时间字段处理
+✅ 扩展JSON序列化/反序列化支持时间字段
+✅ 更新所有ROI相关API响应包含时间信息
+✅ 创建综合测试脚本验证时间规则功能(test_roi_time_based_rules.py)
+✅ 实现时间规则与优先级系统的集成
+✅ 支持空时间字段表示无时间限制(24/7活跃)
 
 ---
 

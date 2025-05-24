@@ -91,6 +91,8 @@ struct ROIRecord {
     std::string polygon_data;  // JSON string of polygon coordinates
     bool enabled = true;
     int priority = 1;
+    std::string start_time;    // ISO 8601 time format (HH:MM or HH:MM:SS)
+    std::string end_time;      // ISO 8601 time format (HH:MM or HH:MM:SS)
     std::string created_at;
     std::string updated_at;
 

@@ -17,6 +17,8 @@ struct ROI {
     std::vector<cv::Point> polygon;
     bool enabled = true;
     int priority = 1;  // 1-5 scale
+    std::string start_time;  // ISO 8601 time format (HH:MM or HH:MM:SS)
+    std::string end_time;    // ISO 8601 time format (HH:MM or HH:MM:SS)
 
     ROI() = default;
     ROI(const std::string& roiId, const std::string& roiName,
@@ -118,6 +120,11 @@ public:
     // Visualization
     void drawROIs(cv::Mat& frame) const;
     void drawObjectStates(cv::Mat& frame) const;
+
+    // Time-based validation
+    static bool isValidTimeFormat(const std::string& timeStr);
+    static bool isCurrentTimeInRange(const std::string& startTime, const std::string& endTime);
+    bool isROIActiveNow(const ROI& roi) const;
 
 private:
     // Internal analysis methods
