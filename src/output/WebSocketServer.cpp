@@ -10,19 +10,19 @@ WebSocketServer::WebSocketServer() {
     // Set logging settings
     m_server.set_access_channels(websocketpp::log::alevel::all);
     m_server.clear_access_channels(websocketpp::log::alevel::frame_payload);
-    
+
     // Initialize ASIO
     m_server.init_asio();
-    
+
     // Set message handlers
     m_server.set_open_handler(std::bind(&WebSocketServer::onOpen, this, std::placeholders::_1));
     m_server.set_close_handler(std::bind(&WebSocketServer::onClose, this, std::placeholders::_1));
     m_server.set_message_handler(std::bind(&WebSocketServer::onMessage, this, std::placeholders::_1, std::placeholders::_2));
     m_server.set_validate_handler(std::bind(&WebSocketServer::onValidate, this, std::placeholders::_1));
-    
+
     // Set reuse address
     m_server.set_reuse_addr(true);
-    
+
     std::cout << "[WebSocketServer] WebSocket server initialized" << std::endl;
 }
 
@@ -35,20 +35,20 @@ bool WebSocketServer::start(int port) {
         std::cout << "[WebSocketServer] Server already running" << std::endl;
         return true;
     }
-    
+
     m_port = port;
-    
+
     try {
         // Listen on specified port
         m_server.listen(port);
         m_server.start_accept();
-        
+
         m_running.store(true);
         m_serverThread = std::thread(&WebSocketServer::serverThread, this);
-        
+
         std::cout << "[WebSocketServer] WebSocket server started on port " << port << std::endl;
         return true;
-        
+
     } catch (const std::exception& e) {
         std::cerr << "[WebSocketServer] Failed to start server: " << e.what() << std::endl;
         m_running.store(false);
@@ -60,11 +60,11 @@ void WebSocketServer::stop() {
     if (!m_running.load()) {
         return;
     }
-    
+
     std::cout << "[WebSocketServer] Stopping WebSocket server..." << std::endl;
-    
+
     m_running.store(false);
-    
+
     try {
         // Close all connections
         {
@@ -78,17 +78,17 @@ void WebSocketServer::stop() {
             }
             m_connections.clear();
         }
-        
+
         // Stop the server
         m_server.stop();
-        
+
         // Wait for server thread to finish
         if (m_serverThread.joinable()) {
             m_serverThread.join();
         }
-        
+
         std::cout << "[WebSocketServer] WebSocket server stopped" << std::endl;
-        
+
     } catch (const std::exception& e) {
         std::cerr << "[WebSocketServer] Error during shutdown: " << e.what() << std::endl;
     }
@@ -100,11 +100,11 @@ bool WebSocketServer::isRunning() const {
 
 void WebSocketServer::broadcast(const std::string& message) {
     std::lock_guard<std::mutex> lock(m_connectionsMutex);
-    
+
     if (m_connections.empty()) {
         return;
     }
-    
+
     size_t sentCount = 0;
     for (auto hdl : m_connections) {
         try {
@@ -114,9 +114,9 @@ void WebSocketServer::broadcast(const std::string& message) {
             std::cerr << "[WebSocketServer] Failed to send message to client: " << e.what() << std::endl;
         }
     }
-    
+
     m_messagesSent.fetch_add(sentCount);
-    
+
     if (sentCount > 0) {
         std::cout << "[WebSocketServer] Broadcasted alarm to " << sentCount << " clients" << std::endl;
     }
@@ -136,14 +136,14 @@ size_t WebSocketServer::getConnectionCount() const {
     return m_connections.size();
 }
 
-std::vector<std::string> WebSocketServer::getConnectedClients() const {
+std::vector<std::string> WebSocketServer::getConnectedClients() {
     std::lock_guard<std::mutex> lock(m_connectionsMutex);
     std::vector<std::string> clients;
-    
+
     for (auto hdl : m_connections) {
         clients.push_back(getConnectionInfo(hdl));
     }
-    
+
     return clients;
 }
 
@@ -157,7 +157,7 @@ void WebSocketServer::setPingInterval(int intervalMs) {
 
 void WebSocketServer::onOpen(connection_hdl hdl) {
     std::lock_guard<std::mutex> lock(m_connectionsMutex);
-    
+
     // Check connection limit
     if (m_connections.size() >= m_maxConnections) {
         std::cout << "[WebSocketServer] Connection limit reached, rejecting new connection" << std::endl;
@@ -168,17 +168,17 @@ void WebSocketServer::onOpen(connection_hdl hdl) {
         }
         return;
     }
-    
+
     m_connections.insert(hdl);
     m_totalConnections.fetch_add(1);
-    
+
     std::string clientInfo = getConnectionInfo(hdl);
-    std::cout << "[WebSocketServer] Client connected: " << clientInfo 
+    std::cout << "[WebSocketServer] Client connected: " << clientInfo
               << " (Total: " << m_connections.size() << ")" << std::endl;
-    
+
     // Send welcome message
     try {
-        std::string welcomeMsg = R"({"type":"welcome","message":"Connected to AI Security Vision alarm stream","timestamp":")" + 
+        std::string welcomeMsg = R"({"type":"welcome","message":"Connected to AI Security Vision alarm stream","timestamp":")" +
                                std::to_string(std::chrono::duration_cast<std::chrono::seconds>(
                                    std::chrono::system_clock::now().time_since_epoch()).count()) + "\"}";
         m_server.send(hdl, welcomeMsg, websocketpp::frame::opcode::text);
@@ -189,11 +189,11 @@ void WebSocketServer::onOpen(connection_hdl hdl) {
 
 void WebSocketServer::onClose(connection_hdl hdl) {
     std::lock_guard<std::mutex> lock(m_connectionsMutex);
-    
+
     std::string clientInfo = getConnectionInfo(hdl);
     m_connections.erase(hdl);
-    
-    std::cout << "[WebSocketServer] Client disconnected: " << clientInfo 
+
+    std::cout << "[WebSocketServer] Client disconnected: " << clientInfo
               << " (Remaining: " << m_connections.size() << ")" << std::endl;
 }
 
@@ -201,7 +201,7 @@ void WebSocketServer::onMessage(connection_hdl hdl, message_ptr msg) {
     // Handle incoming messages (for future use - ping/pong, client commands)
     std::string payload = msg->get_payload();
     std::cout << "[WebSocketServer] Received message: " << payload << std::endl;
-    
+
     // Echo back for testing
     try {
         std::string response = R"({"type":"echo","message":")" + payload + "\"}";
@@ -227,7 +227,7 @@ void WebSocketServer::serverThread() {
     }
 }
 
-std::string WebSocketServer::getConnectionInfo(connection_hdl hdl) const {
+std::string WebSocketServer::getConnectionInfo(connection_hdl hdl) {
     try {
         auto con = m_server.get_con_from_hdl(hdl);
         return con->get_remote_endpoint();
@@ -238,7 +238,7 @@ std::string WebSocketServer::getConnectionInfo(connection_hdl hdl) const {
 
 void WebSocketServer::cleanupConnections() {
     std::lock_guard<std::mutex> lock(m_connectionsMutex);
-    
+
     auto it = m_connections.begin();
     while (it != m_connections.end()) {
         try {

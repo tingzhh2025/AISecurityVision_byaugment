@@ -354,23 +354,7 @@ AlarmRoutingResult AlarmTrigger::deliverAlarm(const AlarmPayload& payload) {
     return routingResult;
 }
 
-void AlarmTrigger::deliverHttpAlarm(const AlarmPayload& payload, const HttpAlarmConfig& config) {
-    if (!config.enabled || config.url.empty()) {
-        std::cerr << "[AlarmTrigger] HTTP config disabled or invalid URL" << std::endl;
-        return;
-    }
 
-    std::string jsonPayload = payload.toJson();
-
-    bool success = sendHttpPost(config.url, jsonPayload, config.headers, config.timeout_ms);
-
-    if (success) {
-        std::cout << "[AlarmTrigger] HTTP alarm delivered to: " << config.url << std::endl;
-    } else {
-        std::cerr << "[AlarmTrigger] Failed to deliver HTTP alarm to: " << config.url << std::endl;
-        throw std::runtime_error("HTTP delivery failed");
-    }
-}
 
 // HTTP client functionality
 bool AlarmTrigger::sendHttpPost(const std::string& url, const std::string& jsonPayload,
@@ -486,29 +470,7 @@ AlarmPayload AlarmTrigger::createAlarmPayload(const FrameResult& result, const B
     return payload;
 }
 
-// WebSocket delivery implementation
-void AlarmTrigger::deliverWebSocketAlarm(const AlarmPayload& payload, const WebSocketAlarmConfig& config) {
-#ifdef HAVE_WEBSOCKETPP
-    if (!config.enabled) {
-        std::cerr << "[AlarmTrigger] WebSocket config disabled" << std::endl;
-        return;
-    }
 
-    if (!m_webSocketServer || !m_webSocketServer->isRunning()) {
-        std::cerr << "[AlarmTrigger] WebSocket server not running" << std::endl;
-        throw std::runtime_error("WebSocket server not available");
-    }
-
-    std::string jsonPayload = payload.toJson();
-    m_webSocketServer->broadcast(jsonPayload);
-
-    std::cout << "[AlarmTrigger] WebSocket alarm broadcasted to "
-              << m_webSocketServer->getConnectionCount() << " clients" << std::endl;
-#else
-    std::cerr << "[AlarmTrigger] WebSocket support not compiled" << std::endl;
-    throw std::runtime_error("WebSocket support not available");
-#endif
-}
 
 // WebSocket server management
 void AlarmTrigger::startWebSocketServer(int port) {
@@ -555,37 +517,7 @@ void AlarmTrigger::broadcastToWebSocketClients(const std::string& message) {
 #endif
 }
 
-// MQTT delivery implementation
-void AlarmTrigger::deliverMQTTAlarm(const AlarmPayload& payload, const MQTTAlarmConfig& config) {
-#ifdef HAVE_MQTT
-    if (!config.enabled) {
-        std::cerr << "[AlarmTrigger] MQTT config disabled" << std::endl;
-        return;
-    }
 
-    // Connect to MQTT broker if not connected or config changed
-    if (!m_mqttConnected.load() ||
-        m_currentMQTTConfig.broker != config.broker ||
-        m_currentMQTTConfig.port != config.port) {
-
-        if (!connectMQTTClient(config)) {
-            throw std::runtime_error("Failed to connect to MQTT broker");
-        }
-    }
-
-    std::string jsonPayload = payload.toJson();
-
-    if (!publishMQTTMessage(config.topic, jsonPayload, config.qos, config.retain)) {
-        throw std::runtime_error("Failed to publish MQTT message");
-    }
-
-    std::cout << "[AlarmTrigger] MQTT alarm published to " << config.broker
-              << " topic: " << config.topic << " (QoS " << config.qos << ")" << std::endl;
-#else
-    std::cerr << "[AlarmTrigger] MQTT support not compiled" << std::endl;
-    throw std::runtime_error("MQTT support not available");
-#endif
-}
 
 // MQTT client management
 bool AlarmTrigger::connectMQTTClient(const MQTTAlarmConfig& config) {

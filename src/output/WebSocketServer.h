@@ -20,7 +20,7 @@
 
 /**
  * @brief WebSocket server for real-time alarm streaming
- * 
+ *
  * This class provides:
  * - WebSocket server for persistent connections
  * - Real-time alarm broadcasting to connected clients
@@ -47,7 +47,7 @@ public:
 
     // Connection management
     size_t getConnectionCount() const;
-    std::vector<std::string> getConnectedClients() const;
+    std::vector<std::string> getConnectedClients();
 
     // Configuration
     void setMaxConnections(size_t maxConnections);
@@ -64,21 +64,21 @@ private:
     void serverThread();
 
     // Utility methods
-    std::string getConnectionInfo(connection_hdl hdl) const;
+    std::string getConnectionInfo(connection_hdl hdl);
     void cleanupConnections();
 
     // Member variables
     server m_server;
     std::set<connection_hdl, std::owner_less<connection_hdl>> m_connections;
     mutable std::mutex m_connectionsMutex;
-    
+
     std::thread m_serverThread;
     std::atomic<bool> m_running{false};
-    
+
     int m_port{8081};
     size_t m_maxConnections{100};
     int m_pingInterval{30000};  // 30 seconds
-    
+
     // Statistics
     std::atomic<size_t> m_totalConnections{0};
     std::atomic<size_t> m_messagesSent{0};

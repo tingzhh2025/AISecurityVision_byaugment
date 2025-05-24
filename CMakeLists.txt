@@ -222,6 +222,7 @@ if(NOT PAHO_MQTT_CPP_FOUND)
         # Create a minimal MQTT client header (will be implemented in source)
         set(PAHO_MQTT_CPP_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/third_party/mqtt")
         set(PAHO_MQTT_CPP_FOUND TRUE)
+        set(USE_SIMPLE_MQTT TRUE)
         add_definitions(-DUSE_SIMPLE_MQTT)
     endif()
 endif()
@@ -250,8 +251,9 @@ file(GLOB_RECURSE SOURCES
 )
 
 # Add MQTT client source if using simple MQTT
-if(PAHO_MQTT_CPP_FOUND AND USE_SIMPLE_MQTT)
+if(USE_SIMPLE_MQTT)
     list(APPEND SOURCES "third_party/mqtt/simple_mqtt.cpp")
+    message(STATUS "Adding simple MQTT client source")
 endif()
 
 # Create executable
