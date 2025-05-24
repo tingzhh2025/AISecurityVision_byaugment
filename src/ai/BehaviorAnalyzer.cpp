@@ -383,24 +383,17 @@ std::vector<BehaviorEvent> BehaviorAnalyzer::checkIntrusionRulesWithPriority() {
             continue; // Already processed this object
         }
 
-        // Get all ROIs that contain this object's center point
-        std::vector<std::string> overlappingROIs = getOverlappingROIs(state.position);
+        // Use enhanced conflict resolution
+        ConflictResolutionResult conflictResult = resolveROIConflicts(state.position);
 
-        if (overlappingROIs.empty()) {
-            continue; // Object not in any ROI
+        if (conflictResult.selectedROIId.empty()) {
+            continue; // No valid ROI found after conflict resolution
         }
 
-        // Find the highest priority ROI among overlapping ones
-        std::string highestPriorityROIId = getHighestPriorityROI(overlappingROIs);
-
-        if (highestPriorityROIId.empty()) {
-            continue; // No valid ROI found
-        }
-
-        // Find the intrusion rule for the highest priority ROI
+        // Find the intrusion rule for the selected ROI
         IntrusionRule* activeRule = nullptr;
         for (auto& rulePair : m_intrusionRules) {
-            if (rulePair.second.roi.id == highestPriorityROIId && rulePair.second.enabled) {
+            if (rulePair.second.roi.id == conflictResult.selectedROIId && rulePair.second.enabled) {
                 activeRule = &rulePair.second;
                 break;
             }
@@ -410,18 +403,13 @@ std::vector<BehaviorEvent> BehaviorAnalyzer::checkIntrusionRulesWithPriority() {
             continue; // No active rule for this ROI
         }
 
-        // Check if ROI is currently active based on time rules
-        if (!isROIActiveNow(activeRule->roi)) {
-            continue; // ROI is not active during current time
-        }
-
         // Check if object has been in this ROI long enough
         auto roiEntryIt = state.roiEntryTimes.find(activeRule->roi.id);
         if (roiEntryIt != state.roiEntryTimes.end()) {
             double duration = std::chrono::duration<double>(now - roiEntryIt->second).count();
 
             if (duration >= activeRule->minDuration) {
-                // Generate intrusion event for highest priority ROI only
+                // Generate intrusion event for selected ROI
                 cv::Rect bbox(
                     static_cast<int>(state.position.x - 25),
                     static_cast<int>(state.position.y - 25),
@@ -432,16 +420,12 @@ std::vector<BehaviorEvent> BehaviorAnalyzer::checkIntrusionRulesWithPriority() {
                                   bbox, activeRule->confidence);
                 event.timestamp = generateTimestamp();
 
-                // Enhanced metadata with priority information
+                // Enhanced metadata with detailed conflict resolution information
                 std::ostringstream metadata;
                 metadata << "Duration: " << std::fixed << std::setprecision(1) << duration << "s"
                          << ", ROI: " << activeRule->roi.name
                          << ", Priority: " << activeRule->roi.priority
-                         << ", Overlapping ROIs: " << overlappingROIs.size();
-
-                if (overlappingROIs.size() > 1) {
-                    metadata << " (Conflict resolved by priority)";
-                }
+                         << ", " << formatConflictMetadata(conflictResult);
 
                 event.metadata = metadata.str();
                 events.push_back(event);
@@ -450,11 +434,12 @@ std::vector<BehaviorEvent> BehaviorAnalyzer::checkIntrusionRulesWithPriority() {
                 processedObjects.insert(state.trackId);
                 const_cast<ObjectState&>(state).roiEntryTimes.erase(activeRule->roi.id);
 
-                std::cout << "[BehaviorAnalyzer] Priority-resolved intrusion event: "
+                std::cout << "[BehaviorAnalyzer] Enhanced conflict-resolved intrusion event: "
                           << "Object " << state.trackId
                           << " in ROI " << activeRule->roi.name
                           << " (Priority " << activeRule->roi.priority << ")"
-                          << " for " << duration << "s" << std::endl;
+                          << " for " << duration << "s"
+                          << " - " << conflictResult.resolutionReason << std::endl;
             }
         }
     }
@@ -561,4 +546,155 @@ bool BehaviorAnalyzer::isROIActiveNow(const ROI& roi) const {
     }
 
     return isCurrentTimeInRange(roi.start_time, roi.end_time);
+}
+
+// Enhanced conflict resolution methods implementation
+
+BehaviorAnalyzer::ConflictResolutionResult BehaviorAnalyzer::resolveROIConflicts(const cv::Point2f& point) const {
+    ConflictResolutionResult result;
+
+    // Get all active overlapping ROIs (considering both enabled status and time rules)
+    std::vector<std::string> activeROIs = getActiveOverlappingROIs(point);
+
+    if (activeROIs.empty()) {
+        result.resolutionReason = "No active ROIs found";
+        return result;
+    }
+
+    result.conflictingROIs = activeROIs;
+
+    if (activeROIs.size() == 1) {
+        // No conflict - single ROI
+        result.selectedROIId = activeROIs[0];
+        result.resolutionReason = "Single active ROI";
+
+        auto roiIt = m_rois.find(result.selectedROIId);
+        if (roiIt != m_rois.end()) {
+            result.selectedPriority = roiIt->second.priority;
+        }
+
+        return result;
+    }
+
+    // Multiple ROIs - resolve conflicts
+    std::string highestPriorityROI = activeROIs[0];
+    int highestPriority = 0;
+    bool hasTimeBasedConflict = false;
+
+    // Find ROI with highest priority
+    for (const std::string& roiId : activeROIs) {
+        auto roiIt = m_rois.find(roiId);
+        if (roiIt != m_rois.end()) {
+            const ROI& roi = roiIt->second;
+
+            // Check if this ROI has time restrictions
+            if (!roi.start_time.empty() || !roi.end_time.empty()) {
+                hasTimeBasedConflict = true;
+            }
+
+            if (roi.priority > highestPriority) {
+                highestPriority = roi.priority;
+                highestPriorityROI = roiId;
+            }
+        }
+    }
+
+    result.selectedROIId = highestPriorityROI;
+    result.selectedPriority = highestPriority;
+    result.timeBasedResolution = hasTimeBasedConflict;
+
+    // Generate detailed resolution reason
+    std::ostringstream reason;
+    reason << "Conflict resolved: " << activeROIs.size() << " overlapping ROIs, "
+           << "selected priority " << highestPriority;
+
+    if (hasTimeBasedConflict) {
+        reason << " (time-based filtering applied)";
+    }
+
+    result.resolutionReason = reason.str();
+
+    return result;
+}
+
+std::vector<std::string> BehaviorAnalyzer::getActiveOverlappingROIs(const cv::Point2f& point) const {
+    std::vector<std::string> activeROIs;
+
+    for (const auto& roiPair : m_rois) {
+        const ROI& roi = roiPair.second;
+
+        // Check if ROI is enabled
+        if (!roi.enabled) {
+            continue;
+        }
+
+        // Check if ROI is currently active based on time rules
+        if (!isROIActiveNow(roi)) {
+            continue;
+        }
+
+        // Check if point is within ROI polygon
+        if (isPointInROI(point, roi)) {
+            activeROIs.push_back(roi.id);
+        }
+    }
+
+    return activeROIs;
+}
+
+bool BehaviorAnalyzer::compareROIPriority(const std::string& roi1Id, const std::string& roi2Id) const {
+    auto roi1It = m_rois.find(roi1Id);
+    auto roi2It = m_rois.find(roi2Id);
+
+    if (roi1It == m_rois.end() || roi2It == m_rois.end()) {
+        return false;
+    }
+
+    const ROI& roi1 = roi1It->second;
+    const ROI& roi2 = roi2It->second;
+
+    // Higher priority wins
+    if (roi1.priority != roi2.priority) {
+        return roi1.priority > roi2.priority;
+    }
+
+    // If priorities are equal, prefer ROI with time restrictions (more specific)
+    bool roi1HasTime = !roi1.start_time.empty() || !roi1.end_time.empty();
+    bool roi2HasTime = !roi2.start_time.empty() || !roi2.end_time.empty();
+
+    if (roi1HasTime != roi2HasTime) {
+        return roi1HasTime; // Prefer ROI with time restrictions
+    }
+
+    // If still equal, use lexicographic order for consistency
+    return roi1.id < roi2.id;
+}
+
+std::string BehaviorAnalyzer::formatConflictMetadata(const ConflictResolutionResult& result) const {
+    std::ostringstream metadata;
+
+    metadata << "Conflicts: " << result.conflictingROIs.size() << " ROIs";
+
+    if (result.conflictingROIs.size() > 1) {
+        metadata << " [";
+        for (size_t i = 0; i < result.conflictingROIs.size(); ++i) {
+            if (i > 0) metadata << ", ";
+
+            auto roiIt = m_rois.find(result.conflictingROIs[i]);
+            if (roiIt != m_rois.end()) {
+                metadata << roiIt->second.name << "(P" << roiIt->second.priority << ")";
+            } else {
+                metadata << result.conflictingROIs[i];
+            }
+        }
+        metadata << "]";
+
+        metadata << ", Resolution: " << result.resolutionReason;
+
+        if (result.timeBasedResolution) {
+            metadata << ", Time-filtered";
+        }
+    }
+
+    return metadata.str();
 }

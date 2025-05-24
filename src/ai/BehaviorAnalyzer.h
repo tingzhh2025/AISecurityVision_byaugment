@@ -139,6 +139,20 @@ private:
     void cleanupOldObjects();
     std::string generateTimestamp() const;
 
+    // Enhanced conflict resolution methods
+    struct ConflictResolutionResult {
+        std::string selectedROIId;
+        std::vector<std::string> conflictingROIs;
+        std::string resolutionReason;
+        int selectedPriority;
+        bool timeBasedResolution;
+    };
+
+    ConflictResolutionResult resolveROIConflicts(const cv::Point2f& point) const;
+    std::vector<std::string> getActiveOverlappingROIs(const cv::Point2f& point) const;
+    bool compareROIPriority(const std::string& roi1Id, const std::string& roi2Id) const;
+    std::string formatConflictMetadata(const ConflictResolutionResult& result) const;
+
     // Member variables
     std::map<std::string, IntrusionRule> m_intrusionRules;
     std::map<std::string, ROI> m_rois;
