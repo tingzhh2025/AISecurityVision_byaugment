@@ -1,4 +1,5 @@
 #include "AlarmTrigger.h"
+#include "WebSocketServer.h"
 #include "../core/VideoPipeline.h"
 #include "../ai/BehaviorAnalyzer.h"
 #include <iostream>
@@ -37,6 +38,11 @@ std::string AlarmPayload::toJson() const {
 AlarmTrigger::AlarmTrigger() {
     // Initialize libcurl
     curl_global_init(CURL_GLOBAL_DEFAULT);
+
+#ifdef HAVE_WEBSOCKETPP
+    // Initialize WebSocket server
+    m_webSocketServer = std::make_unique<WebSocketServer>();
+#endif
 }
 
 AlarmTrigger::~AlarmTrigger() {
@@ -67,6 +73,11 @@ void AlarmTrigger::shutdown() {
         if (m_processingThread.joinable()) {
             m_processingThread.join();
         }
+
+#ifdef HAVE_WEBSOCKETPP
+        // Stop WebSocket server
+        stopWebSocketServer();
+#endif
 
         std::cout << "[AlarmTrigger] Shutdown complete" << std::endl;
     }
@@ -241,8 +252,8 @@ void AlarmTrigger::deliverAlarm(const AlarmPayload& payload) {
                     break;
 
                 case AlarmMethod::WEBSOCKET:
-                    // TODO: Implement WebSocket delivery in future tasks
-                    std::cout << "[AlarmTrigger] WebSocket delivery not yet implemented" << std::endl;
+                    deliverWebSocketAlarm(payload, config.webSocketConfig);
+                    delivered = true;
                     break;
 
                 case AlarmMethod::MQTT:
@@ -396,4 +407,73 @@ AlarmPayload AlarmTrigger::createAlarmPayload(const FrameResult& result, const B
     payload.test_mode = false;
 
     return payload;
+}
+
+// WebSocket delivery implementation
+void AlarmTrigger::deliverWebSocketAlarm(const AlarmPayload& payload, const WebSocketAlarmConfig& config) {
+#ifdef HAVE_WEBSOCKETPP
+    if (!config.enabled) {
+        std::cerr << "[AlarmTrigger] WebSocket config disabled" << std::endl;
+        return;
+    }
+
+    if (!m_webSocketServer || !m_webSocketServer->isRunning()) {
+        std::cerr << "[AlarmTrigger] WebSocket server not running" << std::endl;
+        throw std::runtime_error("WebSocket server not available");
+    }
+
+    std::string jsonPayload = payload.toJson();
+    m_webSocketServer->broadcast(jsonPayload);
+
+    std::cout << "[AlarmTrigger] WebSocket alarm broadcasted to "
+              << m_webSocketServer->getConnectionCount() << " clients" << std::endl;
+#else
+    std::cerr << "[AlarmTrigger] WebSocket support not compiled" << std::endl;
+    throw std::runtime_error("WebSocket support not available");
+#endif
+}
+
+// WebSocket server management
+void AlarmTrigger::startWebSocketServer(int port) {
+#ifdef HAVE_WEBSOCKETPP
+    if (m_webSocketRunning.load()) {
+        std::cout << "[AlarmTrigger] WebSocket server already running" << std::endl;
+        return;
+    }
+
+    if (!m_webSocketServer) {
+        m_webSocketServer = std::make_unique<WebSocketServer>();
+    }
+
+    if (m_webSocketServer->start(port)) {
+        m_webSocketRunning.store(true);
+        std::cout << "[AlarmTrigger] WebSocket server started on port " << port << std::endl;
+    } else {
+        std::cerr << "[AlarmTrigger] Failed to start WebSocket server" << std::endl;
+    }
+#else
+    std::cerr << "[AlarmTrigger] WebSocket support not compiled" << std::endl;
+#endif
+}
+
+void AlarmTrigger::stopWebSocketServer() {
+#ifdef HAVE_WEBSOCKETPP
+    if (!m_webSocketRunning.load()) {
+        return;
+    }
+
+    if (m_webSocketServer) {
+        m_webSocketServer->stop();
+        m_webSocketRunning.store(false);
+        std::cout << "[AlarmTrigger] WebSocket server stopped" << std::endl;
+    }
+#endif
+}
+
+void AlarmTrigger::broadcastToWebSocketClients(const std::string& message) {
+#ifdef HAVE_WEBSOCKETPP
+    if (m_webSocketServer && m_webSocketServer->isRunning()) {
+        m_webSocketServer->broadcast(message);
+    }
+#endif
 }

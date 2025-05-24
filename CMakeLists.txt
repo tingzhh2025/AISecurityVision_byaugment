@@ -93,6 +93,89 @@ else()
     message(FATAL_ERROR "libcurl is required for HTTP alarm delivery")
 endif()
 
+# Find or download websocketpp for WebSocket alarm delivery
+find_path(WEBSOCKETPP_INCLUDE_DIR websocketpp/config/asio_no_tls.hpp
+    PATHS
+    /usr/include
+    /usr/local/include
+    ${CMAKE_SOURCE_DIR}/third_party/websocketpp
+)
+
+if(NOT WEBSOCKETPP_INCLUDE_DIR)
+    message(STATUS "websocketpp not found, downloading...")
+
+    # Create directory
+    file(MAKE_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/websocketpp")
+
+    # Download websocketpp headers
+    file(DOWNLOAD
+        "https://github.com/zaphoyd/websocketpp/archive/refs/tags/0.8.2.tar.gz"
+        "${CMAKE_SOURCE_DIR}/third_party/websocketpp-0.8.2.tar.gz"
+        SHOW_PROGRESS
+    )
+
+    # Extract the archive
+    execute_process(
+        COMMAND ${CMAKE_COMMAND} -E tar xzf "${CMAKE_SOURCE_DIR}/third_party/websocketpp-0.8.2.tar.gz"
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/"
+    )
+
+    # Move headers to expected location
+    execute_process(
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/third_party/websocketpp-0.8.2/websocketpp"
+        "${CMAKE_SOURCE_DIR}/third_party/websocketpp/websocketpp"
+    )
+
+    set(WEBSOCKETPP_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/third_party/websocketpp")
+endif()
+
+if(WEBSOCKETPP_INCLUDE_DIR)
+    include_directories(${WEBSOCKETPP_INCLUDE_DIR})
+    message(STATUS "websocketpp found at: ${WEBSOCKETPP_INCLUDE_DIR}")
+
+    # Find Boost (required by websocketpp)
+    find_package(Boost COMPONENTS system thread)
+    if(NOT Boost_FOUND)
+        message(STATUS "Boost not found, using standalone ASIO")
+        # Download standalone ASIO if Boost is not available
+        find_path(ASIO_INCLUDE_DIR asio.hpp
+            PATHS
+            /usr/include
+            /usr/local/include
+            ${CMAKE_SOURCE_DIR}/third_party/asio
+        )
+
+        if(NOT ASIO_INCLUDE_DIR)
+            message(STATUS "ASIO not found, downloading...")
+            file(DOWNLOAD
+                "https://github.com/chriskohlhoff/asio/archive/refs/tags/asio-1-24-0.tar.gz"
+                "${CMAKE_SOURCE_DIR}/third_party/asio-1-24-0.tar.gz"
+                SHOW_PROGRESS
+            )
+
+            execute_process(
+                COMMAND ${CMAKE_COMMAND} -E tar xzf "${CMAKE_SOURCE_DIR}/third_party/asio-1-24-0.tar.gz"
+                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/third_party/"
+            )
+
+            execute_process(
+                COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_SOURCE_DIR}/third_party/asio-asio-1-24-0/asio/include"
+                "${CMAKE_SOURCE_DIR}/third_party/asio"
+            )
+
+            set(ASIO_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/third_party/asio")
+        endif()
+
+        if(ASIO_INCLUDE_DIR)
+            include_directories(${ASIO_INCLUDE_DIR})
+            add_definitions(-DASIO_STANDALONE)
+            message(STATUS "Standalone ASIO found at: ${ASIO_INCLUDE_DIR}")
+        endif()
+    endif()
+endif()
+
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${OpenCV_INCLUDE_DIRS})
@@ -147,6 +230,17 @@ endif()
 if(CURL_FOUND)
     list(APPEND LINK_LIBRARIES ${CURL_LIBRARIES})
     include_directories(${CURL_INCLUDE_DIRS})
+endif()
+
+# Add WebSocket dependencies
+if(WEBSOCKETPP_INCLUDE_DIR)
+    if(Boost_FOUND)
+        list(APPEND LINK_LIBRARIES ${Boost_LIBRARIES})
+        target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_WEBSOCKETPP)
+    else()
+        # Using standalone ASIO, no additional libraries needed
+        target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_WEBSOCKETPP ASIO_STANDALONE)
+    endif()
 endif()
 
 target_link_libraries(${PROJECT_NAME} ${LINK_LIBRARIES})

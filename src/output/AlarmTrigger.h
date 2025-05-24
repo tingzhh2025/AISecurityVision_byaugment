@@ -42,12 +42,27 @@ struct HttpAlarmConfig {
 };
 
 /**
+ * @brief WebSocket alarm configuration
+ */
+struct WebSocketAlarmConfig {
+    std::string endpoint = "/ws/alarms";
+    int port = 8081;
+    bool enabled = true;
+    int max_connections = 100;
+    int ping_interval_ms = 30000;  // 30 seconds
+
+    WebSocketAlarmConfig() = default;
+    WebSocketAlarmConfig(int ws_port) : port(ws_port) {}
+};
+
+/**
  * @brief Alarm configuration structure
  */
 struct AlarmConfig {
     std::string id;
     AlarmMethod method;
     HttpAlarmConfig httpConfig;
+    WebSocketAlarmConfig webSocketConfig;
     bool enabled = true;
     int priority = 1;  // 1-5 scale
 
@@ -111,10 +126,16 @@ private:
     void processAlarmQueue();
     void deliverAlarm(const AlarmPayload& payload);
     void deliverHttpAlarm(const AlarmPayload& payload, const HttpAlarmConfig& config);
+    void deliverWebSocketAlarm(const AlarmPayload& payload, const WebSocketAlarmConfig& config);
 
     // HTTP client functionality
     bool sendHttpPost(const std::string& url, const std::string& jsonPayload,
                      const std::map<std::string, std::string>& headers, int timeout_ms);
+
+    // WebSocket server functionality
+    void startWebSocketServer(int port);
+    void stopWebSocketServer();
+    void broadcastToWebSocketClients(const std::string& message);
 
     // Utility methods
     std::string generateAlarmId() const;
@@ -136,7 +157,13 @@ private:
     std::atomic<size_t> m_deliveredCount{0};
     std::atomic<size_t> m_failedCount{0};
 
+    // WebSocket server
+    std::unique_ptr<class WebSocketServer> m_webSocketServer;
+    std::thread m_webSocketThread;
+    std::atomic<bool> m_webSocketRunning{false};
+
     // Constants
     static constexpr size_t MAX_QUEUE_SIZE = 1000;
     static constexpr int DEFAULT_HTTP_TIMEOUT_MS = 5000;
+    static constexpr int DEFAULT_WEBSOCKET_PORT = 8081;
 };

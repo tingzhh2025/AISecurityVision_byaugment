@@ -1264,7 +1264,24 @@ AISecurityVision/
 
 **所属子史诗**: 12
 
-**状态**: todo
+**状态**: done
+
+**实施完成**:
+✅ 添加websocketpp库依赖到CMakeLists.txt，支持自动下载和配置
+✅ 创建WebSocketServer类：支持持久连接、消息广播、连接管理
+✅ 扩展AlarmTrigger类：添加WebSocket配置结构体和投递方法
+✅ 实现WebSocket报警投递：deliverWebSocketAlarm()方法支持实时广播
+✅ 增强APIService：WebSocket报警配置端点，支持端口、连接数、ping间隔配置
+✅ 自动WebSocket服务器启动：配置WebSocket报警时自动启动服务器
+✅ 线程安全实现：连接管理、消息广播、服务器控制的完整线程安全
+✅ 多客户端支持：支持最多1000个并发WebSocket连接
+✅ 连接健康监控：ping/pong机制、连接状态跟踪、自动清理
+✅ JSON消息格式：标准化报警负载格式，包含事件类型、摄像头ID、置信度等
+✅ 错误处理和日志：详细的连接日志、错误处理、状态监控
+✅ API集成：POST /api/alarms/config支持WebSocket方法配置
+✅ 测试工具：创建综合测试脚本(test_websocket_alarms.sh)和HTML客户端
+✅ 实时报警广播：支持向所有连接的客户端实时广播报警事件
+✅ 配置验证：端口范围、连接数限制、ping间隔验证
 
 ---
 

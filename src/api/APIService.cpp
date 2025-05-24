@@ -2297,7 +2297,29 @@ void APIService::handlePostAlarmConfig(const std::string& request, std::string& 
 
         } else if (method == "websocket") {
             config.method = AlarmMethod::WEBSOCKET;
-            // TODO: Add WebSocket configuration
+
+            // Parse WebSocket configuration
+            int port = parseJsonInt(request, "port", 8081);
+            if (port < 1024 || port > 65535) {
+                response = createErrorResponse("port must be between 1024 and 65535", 400);
+                return;
+            }
+            config.webSocketConfig.port = port;
+
+            int maxConnections = parseJsonInt(request, "max_connections", 100);
+            if (maxConnections < 1 || maxConnections > 1000) {
+                response = createErrorResponse("max_connections must be between 1 and 1000", 400);
+                return;
+            }
+            config.webSocketConfig.max_connections = maxConnections;
+
+            int pingInterval = parseJsonInt(request, "ping_interval_ms", 30000);
+            if (pingInterval < 5000 || pingInterval > 300000) {
+                response = createErrorResponse("ping_interval_ms must be between 5000 and 300000", 400);
+                return;
+            }
+            config.webSocketConfig.ping_interval_ms = pingInterval;
+
         } else if (method == "mqtt") {
             config.method = AlarmMethod::MQTT;
             // TODO: Add MQTT configuration
@@ -2325,6 +2347,11 @@ void APIService::handlePostAlarmConfig(const std::string& request, std::string& 
             return;
         }
 
+        // Start WebSocket server if this is a WebSocket configuration
+        if (config.method == AlarmMethod::WEBSOCKET) {
+            alarmTrigger.startWebSocketServer(config.webSocketConfig.port);
+        }
+
         std::ostringstream json;
         json << "{"
              << "\"status\":\"created\","
@@ -2336,6 +2363,10 @@ void APIService::handlePostAlarmConfig(const std::string& request, std::string& 
         if (method == "http") {
             json << ",\"url\":\"" << config.httpConfig.url << "\","
                  << "\"timeout_ms\":" << config.httpConfig.timeout_ms;
+        } else if (method == "websocket") {
+            json << ",\"port\":" << config.webSocketConfig.port << ","
+                 << "\"max_connections\":" << config.webSocketConfig.max_connections << ","
+                 << "\"ping_interval_ms\":" << config.webSocketConfig.ping_interval_ms;
         }
 
         json << ",\"created_at\":\"" << getCurrentTimestamp() << "\""
@@ -2380,6 +2411,10 @@ void APIService::handleGetAlarmConfigs(const std::string& request, std::string& 
             if (config.method == AlarmMethod::HTTP_POST) {
                 json << ",\"url\":\"" << config.httpConfig.url << "\","
                      << "\"timeout_ms\":" << config.httpConfig.timeout_ms;
+            } else if (config.method == AlarmMethod::WEBSOCKET) {
+                json << ",\"port\":" << config.webSocketConfig.port << ","
+                     << "\"max_connections\":" << config.webSocketConfig.max_connections << ","
+                     << "\"ping_interval_ms\":" << config.webSocketConfig.ping_interval_ms;
             }
 
             json << "}";
@@ -2422,6 +2457,10 @@ void APIService::handleGetAlarmConfig(const std::string& request, std::string& r
                 if (config.method == AlarmMethod::HTTP_POST) {
                     json << ",\"url\":\"" << config.httpConfig.url << "\","
                          << "\"timeout_ms\":" << config.httpConfig.timeout_ms;
+                } else if (config.method == AlarmMethod::WEBSOCKET) {
+                    json << ",\"port\":" << config.webSocketConfig.port << ","
+                         << "\"max_connections\":" << config.webSocketConfig.max_connections << ","
+                         << "\"ping_interval_ms\":" << config.webSocketConfig.ping_interval_ms;
                 }
 
                 json << ",\"timestamp\":\"" << getCurrentTimestamp() << "\""
@@ -2522,7 +2561,11 @@ void APIService::handlePutAlarmConfig(const std::string& request, std::string& r
 
         if (updatedConfig.method == AlarmMethod::HTTP_POST) {
             json << ",\"url\":\"" << updatedConfig.httpConfig.url << "\","
-                 << ",\"timeout_ms\":" << updatedConfig.httpConfig.timeout_ms;
+                 << "\"timeout_ms\":" << updatedConfig.httpConfig.timeout_ms;
+        } else if (updatedConfig.method == AlarmMethod::WEBSOCKET) {
+            json << ",\"port\":" << updatedConfig.webSocketConfig.port << ","
+                 << "\"max_connections\":" << updatedConfig.webSocketConfig.max_connections << ","
+                 << "\"ping_interval_ms\":" << updatedConfig.webSocketConfig.ping_interval_ms;
         }
 
         json << ",\"updated_at\":\"" << getCurrentTimestamp() << "\""
