@@ -911,7 +911,22 @@ AISecurityVision/
 
 **所属子史诗**: 9
 
-**状态**: todo
+**状态**: done
+
+**实施完成**:
+✅ 实现优先级冲突解决算法：checkIntrusionRulesWithPriority()方法
+✅ 添加重叠ROI检测：getOverlappingROIs()辅助函数
+✅ 实现最高优先级ROI选择：getHighestPriorityROI()辅助函数
+✅ 增强事件元数据包含优先级信息和冲突解决标识
+✅ 实现重复事件防止机制：processedObjects集合跟踪
+✅ 支持1-5优先级等级：5(关键) > 4(高) > 3(中) > 2(中低) > 1(低)
+✅ 线程安全实现：使用mutex保护所有优先级解决操作
+✅ 详细日志记录：优先级冲突解决过程和结果
+✅ 创建综合测试脚本验证优先级冲突解决(test_priority_conflict_resolution.sh)
+✅ 创建单元测试验证优先级解决逻辑(test_priority_resolution.cpp)
+✅ 集成到主要分析流程：替换原有checkIntrusionRules()调用
+✅ 支持复杂重叠场景：多个ROI重叠时选择最高优先级
+✅ 增强可视化：ROI绘制时根据优先级使用不同颜色编码
 
 ---
 

@@ -4,6 +4,8 @@
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
+#include <set>
+#include <chrono>
 
 BehaviorAnalyzer::BehaviorAnalyzer()
     : m_minObjectSize(DEFAULT_MIN_WIDTH, DEFAULT_MIN_HEIGHT),
@@ -41,8 +43,8 @@ std::vector<BehaviorEvent> BehaviorAnalyzer::analyze(const cv::Mat& frame,
     // Update object states with current detections
     updateObjectStates(detections, trackIds);
 
-    // Check intrusion rules
-    auto intrusionEvents = checkIntrusionRules();
+    // Check intrusion rules with priority-based conflict resolution
+    auto intrusionEvents = checkIntrusionRulesWithPriority();
     events.insert(events.end(), intrusionEvents.begin(), intrusionEvents.end());
 
     // Cleanup old objects
@@ -358,4 +360,127 @@ bool BehaviorAnalyzer::loadRulesFromJson(const std::string& jsonPath) {
     // For now, just return true as a placeholder
     std::cout << "[BehaviorAnalyzer] JSON rule loading not yet implemented: " << jsonPath << std::endl;
     return true;
+}
+
+std::vector<BehaviorEvent> BehaviorAnalyzer::checkIntrusionRulesWithPriority() {
+    std::vector<BehaviorEvent> events;
+    auto now = std::chrono::steady_clock::now();
+
+    // Track which objects have already generated events to avoid duplicates
+    std::set<int> processedObjects;
+
+    for (const auto& statePair : m_objectStates) {
+        const ObjectState& state = statePair.second;
+
+        if (processedObjects.find(state.trackId) != processedObjects.end()) {
+            continue; // Already processed this object
+        }
+
+        // Get all ROIs that contain this object's center point
+        std::vector<std::string> overlappingROIs = getOverlappingROIs(state.position);
+
+        if (overlappingROIs.empty()) {
+            continue; // Object not in any ROI
+        }
+
+        // Find the highest priority ROI among overlapping ones
+        std::string highestPriorityROIId = getHighestPriorityROI(overlappingROIs);
+
+        if (highestPriorityROIId.empty()) {
+            continue; // No valid ROI found
+        }
+
+        // Find the intrusion rule for the highest priority ROI
+        IntrusionRule* activeRule = nullptr;
+        for (auto& rulePair : m_intrusionRules) {
+            if (rulePair.second.roi.id == highestPriorityROIId && rulePair.second.enabled) {
+                activeRule = &rulePair.second;
+                break;
+            }
+        }
+
+        if (!activeRule) {
+            continue; // No active rule for this ROI
+        }
+
+        // Check if object has been in this ROI long enough
+        auto roiEntryIt = state.roiEntryTimes.find(activeRule->roi.id);
+        if (roiEntryIt != state.roiEntryTimes.end()) {
+            double duration = std::chrono::duration<double>(now - roiEntryIt->second).count();
+
+            if (duration >= activeRule->minDuration) {
+                // Generate intrusion event for highest priority ROI only
+                cv::Rect bbox(
+                    static_cast<int>(state.position.x - 25),
+                    static_cast<int>(state.position.y - 25),
+                    50, 50
+                );
+
+                BehaviorEvent event("intrusion", activeRule->id, std::to_string(state.trackId),
+                                  bbox, activeRule->confidence);
+                event.timestamp = generateTimestamp();
+
+                // Enhanced metadata with priority information
+                std::ostringstream metadata;
+                metadata << "Duration: " << std::fixed << std::setprecision(1) << duration << "s"
+                         << ", ROI: " << activeRule->roi.name
+                         << ", Priority: " << activeRule->roi.priority
+                         << ", Overlapping ROIs: " << overlappingROIs.size();
+
+                if (overlappingROIs.size() > 1) {
+                    metadata << " (Conflict resolved by priority)";
+                }
+
+                event.metadata = metadata.str();
+                events.push_back(event);
+
+                // Mark this object as processed and remove entry time to avoid duplicate events
+                processedObjects.insert(state.trackId);
+                const_cast<ObjectState&>(state).roiEntryTimes.erase(activeRule->roi.id);
+
+                std::cout << "[BehaviorAnalyzer] Priority-resolved intrusion event: "
+                          << "Object " << state.trackId
+                          << " in ROI " << activeRule->roi.name
+                          << " (Priority " << activeRule->roi.priority << ")"
+                          << " for " << duration << "s" << std::endl;
+            }
+        }
+    }
+
+    return events;
+}
+
+std::vector<std::string> BehaviorAnalyzer::getOverlappingROIs(const cv::Point2f& point) const {
+    std::vector<std::string> overlappingROIs;
+
+    for (const auto& roiPair : m_rois) {
+        const ROI& roi = roiPair.second;
+        if (roi.enabled && isPointInROI(point, roi)) {
+            overlappingROIs.push_back(roi.id);
+        }
+    }
+
+    return overlappingROIs;
+}
+
+std::string BehaviorAnalyzer::getHighestPriorityROI(const std::vector<std::string>& roiIds) const {
+    if (roiIds.empty()) {
+        return "";
+    }
+
+    std::string highestPriorityROIId = roiIds[0];
+    int highestPriority = 0;
+
+    for (const std::string& roiId : roiIds) {
+        auto roiIt = m_rois.find(roiId);
+        if (roiIt != m_rois.end()) {
+            const ROI& roi = roiIt->second;
+            if (roi.priority > highestPriority) {
+                highestPriority = roi.priority;
+                highestPriorityROIId = roiId;
+            }
+        }
+    }
+
+    return highestPriorityROIId;
 }

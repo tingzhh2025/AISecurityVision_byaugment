@@ -124,6 +124,9 @@ private:
     void updateObjectStates(const std::vector<cv::Rect>& detections,
                            const std::vector<int>& trackIds);
     std::vector<BehaviorEvent> checkIntrusionRules();
+    std::vector<BehaviorEvent> checkIntrusionRulesWithPriority();
+    std::vector<std::string> getOverlappingROIs(const cv::Point2f& point) const;
+    std::string getHighestPriorityROI(const std::vector<std::string>& roiIds) const;
     bool isPointInROI(const cv::Point2f& point, const ROI& roi) const;
     bool isObjectInROI(const cv::Rect& bbox, const ROI& roi) const;
     void cleanupOldObjects();
