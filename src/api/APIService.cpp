@@ -5,6 +5,7 @@
 #include "../utils/PolygonValidator.h"
 #include "../onvif/ONVIFDiscovery.h"
 #include "../output/Streamer.h"
+#include "../output/AlarmTrigger.h"
 #include "../database/DatabaseManager.h"
 #include "../recognition/FaceRecognizer.h"
 #include <iostream>
@@ -237,6 +238,80 @@ void APIService::setupRoutes() {
     m_httpServer->Post("/api/faces/verify", [this](const httplib::Request& req, httplib::Response& res) {
         std::string response;
         handlePostFaceVerify(req, response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    // Alarm configuration endpoints - Task 63
+    m_httpServer->Post("/api/alarms/config", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handlePostAlarmConfig(req.body, response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Get("/api/alarms/config", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handleGetAlarmConfigs("", response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Get(R"(/api/alarms/config/(\w+))", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        std::string configId = req.matches[1].str();
+        handleGetAlarmConfig("", response, configId);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Put(R"(/api/alarms/config/(\w+))", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        std::string configId = req.matches[1].str();
+        handlePutAlarmConfig(req.body, response, configId);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Delete(R"(/api/alarms/config/(\w+))", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        std::string configId = req.matches[1].str();
+        handleDeleteAlarmConfig("", response, configId);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Post("/api/alarms/test", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handlePostTestAlarm(req.body, response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Get("/api/alarms/status", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handleGetAlarmStatus("", response);
         size_t contentStart = response.find("\r\n\r\n");
         if (contentStart != std::string::npos) {
             response = response.substr(contentStart + 4);
@@ -2171,6 +2246,412 @@ void APIService::handlePostFaceVerify(const httplib::Request& request, std::stri
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Face verification failed: " + std::string(e.what()), 500);
+    }
+}
+
+// Alarm configuration handlers - Task 63
+void APIService::handlePostAlarmConfig(const std::string& request, std::string& response) {
+    try {
+        std::string method = parseJsonField(request, "method");
+        std::string url = parseJsonField(request, "url");
+        std::string configId = parseJsonField(request, "id");
+
+        if (configId.empty()) {
+            // Generate a unique config ID
+            auto now = std::chrono::system_clock::now();
+            auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now.time_since_epoch()).count();
+            configId = "alarm_config_" + std::to_string(timestamp);
+        }
+
+        if (method.empty()) {
+            response = createErrorResponse("method is required (http, websocket, mqtt)", 400);
+            return;
+        }
+
+        if (method != "http" && method != "websocket" && method != "mqtt") {
+            response = createErrorResponse("method must be 'http', 'websocket', or 'mqtt'", 400);
+            return;
+        }
+
+        if (method == "http" && url.empty()) {
+            response = createErrorResponse("url is required for HTTP method", 400);
+            return;
+        }
+
+        // Create alarm configuration
+        AlarmConfig config;
+        config.id = configId;
+
+        if (method == "http") {
+            config.method = AlarmMethod::HTTP_POST;
+            config.httpConfig = HttpAlarmConfig(url);
+
+            // Parse optional HTTP parameters
+            int timeout = parseJsonInt(request, "timeout_ms", 5000);
+            if (timeout < 1000 || timeout > 30000) {
+                response = createErrorResponse("timeout_ms must be between 1000 and 30000", 400);
+                return;
+            }
+            config.httpConfig.timeout_ms = timeout;
+
+        } else if (method == "websocket") {
+            config.method = AlarmMethod::WEBSOCKET;
+            // TODO: Add WebSocket configuration
+        } else if (method == "mqtt") {
+            config.method = AlarmMethod::MQTT;
+            // TODO: Add MQTT configuration
+        }
+
+        config.enabled = true;
+        config.priority = parseJsonInt(request, "priority", 1);
+        if (config.priority < 1 || config.priority > 5) {
+            config.priority = 1;
+        }
+
+        // Get AlarmTrigger from TaskManager (assuming it's accessible)
+        TaskManager& taskManager = TaskManager::getInstance();
+        // For now, we'll create a static AlarmTrigger instance
+        // In a real implementation, this should be managed by TaskManager
+        static AlarmTrigger alarmTrigger;
+        static bool initialized = false;
+        if (!initialized) {
+            alarmTrigger.initialize();
+            initialized = true;
+        }
+
+        if (!alarmTrigger.addAlarmConfig(config)) {
+            response = createErrorResponse("Failed to add alarm configuration", 500);
+            return;
+        }
+
+        std::ostringstream json;
+        json << "{"
+             << "\"status\":\"created\","
+             << "\"config_id\":\"" << config.id << "\","
+             << "\"method\":\"" << method << "\","
+             << "\"enabled\":" << (config.enabled ? "true" : "false") << ","
+             << "\"priority\":" << config.priority;
+
+        if (method == "http") {
+            json << ",\"url\":\"" << config.httpConfig.url << "\","
+                 << "\"timeout_ms\":" << config.httpConfig.timeout_ms;
+        }
+
+        json << ",\"created_at\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str(), 201);
+
+        std::cout << "[APIService] Created alarm config: " << config.id
+                  << " (method: " << method << ")" << std::endl;
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to create alarm config: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handleGetAlarmConfigs(const std::string& request, std::string& response) {
+    try {
+        // Get AlarmTrigger instance
+        static AlarmTrigger alarmTrigger;
+        static bool initialized = false;
+        if (!initialized) {
+            alarmTrigger.initialize();
+            initialized = true;
+        }
+
+        auto configs = alarmTrigger.getAlarmConfigs();
+
+        std::ostringstream json;
+        json << "{\"configs\":[";
+
+        for (size_t i = 0; i < configs.size(); ++i) {
+            if (i > 0) json << ",";
+
+            const auto& config = configs[i];
+            json << "{"
+                 << "\"id\":\"" << config.id << "\","
+                 << "\"method\":\"" << (config.method == AlarmMethod::HTTP_POST ? "http" :
+                                      config.method == AlarmMethod::WEBSOCKET ? "websocket" : "mqtt") << "\","
+                 << "\"enabled\":" << (config.enabled ? "true" : "false") << ","
+                 << "\"priority\":" << config.priority;
+
+            if (config.method == AlarmMethod::HTTP_POST) {
+                json << ",\"url\":\"" << config.httpConfig.url << "\","
+                     << "\"timeout_ms\":" << config.httpConfig.timeout_ms;
+            }
+
+            json << "}";
+        }
+
+        json << "],"
+             << "\"count\":" << configs.size() << ","
+             << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to get alarm configs: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handleGetAlarmConfig(const std::string& request, std::string& response, const std::string& configId) {
+    try {
+        static AlarmTrigger alarmTrigger;
+        static bool initialized = false;
+        if (!initialized) {
+            alarmTrigger.initialize();
+            initialized = true;
+        }
+
+        auto configs = alarmTrigger.getAlarmConfigs();
+
+        // Find the specific config
+        for (const auto& config : configs) {
+            if (config.id == configId) {
+                std::ostringstream json;
+                json << "{"
+                     << "\"id\":\"" << config.id << "\","
+                     << "\"method\":\"" << (config.method == AlarmMethod::HTTP_POST ? "http" :
+                                          config.method == AlarmMethod::WEBSOCKET ? "websocket" : "mqtt") << "\","
+                     << "\"enabled\":" << (config.enabled ? "true" : "false") << ","
+                     << "\"priority\":" << config.priority;
+
+                if (config.method == AlarmMethod::HTTP_POST) {
+                    json << ",\"url\":\"" << config.httpConfig.url << "\","
+                         << "\"timeout_ms\":" << config.httpConfig.timeout_ms;
+                }
+
+                json << ",\"timestamp\":\"" << getCurrentTimestamp() << "\""
+                     << "}";
+
+                response = createJsonResponse(json.str());
+                return;
+            }
+        }
+
+        response = createErrorResponse("Alarm config not found: " + configId, 404);
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to get alarm config: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handlePutAlarmConfig(const std::string& request, std::string& response, const std::string& configId) {
+    try {
+        static AlarmTrigger alarmTrigger;
+        static bool initialized = false;
+        if (!initialized) {
+            alarmTrigger.initialize();
+            initialized = true;
+        }
+
+        // Parse update parameters
+        std::string method = parseJsonField(request, "method");
+        std::string url = parseJsonField(request, "url");
+
+        // Get existing config
+        auto configs = alarmTrigger.getAlarmConfigs();
+        AlarmConfig* existingConfig = nullptr;
+
+        for (auto& config : configs) {
+            if (config.id == configId) {
+                existingConfig = &config;
+                break;
+            }
+        }
+
+        if (!existingConfig) {
+            response = createErrorResponse("Alarm config not found: " + configId, 404);
+            return;
+        }
+
+        // Update configuration
+        AlarmConfig updatedConfig = *existingConfig;
+
+        if (!method.empty()) {
+            if (method == "http") {
+                updatedConfig.method = AlarmMethod::HTTP_POST;
+            } else if (method == "websocket") {
+                updatedConfig.method = AlarmMethod::WEBSOCKET;
+            } else if (method == "mqtt") {
+                updatedConfig.method = AlarmMethod::MQTT;
+            } else {
+                response = createErrorResponse("Invalid method: " + method, 400);
+                return;
+            }
+        }
+
+        if (!url.empty() && updatedConfig.method == AlarmMethod::HTTP_POST) {
+            updatedConfig.httpConfig.url = url;
+        }
+
+        int timeout = parseJsonInt(request, "timeout_ms", -1);
+        if (timeout > 0) {
+            if (timeout < 1000 || timeout > 30000) {
+                response = createErrorResponse("timeout_ms must be between 1000 and 30000", 400);
+                return;
+            }
+            updatedConfig.httpConfig.timeout_ms = timeout;
+        }
+
+        int priority = parseJsonInt(request, "priority", -1);
+        if (priority > 0) {
+            if (priority < 1 || priority > 5) {
+                response = createErrorResponse("priority must be between 1 and 5", 400);
+                return;
+            }
+            updatedConfig.priority = priority;
+        }
+
+        if (!alarmTrigger.updateAlarmConfig(updatedConfig)) {
+            response = createErrorResponse("Failed to update alarm configuration", 500);
+            return;
+        }
+
+        std::ostringstream json;
+        json << "{"
+             << "\"status\":\"updated\","
+             << "\"config_id\":\"" << updatedConfig.id << "\","
+             << "\"method\":\"" << (updatedConfig.method == AlarmMethod::HTTP_POST ? "http" :
+                                  updatedConfig.method == AlarmMethod::WEBSOCKET ? "websocket" : "mqtt") << "\","
+             << "\"enabled\":" << (updatedConfig.enabled ? "true" : "false") << ","
+             << "\"priority\":" << updatedConfig.priority;
+
+        if (updatedConfig.method == AlarmMethod::HTTP_POST) {
+            json << ",\"url\":\"" << updatedConfig.httpConfig.url << "\","
+                 << ",\"timeout_ms\":" << updatedConfig.httpConfig.timeout_ms;
+        }
+
+        json << ",\"updated_at\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+
+        std::cout << "[APIService] Updated alarm config: " << configId << std::endl;
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to update alarm config: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handleDeleteAlarmConfig(const std::string& request, std::string& response, const std::string& configId) {
+    try {
+        static AlarmTrigger alarmTrigger;
+        static bool initialized = false;
+        if (!initialized) {
+            alarmTrigger.initialize();
+            initialized = true;
+        }
+
+        if (!alarmTrigger.removeAlarmConfig(configId)) {
+            response = createErrorResponse("Alarm config not found: " + configId, 404);
+            return;
+        }
+
+        std::ostringstream json;
+        json << "{"
+             << "\"status\":\"deleted\","
+             << "\"config_id\":\"" << configId << "\","
+             << "\"deleted_at\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str(), 204);
+
+        std::cout << "[APIService] Deleted alarm config: " << configId << std::endl;
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to delete alarm config: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handlePostTestAlarm(const std::string& request, std::string& response) {
+    try {
+        std::string eventType = parseJsonField(request, "event_type");
+        std::string cameraId = parseJsonField(request, "camera_id");
+
+        if (eventType.empty()) {
+            response = createErrorResponse("event_type is required", 400);
+            return;
+        }
+
+        if (cameraId.empty()) {
+            cameraId = "test_camera";
+        }
+
+        static AlarmTrigger alarmTrigger;
+        static bool initialized = false;
+        if (!initialized) {
+            alarmTrigger.initialize();
+            initialized = true;
+        }
+
+        // Trigger test alarm
+        alarmTrigger.triggerTestAlarm(eventType, cameraId);
+
+        std::ostringstream json;
+        json << "{"
+             << "\"status\":\"test_alarm_triggered\","
+             << "\"event_type\":\"" << eventType << "\","
+             << "\"camera_id\":\"" << cameraId << "\","
+             << "\"test_mode\":true,"
+             << "\"triggered_at\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+
+        std::cout << "[APIService] Test alarm triggered: " << eventType
+                  << " for camera: " << cameraId << std::endl;
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to trigger test alarm: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handleGetAlarmStatus(const std::string& request, std::string& response) {
+    try {
+        static AlarmTrigger alarmTrigger;
+        static bool initialized = false;
+        if (!initialized) {
+            alarmTrigger.initialize();
+            initialized = true;
+        }
+
+        auto configs = alarmTrigger.getAlarmConfigs();
+        size_t pendingAlarms = alarmTrigger.getPendingAlarmsCount();
+        size_t deliveredAlarms = alarmTrigger.getDeliveredAlarmsCount();
+        size_t failedAlarms = alarmTrigger.getFailedAlarmsCount();
+
+        std::ostringstream json;
+        json << "{"
+             << "\"alarm_system\":{"
+             << "\"status\":\"running\","
+             << "\"total_configs\":" << configs.size() << ","
+             << "\"enabled_configs\":" << std::count_if(configs.begin(), configs.end(),
+                                                       [](const AlarmConfig& c) { return c.enabled; }) << ","
+             << "\"pending_alarms\":" << pendingAlarms << ","
+             << "\"delivered_alarms\":" << deliveredAlarms << ","
+             << "\"failed_alarms\":" << failedAlarms << ","
+             << "\"success_rate\":" << (deliveredAlarms + failedAlarms > 0 ?
+                                      (double)deliveredAlarms / (deliveredAlarms + failedAlarms) * 100.0 : 100.0)
+             << "},"
+             << "\"methods\":{"
+             << "\"http_configs\":" << std::count_if(configs.begin(), configs.end(),
+                                                   [](const AlarmConfig& c) { return c.method == AlarmMethod::HTTP_POST; }) << ","
+             << "\"websocket_configs\":" << std::count_if(configs.begin(), configs.end(),
+                                                        [](const AlarmConfig& c) { return c.method == AlarmMethod::WEBSOCKET; }) << ","
+             << "\"mqtt_configs\":" << std::count_if(configs.begin(), configs.end(),
+                                                   [](const AlarmConfig& c) { return c.method == AlarmMethod::MQTT; })
+             << "},"
+             << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to get alarm status: " + std::string(e.what()), 500);
     }
 }
 

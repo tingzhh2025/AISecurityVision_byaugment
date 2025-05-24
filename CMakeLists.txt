@@ -84,6 +84,15 @@ if(NVML_LIBRARIES)
     )
 endif()
 
+# Find libcurl for HTTP alarm delivery
+find_package(CURL REQUIRED)
+if(CURL_FOUND)
+    set(CURL_FOUND TRUE)
+    message(STATUS "libcurl found: ${CURL_LIBRARIES}")
+else()
+    message(FATAL_ERROR "libcurl is required for HTTP alarm delivery")
+endif()
+
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${OpenCV_INCLUDE_DIRS})
@@ -134,6 +143,12 @@ if(NVML_FOUND)
     target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_NVML)
 endif()
 
+# Add libcurl
+if(CURL_FOUND)
+    list(APPEND LINK_LIBRARIES ${CURL_LIBRARIES})
+    include_directories(${CURL_INCLUDE_DIRS})
+endif()
+
 target_link_libraries(${PROJECT_NAME} ${LINK_LIBRARIES})
 
 # Compiler-specific options
@@ -155,3 +170,4 @@ message(STATUS "OpenCV version: ${OpenCV_VERSION}")
 message(STATUS "SQLite3 found: ${SQLITE3_FOUND}")
 message(STATUS "FFmpeg found: ${LIBAV_FOUND}")
 message(STATUS "NVML found: ${NVML_FOUND}")
+message(STATUS "libcurl found: ${CURL_FOUND}")

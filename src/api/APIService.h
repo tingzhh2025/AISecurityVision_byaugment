@@ -10,6 +10,7 @@
 // Forward declarations
 struct ROI;
 struct IntrusionRule;
+struct AlarmConfig;
 #include <memory>
 
 /**
@@ -108,6 +109,15 @@ private:
     void handleDeleteFace(const std::string& request, std::string& response, const std::string& faceId);
     void handlePostFaceVerify(const httplib::Request& request, std::string& response);
 
+    // Alarm configuration handlers
+    void handlePostAlarmConfig(const std::string& request, std::string& response);
+    void handleGetAlarmConfigs(const std::string& request, std::string& response);
+    void handleGetAlarmConfig(const std::string& request, std::string& response, const std::string& configId);
+    void handlePutAlarmConfig(const std::string& request, std::string& response, const std::string& configId);
+    void handleDeleteAlarmConfig(const std::string& request, std::string& response, const std::string& configId);
+    void handlePostTestAlarm(const std::string& request, std::string& response);
+    void handleGetAlarmStatus(const std::string& request, std::string& response);
+
     // Utility methods
     std::string createJsonResponse(const std::string& data, int statusCode = 200);
     std::string createErrorResponse(const std::string& error, int statusCode = 400);
@@ -130,6 +140,13 @@ private:
     // JSON deserialization for behavior rules
     bool deserializeROI(const std::string& json, ROI& roi);
     bool deserializeIntrusionRule(const std::string& json, IntrusionRule& rule);
+
+    // JSON serialization for alarm configurations
+    std::string serializeAlarmConfig(const struct AlarmConfig& config);
+    std::string serializeAlarmConfigList(const std::vector<struct AlarmConfig>& configs);
+
+    // JSON deserialization for alarm configurations
+    bool deserializeAlarmConfig(const std::string& json, struct AlarmConfig& config);
 
     // Web interface utilities
     std::string loadWebFile(const std::string& filePath);
