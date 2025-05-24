@@ -192,6 +192,11 @@ public:
     std::map<AlarmMethod, double> getDeliveryTimesByMethod() const;
     std::map<AlarmMethod, double> getSuccessRatesByMethod() const;
 
+    // WebSocket server functionality
+    void startWebSocketServer(int port);
+    void stopWebSocketServer();
+    void broadcastToWebSocketClients(const std::string& message);
+
 private:
     // Alarm processing
     void processAlarmQueue();
@@ -209,11 +214,6 @@ private:
     // HTTP client functionality
     bool sendHttpPost(const std::string& url, const std::string& jsonPayload,
                      const std::map<std::string, std::string>& headers, int timeout_ms);
-
-    // WebSocket server functionality
-    void startWebSocketServer(int port);
-    void stopWebSocketServer();
-    void broadcastToWebSocketClients(const std::string& message);
 
     // MQTT client functionality
     bool connectMQTTClient(const MQTTAlarmConfig& config);
