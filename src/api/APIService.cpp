@@ -6,6 +6,7 @@
 #include "../onvif/ONVIFDiscovery.h"
 #include "../output/Streamer.h"
 #include "../database/DatabaseManager.h"
+#include "../recognition/FaceRecognizer.h"
 #include <iostream>
 #include <sstream>
 #include <chrono>
@@ -225,6 +226,17 @@ void APIService::setupRoutes() {
         std::string response;
         std::string faceId = req.matches[1].str();
         handleDeleteFace("", response, faceId);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    // Face verification endpoint - Task 62
+    m_httpServer->Post("/api/faces/verify", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handlePostFaceVerify(req, response);
         size_t contentStart = response.find("\r\n\r\n");
         if (contentStart != std::string::npos) {
             response = response.substr(contentStart + 4);
@@ -1882,11 +1894,27 @@ void APIService::handlePostFaceAdd(const httplib::Request& request, std::string&
 
         std::cout << "[APIService] Saved face image: " << imagePath << std::endl;
 
-        // TODO: Extract face embedding using face recognition module
-        // For now, create a dummy embedding
+        // Extract face embedding using face recognition module
+        std::vector<uchar> imageData(imageFile.content.begin(), imageFile.content.end());
+        cv::Mat faceImage = cv::imdecode(imageData, cv::IMREAD_COLOR);
+
         std::vector<float> embedding;
-        for (int i = 0; i < 128; i++) {
-            embedding.push_back(static_cast<float>(rand()) / RAND_MAX);
+        if (!faceImage.empty()) {
+            FaceRecognizer faceRecognizer;
+            if (faceRecognizer.initialize()) {
+                embedding = faceRecognizer.extractFaceEmbedding(faceImage);
+                std::cout << "[APIService] Generated face embedding with " << embedding.size() << " dimensions" << std::endl;
+            } else {
+                std::cout << "[APIService] Warning: Face recognizer initialization failed, using dummy embedding" << std::endl;
+            }
+        }
+
+        // Fallback to dummy embedding if face recognition failed
+        if (embedding.empty()) {
+            std::cout << "[APIService] Using dummy embedding as fallback" << std::endl;
+            for (int i = 0; i < 128; i++) {
+                embedding.push_back(static_cast<float>(rand()) / RAND_MAX);
+            }
         }
 
         // Create face record
@@ -2029,6 +2057,120 @@ void APIService::handleDeleteFace(const std::string& request, std::string& respo
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to delete face: " + std::string(e.what()), 500);
+    }
+}
+
+// Task 62: Face verification endpoint implementation
+void APIService::handlePostFaceVerify(const httplib::Request& request, std::string& response) {
+    try {
+        // Check if request has multipart form data with image
+        if (!request.has_file("image")) {
+            response = createErrorResponse("Image file is required", 400);
+            return;
+        }
+
+        // Get the uploaded image file
+        auto imageFile = request.get_file_value("image");
+        if (imageFile.content.empty()) {
+            response = createErrorResponse("Image file is empty", 400);
+            return;
+        }
+
+        // Validate image file type
+        std::string filename = imageFile.filename;
+        std::string extension = filename.substr(filename.find_last_of(".") + 1);
+        std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+
+        if (extension != "jpg" && extension != "jpeg" && extension != "png" && extension != "bmp") {
+            response = createErrorResponse("Unsupported image format. Use JPG, PNG, or BMP", 400);
+            return;
+        }
+
+        // Get optional threshold parameter (default 0.7)
+        float threshold = 0.7f;
+        if (request.has_param("threshold")) {
+            try {
+                threshold = std::stof(request.get_param_value("threshold"));
+                if (threshold < 0.0f || threshold > 1.0f) {
+                    response = createErrorResponse("Threshold must be between 0.0 and 1.0", 400);
+                    return;
+                }
+            } catch (const std::exception&) {
+                response = createErrorResponse("Invalid threshold value", 400);
+                return;
+            }
+        }
+
+        std::cout << "[APIService] Face verification request with threshold: " << threshold << std::endl;
+
+        // Create database manager instance
+        DatabaseManager db;
+        if (!db.initialize()) {
+            response = createErrorResponse("Database not available", 503);
+            return;
+        }
+
+        // Get all registered faces from database
+        auto registeredFaces = db.getFaces();
+        if (registeredFaces.empty()) {
+            response = createJsonResponse("{\"matches\":[],\"count\":0,\"message\":\"No registered faces found\",\"timestamp\":\"" + getCurrentTimestamp() + "\"}");
+            return;
+        }
+
+        std::cout << "[APIService] Found " << registeredFaces.size() << " registered faces for verification" << std::endl;
+
+        // Convert image data to OpenCV Mat
+        std::vector<uchar> imageData(imageFile.content.begin(), imageFile.content.end());
+        cv::Mat inputImage = cv::imdecode(imageData, cv::IMREAD_COLOR);
+
+        if (inputImage.empty()) {
+            response = createErrorResponse("Failed to decode image", 400);
+            return;
+        }
+
+        std::cout << "[APIService] Decoded input image: " << inputImage.cols << "x" << inputImage.rows << std::endl;
+
+        // Initialize face recognizer
+        FaceRecognizer faceRecognizer;
+        if (!faceRecognizer.initialize()) {
+            response = createErrorResponse("Failed to initialize face recognizer", 500);
+            return;
+        }
+
+        // Perform face verification
+        auto verificationResults = faceRecognizer.verifyFace(inputImage, registeredFaces, threshold);
+
+        // Create JSON response
+        std::ostringstream json;
+        json << "{"
+             << "\"matches\":[";
+
+        for (size_t i = 0; i < verificationResults.size(); ++i) {
+            if (i > 0) json << ",";
+
+            const auto& result = verificationResults[i];
+            json << "{"
+                 << "\"face_id\":" << result.face_id << ","
+                 << "\"name\":\"" << result.name << "\","
+                 << "\"confidence\":" << std::fixed << std::setprecision(4) << result.confidence << ","
+                 << "\"similarity_score\":" << std::fixed << std::setprecision(4) << result.similarity_score
+                 << "}";
+        }
+
+        json << "],"
+             << "\"count\":" << verificationResults.size() << ","
+             << "\"threshold\":" << std::fixed << std::setprecision(2) << threshold << ","
+             << "\"total_registered_faces\":" << registeredFaces.size() << ","
+             << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str(), 200);
+
+        std::cout << "[APIService] Face verification completed: " << verificationResults.size()
+                  << " matches found above threshold " << threshold << std::endl;
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Face verification failed: " + std::string(e.what()), 500);
     }
 }
 

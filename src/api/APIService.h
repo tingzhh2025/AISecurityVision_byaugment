@@ -106,6 +106,7 @@ private:
     void handlePostFaceAdd(const httplib::Request& request, std::string& response);
     void handleGetFaces(const std::string& request, std::string& response);
     void handleDeleteFace(const std::string& request, std::string& response, const std::string& faceId);
+    void handlePostFaceVerify(const httplib::Request& request, std::string& response);
 
     // Utility methods
     std::string createJsonResponse(const std::string& data, int statusCode = 200);
