@@ -1457,6 +1457,20 @@ void APIService::handlePostROIs(const std::string& request, std::string& respons
             return;
         }
 
+        // Validate priority level (1-5 scale) - Task 69
+        if (roi.priority < 1 || roi.priority > 5) {
+            std::ostringstream errorJson;
+            errorJson << "{"
+                     << "\"error\":\"Priority must be between 1 and 5 (inclusive)\","
+                     << "\"error_code\":\"INVALID_PRIORITY\","
+                     << "\"provided_priority\":" << roi.priority << ","
+                     << "\"valid_range\":\"1-5\","
+                     << "\"description\":\"Priority levels: 1=Low, 2=Low-Medium, 3=Medium, 4=High, 5=Critical\""
+                     << "}";
+            response = createJsonResponse(errorJson.str(), 400);
+            return;
+        }
+
         // Enhanced polygon validation with detailed error reporting
         auto validationResult = validateROIPolygonDetailed(roi.polygon);
         if (!validationResult.isValid) {
@@ -1646,6 +1660,20 @@ void APIService::handlePutROI(const std::string& request, std::string& response,
         // Validate the ROI
         if (roi.name.empty()) {
             response = createErrorResponse("ROI name is required", 400);
+            return;
+        }
+
+        // Validate priority level (1-5 scale) - Task 69
+        if (roi.priority < 1 || roi.priority > 5) {
+            std::ostringstream errorJson;
+            errorJson << "{"
+                     << "\"error\":\"Priority must be between 1 and 5 (inclusive)\","
+                     << "\"error_code\":\"INVALID_PRIORITY\","
+                     << "\"provided_priority\":" << roi.priority << ","
+                     << "\"valid_range\":\"1-5\","
+                     << "\"description\":\"Priority levels: 1=Low, 2=Low-Medium, 3=Medium, 4=High, 5=Critical\""
+                     << "}";
+            response = createJsonResponse(errorJson.str(), 400);
             return;
         }
 

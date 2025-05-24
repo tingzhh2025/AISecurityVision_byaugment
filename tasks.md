@@ -1389,7 +1389,17 @@ AISecurityVision/
 
 **所属子史诗**: 13
 
-**状态**: todo
+**状态**: done
+
+**实施完成**:
+✅ 优先级验证逻辑：在POST和PUT ROI处理器中添加全面验证
+✅ 范围验证(1-5)：详细错误响应包含error_code、provided_priority、valid_range和描述
+✅ 优先级级别：1=低，2=中低，3=中，4=高，5=关键
+✅ 数据库集成：数据库查询已按priority DESC排序实现正确优先级排序
+✅ API增强：POST /api/rois和PUT /api/rois/{id}增加优先级验证
+✅ 详细错误响应：JSON格式包含错误代码的详细错误响应
+✅ 测试基础设施：创建test_roi_priority_validation.py综合测试脚本
+✅ 文件修改：src/api/APIService.cpp - handlePostROIs()和handlePutROI()添加优先级验证
 
 ---
 
