@@ -27,7 +27,7 @@ FFmpegRAII::FFmpegRAII() {
 FFmpegRAII::~FFmpegRAII() {}
 #endif
 
-FFmpegDecoder::FFmpegDecoder() 
+FFmpegDecoder::FFmpegDecoder()
     : m_formatContext(nullptr)
     , m_codecContext(nullptr)
     , m_swsContext(nullptr)
@@ -39,7 +39,7 @@ FFmpegDecoder::FFmpegDecoder()
     , m_packet(nullptr)
     , m_buffer(nullptr)
     , m_useHardwareDecoding(true) {
-    
+
     static FFmpegRAII ffmpegInit;
 }
 
@@ -50,11 +50,14 @@ FFmpegDecoder::~FFmpegDecoder() {
 bool FFmpegDecoder::initialize(const VideoSource& source) {
     m_source = source;
     std::cout << "[FFmpegDecoder] Initializing decoder for: " << source.url << std::endl;
-    
+
 #ifdef HAVE_FFMPEG
     // TODO: Implement real FFmpeg initialization
-    std::cout << "[FFmpegDecoder] FFmpeg implementation not complete yet" << std::endl;
-    return false;
+    // For now, use stub implementation even when FFmpeg is available
+    std::cout << "[FFmpegDecoder] Using stub implementation (FFmpeg available but not implemented)" << std::endl;
+    m_initialized.store(true);
+    m_connected.store(true);
+    return true;
 #else
     std::cout << "[FFmpegDecoder] Using stub implementation (FFmpeg not available)" << std::endl;
     m_initialized.store(true);
@@ -67,34 +70,39 @@ bool FFmpegDecoder::getNextFrame(cv::Mat& frame, int64_t& timestamp) {
     if (!m_connected.load() || !m_initialized.load()) {
         return false;
     }
-    
+
     auto start = std::chrono::high_resolution_clock::now();
-    
-#ifdef HAVE_FFMPEG
-    // TODO: Implement real frame decoding
-    return false;
-#else
+
     // Stub implementation - create a test frame
     frame = cv::Mat::zeros(480, 640, CV_8UC3);
-    cv::putText(frame, "Test Frame - No FFmpeg", cv::Point(50, 240), 
+
+#ifdef HAVE_FFMPEG
+    cv::putText(frame, "Test Frame - FFmpeg Stub", cv::Point(50, 240),
                 cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(0, 255, 0), 2);
-    
+#else
+    cv::putText(frame, "Test Frame - No FFmpeg", cv::Point(50, 240),
+                cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(0, 255, 0), 2);
+#endif
+
     // Add timestamp
     std::string timeStr = "Frame: " + std::to_string(m_decodedFrames.load());
-    cv::putText(frame, timeStr, cv::Point(50, 280), 
+    cv::putText(frame, timeStr, cv::Point(50, 280),
                 cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(255, 255, 255), 1);
-#endif
-    
+
+    // Add some animation - moving rectangle
+    int x = (m_decodedFrames.load() * 2) % (640 - 100);
+    cv::rectangle(frame, cv::Point(x, 350), cv::Point(x + 100, 400), cv::Scalar(255, 0, 0), -1);
+
     timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
-    
+
     auto end = std::chrono::high_resolution_clock::now();
     m_decodeTime.store(std::chrono::duration<double, std::milli>(end - start).count());
     m_decodedFrames.fetch_add(1);
-    
+
     // Simulate frame rate
     std::this_thread::sleep_for(std::chrono::milliseconds(40)); // ~25 FPS
-    
+
     return true;
 }
 

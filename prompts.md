@@ -1,0 +1,1 @@
+@tasks.md @architecture.md @requirements.md please flow the tasks.md to continue  implement before continue please git commit and push to remote.  your previous develop status here: 

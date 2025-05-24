@@ -39,6 +39,28 @@ pkg_check_modules(LIBAV
     libswscale
     libavutil)
 
+# Find NVIDIA Management Library (NVML) - optional
+find_library(NVML_LIBRARIES nvidia-ml
+    PATHS
+    /usr/lib/x86_64-linux-gnu
+    /usr/lib64
+    /usr/local/cuda/lib64
+    /usr/local/cuda/lib
+    /opt/cuda/lib64
+    /opt/cuda/lib
+)
+
+if(NVML_LIBRARIES)
+    set(NVML_FOUND TRUE)
+    # Try to find the header
+    find_path(NVML_INCLUDE_DIRS nvml.h
+        PATHS
+        /usr/include
+        /usr/local/cuda/include
+        /opt/cuda/include
+    )
+endif()
+
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${OpenCV_INCLUDE_DIRS})
@@ -78,6 +100,15 @@ if(LIBAV_FOUND)
     target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_FFMPEG)
 endif()
 
+# Add NVML if found
+if(NVML_FOUND)
+    list(APPEND LINK_LIBRARIES ${NVML_LIBRARIES})
+    if(NVML_INCLUDE_DIRS)
+        include_directories(${NVML_INCLUDE_DIRS})
+    endif()
+    target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_NVML)
+endif()
+
 target_link_libraries(${PROJECT_NAME} ${LINK_LIBRARIES})
 
 # Compiler-specific options
@@ -98,3 +129,4 @@ message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
 message(STATUS "OpenCV version: ${OpenCV_VERSION}")
 message(STATUS "SQLite3 found: ${SQLITE3_FOUND}")
 message(STATUS "FFmpeg found: ${LIBAV_FOUND}")
+message(STATUS "NVML found: ${NVML_FOUND}")

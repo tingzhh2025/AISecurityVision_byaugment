@@ -12,6 +12,7 @@
 #include <iostream>
 #include <chrono>
 #include <sstream>
+#include <functional>
 
 VideoPipeline::VideoPipeline(const VideoSource& source)
     : m_source(source) {
@@ -71,12 +72,27 @@ bool VideoPipeline::initialize() {
         m_streamer = std::make_unique<Streamer>();
         m_alarmTrigger = std::make_unique<AlarmTrigger>();
 
+        // Configure streamer with appropriate settings
+        StreamConfig streamConfig;
+        streamConfig.width = 640;
+        streamConfig.height = 480;
+        streamConfig.fps = 15;
+        streamConfig.quality = 80;
+        streamConfig.port = 8000 + std::hash<std::string>{}(m_source.id) % 1000; // Unique port per source
+        streamConfig.enableOverlays = true;
+        m_streamer->setConfig(streamConfig);
+
         if (!m_recorder->initialize(m_source.id) ||
             !m_streamer->initialize(m_source.id) ||
             !m_alarmTrigger->initialize()) {
             handleError("Failed to initialize output modules");
             return false;
         }
+
+        // Enable streaming by default
+        m_streamingEnabled.store(true);
+
+        std::cout << "[VideoPipeline] MJPEG stream available at: " << m_streamer->getStreamUrl() << std::endl;
 
         std::cout << "[VideoPipeline] Pipeline initialized successfully: " << m_source.id << std::endl;
         return true;
@@ -275,6 +291,15 @@ void VideoPipeline::setRecordingEnabled(bool enabled) {
 
 void VideoPipeline::setStreamingEnabled(bool enabled) {
     m_streamingEnabled.store(enabled);
+}
+
+// Access methods
+const VideoSource& VideoPipeline::getSource() const {
+    return m_source;
+}
+
+std::chrono::steady_clock::time_point VideoPipeline::getStartTime() const {
+    return m_startTime;
 }
 
 // VideoSource implementation

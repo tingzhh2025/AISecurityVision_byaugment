@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Test - AI Security Vision System</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-section h3 {
+            color: #333;
+            margin-top: 0;
+        }
+        .api-test {
+            background: #f8f9fa;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border-left: 4px solid #007bff;
+        }
+        .status {
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .status.pending { background: #fff3cd; color: #856404; }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 3px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .dashboard-link {
+            display: inline-block;
+            background: #28a745;
+            color: white;
+            padding: 15px 30px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 18px;
+            margin: 20px 0;
+        }
+        .dashboard-link:hover {
+            background: #218838;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛡️ AI Security Vision System - Dashboard Test</h1>
+        <p>This page tests the web dashboard functionality and API endpoints.</p>
+
+        <!-- Dashboard Access -->
+        <div class="test-section">
+            <h3>📊 Dashboard Access</h3>
+            <p>Click the link below to access the main dashboard:</p>
+            <a href="/dashboard" class="dashboard-link" target="_blank">🚀 Open Dashboard</a>
+            <p><small>The dashboard should open in a new tab with real-time metrics and charts.</small></p>
+        </div>
+
+        <!-- API Tests -->
+        <div class="test-section">
+            <h3>🔧 API Endpoint Tests</h3>
+            <p>Test the enhanced API endpoints implemented for Task 44 and 45:</p>
+
+            <div class="api-test">
+                <strong>System Status:</strong>
+                <button onclick="testEndpoint('/api/system/status', 'status-result')">Test</button>
+                <span id="status-status" class="status pending">Pending</span>
+                <pre id="status-result">Click "Test" to check system status</pre>
+            </div>
+
+            <div class="api-test">
+                <strong>Enhanced System Stats:</strong>
+                <button onclick="testEndpoint('/api/system/stats', 'stats-result')">Test</button>
+                <span id="stats-status" class="status pending">Pending</span>
+                <pre id="stats-result">Click "Test" to get comprehensive system statistics</pre>
+            </div>
+
+            <div class="api-test">
+                <strong>Pipeline Statistics:</strong>
+                <button onclick="testEndpoint('/api/system/pipeline-stats', 'pipeline-result')">Test</button>
+                <span id="pipeline-status" class="status pending">Pending</span>
+                <pre id="pipeline-result">Click "Test" to get detailed pipeline statistics</pre>
+            </div>
+
+            <div class="api-test">
+                <strong>System Metrics:</strong>
+                <button onclick="testEndpoint('/api/system/metrics', 'metrics-result')">Test</button>
+                <span id="metrics-status" class="status pending">Pending</span>
+                <pre id="metrics-result">Click "Test" to get system metrics</pre>
+            </div>
+        </div>
+
+        <!-- Static File Tests -->
+        <div class="test-section">
+            <h3>📁 Static File Serving Tests</h3>
+            <p>Test static file serving for dashboard assets:</p>
+
+            <div class="api-test">
+                <strong>CSS File:</strong>
+                <button onclick="testStaticFile('/static/css/dashboard.css', 'css-result')">Test</button>
+                <span id="css-status" class="status pending">Pending</span>
+                <pre id="css-result">Click "Test" to check CSS file serving</pre>
+            </div>
+
+            <div class="api-test">
+                <strong>JavaScript File:</strong>
+                <button onclick="testStaticFile('/static/js/dashboard.js', 'js-result')">Test</button>
+                <span id="js-status" class="status pending">Pending</span>
+                <pre id="js-result">Click "Test" to check JavaScript file serving</pre>
+            </div>
+        </div>
+
+        <!-- Performance Test -->
+        <div class="test-section">
+            <h3>⚡ Performance Test</h3>
+            <p>Test API response times and dashboard loading performance:</p>
+            <button onclick="runPerformanceTest()">Run Performance Test</button>
+            <span id="perf-status" class="status pending">Pending</span>
+            <pre id="perf-result">Click "Run Performance Test" to measure API response times</pre>
+        </div>
+
+        <!-- Auto Refresh Test -->
+        <div class="test-section">
+            <h3>🔄 Auto-Refresh Test</h3>
+            <p>Test automatic data refresh functionality:</p>
+            <button onclick="startAutoRefresh()" id="auto-refresh-btn">Start Auto-Refresh</button>
+            <button onclick="stopAutoRefresh()">Stop Auto-Refresh</button>
+            <span id="auto-status" class="status pending">Stopped</span>
+            <pre id="auto-result">Auto-refresh will update system stats every 3 seconds</pre>
+        </div>
+    </div>
+
+    <script>
+        let autoRefreshInterval = null;
+
+        async function testEndpoint(endpoint, resultId) {
+            const statusId = endpoint.split('/').pop() + '-status';
+            const statusEl = document.getElementById(statusId);
+            const resultEl = document.getElementById(resultId);
+            
+            statusEl.textContent = 'Testing...';
+            statusEl.className = 'status pending';
+            
+            try {
+                const startTime = performance.now();
+                const response = await fetch(endpoint);
+                const endTime = performance.now();
+                const responseTime = (endTime - startTime).toFixed(2);
+                
+                if (response.ok) {
+                    const data = await response.text();
+                    statusEl.textContent = `Success (${responseTime}ms)`;
+                    statusEl.className = 'status success';
+                    
+                    try {
+                        const jsonData = JSON.parse(data);
+                        resultEl.textContent = JSON.stringify(jsonData, null, 2);
+                    } catch {
+                        resultEl.textContent = data;
+                    }
+                } else {
+                    statusEl.textContent = `Error ${response.status}`;
+                    statusEl.className = 'status error';
+                    resultEl.textContent = `HTTP ${response.status}: ${response.statusText}`;
+                }
+            } catch (error) {
+                statusEl.textContent = 'Failed';
+                statusEl.className = 'status error';
+                resultEl.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        async function testStaticFile(filePath, resultId) {
+            const statusId = filePath.split('/').pop().split('.')[0] + '-status';
+            const statusEl = document.getElementById(statusId);
+            const resultEl = document.getElementById(resultId);
+            
+            statusEl.textContent = 'Testing...';
+            statusEl.className = 'status pending';
+            
+            try {
+                const response = await fetch(filePath);
+                
+                if (response.ok) {
+                    const content = await response.text();
+                    const contentType = response.headers.get('content-type');
+                    
+                    statusEl.textContent = 'Success';
+                    statusEl.className = 'status success';
+                    resultEl.textContent = `Content-Type: ${contentType}\nSize: ${content.length} bytes\n\nFirst 200 characters:\n${content.substring(0, 200)}...`;
+                } else {
+                    statusEl.textContent = `Error ${response.status}`;
+                    statusEl.className = 'status error';
+                    resultEl.textContent = `HTTP ${response.status}: ${response.statusText}`;
+                }
+            } catch (error) {
+                statusEl.textContent = 'Failed';
+                statusEl.className = 'status error';
+                resultEl.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        async function runPerformanceTest() {
+            const statusEl = document.getElementById('perf-status');
+            const resultEl = document.getElementById('perf-result');
+            
+            statusEl.textContent = 'Running...';
+            statusEl.className = 'status pending';
+            
+            const endpoints = [
+                '/api/system/status',
+                '/api/system/stats',
+                '/api/system/pipeline-stats',
+                '/api/system/metrics'
+            ];
+            
+            const results = [];
+            
+            for (const endpoint of endpoints) {
+                try {
+                    const startTime = performance.now();
+                    const response = await fetch(endpoint);
+                    const endTime = performance.now();
+                    const responseTime = endTime - startTime;
+                    
+                    results.push({
+                        endpoint,
+                        responseTime: responseTime.toFixed(2),
+                        status: response.status,
+                        success: response.ok
+                    });
+                } catch (error) {
+                    results.push({
+                        endpoint,
+                        responseTime: 'Failed',
+                        status: 'Error',
+                        success: false,
+                        error: error.message
+                    });
+                }
+            }
+            
+            statusEl.textContent = 'Completed';
+            statusEl.className = 'status success';
+            
+            let resultText = 'Performance Test Results:\n\n';
+            results.forEach(result => {
+                resultText += `${result.endpoint}:\n`;
+                resultText += `  Response Time: ${result.responseTime}ms\n`;
+                resultText += `  Status: ${result.status}\n`;
+                resultText += `  Success: ${result.success}\n`;
+                if (result.error) {
+                    resultText += `  Error: ${result.error}\n`;
+                }
+                resultText += '\n';
+            });
+            
+            const avgTime = results
+                .filter(r => r.success)
+                .reduce((sum, r) => sum + parseFloat(r.responseTime), 0) / results.filter(r => r.success).length;
+            
+            resultText += `Average Response Time: ${avgTime.toFixed(2)}ms`;
+            
+            resultEl.textContent = resultText;
+        }
+
+        function startAutoRefresh() {
+            if (autoRefreshInterval) return;
+            
+            const statusEl = document.getElementById('auto-status');
+            const resultEl = document.getElementById('auto-result');
+            const btnEl = document.getElementById('auto-refresh-btn');
+            
+            statusEl.textContent = 'Running';
+            statusEl.className = 'status success';
+            btnEl.textContent = 'Auto-Refresh Running';
+            btnEl.disabled = true;
+            
+            let counter = 0;
+            autoRefreshInterval = setInterval(async () => {
+                counter++;
+                try {
+                    const response = await fetch('/api/system/stats');
+                    if (response.ok) {
+                        const data = await response.json();
+                        const timestamp = new Date().toLocaleTimeString();
+                        resultEl.textContent = `Update #${counter} at ${timestamp}:\n${JSON.stringify(data, null, 2)}`;
+                    }
+                } catch (error) {
+                    resultEl.textContent = `Update #${counter} failed: ${error.message}`;
+                }
+            }, 3000);
+        }
+
+        function stopAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+                
+                const statusEl = document.getElementById('auto-status');
+                const btnEl = document.getElementById('auto-refresh-btn');
+                
+                statusEl.textContent = 'Stopped';
+                statusEl.className = 'status pending';
+                btnEl.textContent = 'Start Auto-Refresh';
+                btnEl.disabled = false;
+            }
+        }
+
+        // Auto-run basic tests on page load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                testEndpoint('/api/system/status', 'status-result');
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

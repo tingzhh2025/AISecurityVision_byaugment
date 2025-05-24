@@ -19,6 +19,9 @@ class Recorder;
 class Streamer;
 class AlarmTrigger;
 
+// Include BehaviorEvent for FrameResult
+struct BehaviorEvent;
+
 // VideoSource definition (moved from TaskManager.h to avoid circular dependency)
 struct VideoSource {
     std::string id;
@@ -67,6 +70,10 @@ public:
     size_t getProcessedFrames() const;
     size_t getDroppedFrames() const;
     std::string getLastError() const;
+
+    // Access methods
+    const VideoSource& getSource() const;
+    std::chrono::steady_clock::time_point getStartTime() const;
 
 private:
     // Processing thread
@@ -127,8 +134,9 @@ struct FrameResult {
     int64_t timestamp;
     std::vector<cv::Rect> detections;
     std::vector<int> trackIds;
+    std::vector<std::string> labels;  // Detection class labels
     std::vector<std::string> faceIds;
     std::vector<std::string> plateNumbers;
-    std::vector<std::string> events;
+    std::vector<BehaviorEvent> events;  // Changed from std::string to BehaviorEvent
     bool hasAlarm = false;
 };

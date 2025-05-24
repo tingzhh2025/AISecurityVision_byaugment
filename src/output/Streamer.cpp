@@ -1,15 +1,900 @@
 #include "Streamer.h"
 #include "../core/VideoPipeline.h"
 #include <iostream>
+#include <sstream>
+#include <iomanip>
+#include <chrono>
+#include <cstring>
+#include <algorithm>
+#include <mutex>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
-Streamer::Streamer() {}
-Streamer::~Streamer() {}
+// FFmpeg includes for RTMP streaming
+extern "C" {
+#include <libavformat/avformat.h>
+#include <libavcodec/avcodec.h>
+#include <libavutil/opt.h>
+#include <libavutil/imgutils.h>
+#include <libavutil/error.h>
+#include <libswscale/swscale.h>
+}
+
+// Helper function for FFmpeg error messages
+static std::string ffmpeg_error_string(int errnum) {
+    char errbuf[AV_ERROR_MAX_STRING_SIZE];
+    av_strerror(errnum, errbuf, AV_ERROR_MAX_STRING_SIZE);
+    return std::string(errbuf);
+}
+
+Streamer::Streamer() : m_lastFpsUpdate(std::chrono::steady_clock::now()) {
+    std::cout << "[Streamer] Creating multi-protocol streamer" << std::endl;
+
+    // Initialize FFmpeg (thread-safe in newer versions)
+    static std::once_flag ffmpeg_init_flag;
+    std::call_once(ffmpeg_init_flag, []() {
+        av_log_set_level(AV_LOG_WARNING);
+        std::cout << "[Streamer] FFmpeg initialized" << std::endl;
+    });
+}
+
+Streamer::~Streamer() {
+    cleanup();
+}
 
 bool Streamer::initialize(const std::string& sourceId) {
-    std::cout << "[Streamer] Initialized for " << sourceId << " (stub)" << std::endl;
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    m_sourceId = sourceId;
+    m_running.store(true);
+
+    // Start frame processing thread
+    m_frameProcessingThread = std::thread(&Streamer::frameProcessingThread, this);
+
+    // Initialize based on protocol
+    if (m_config.protocol == StreamProtocol::MJPEG) {
+        // Start HTTP server for MJPEG
+        if (!startServer()) {
+            std::cerr << "[Streamer] Failed to start HTTP server for " << sourceId << std::endl;
+            return false;
+        }
+        std::cout << "[Streamer] Initialized MJPEG streamer for " << sourceId
+                  << " on port " << m_config.port << std::endl;
+    } else if (m_config.protocol == StreamProtocol::RTMP) {
+        // Start RTMP stream
+        if (!startRtmpStream()) {
+            std::cerr << "[Streamer] Failed to start RTMP stream for " << sourceId << std::endl;
+            return false;
+        }
+        std::cout << "[Streamer] Initialized RTMP streamer for " << sourceId
+                  << " to " << m_config.rtmpUrl << std::endl;
+    }
+
     return true;
 }
 
+void Streamer::cleanup() {
+    std::cout << "[Streamer] Cleaning up streamer for " << m_sourceId << std::endl;
+
+    stopServer();
+    stopRtmpStream();
+    m_running.store(false);
+
+    // Wake up frame processing thread
+    {
+        std::lock_guard<std::mutex> lock(m_frameBufferMutex);
+        m_frameCondition.notify_all();
+    }
+
+    // Join threads
+    if (m_frameProcessingThread.joinable()) {
+        m_frameProcessingThread.join();
+    }
+
+    if (m_serverThread.joinable()) {
+        m_serverThread.join();
+    }
+
+    if (m_rtmpStreamingThread.joinable()) {
+        m_rtmpStreamingThread.join();
+    }
+
+    // Join client threads
+    for (auto& thread : m_clientThreads) {
+        if (thread.joinable()) {
+            thread.join();
+        }
+    }
+    m_clientThreads.clear();
+
+    // Close server socket
+    if (m_serverSocket >= 0) {
+        close(m_serverSocket);
+        m_serverSocket = -1;
+    }
+
+    std::cout << "[Streamer] Cleanup complete for " << m_sourceId << std::endl;
+}
+
+void Streamer::setConfig(const StreamConfig& config) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_config = config;
+    std::cout << "[Streamer] Updated config: " << config.width << "x" << config.height
+              << "@" << config.fps << "fps, quality=" << config.quality << std::endl;
+}
+
+StreamConfig Streamer::getConfig() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_config;
+}
+
 void Streamer::processFrame(const FrameResult& result) {
-    // Stub implementation
+    if (!m_running.load() || result.frame.empty()) {
+        return;
+    }
+
+    // Create frame data
+    FrameData frameData;
+
+    // Render overlays if enabled
+    if (m_config.enableOverlays) {
+        frameData.frame = renderOverlays(result.frame, result);
+    } else {
+        frameData.frame = result.frame.clone();
+    }
+
+    // Resize frame to target resolution
+    frameData.frame = resizeFrame(frameData.frame, m_config.width, m_config.height);
+
+    // Process based on protocol
+    if (m_config.protocol == StreamProtocol::MJPEG) {
+        // Encode to JPEG for MJPEG streaming
+        frameData.jpegData = encodeJpeg(frameData.frame);
+        // Add to buffer for MJPEG clients
+        addFrameToBuffer(frameData);
+    } else if (m_config.protocol == StreamProtocol::RTMP) {
+        // Send frame directly to RTMP stream
+        if (m_rtmpStreaming.load()) {
+            encodeAndSendRtmpFrame(frameData.frame);
+        }
+    }
+
+    // Update FPS statistics
+    m_frameCount.fetch_add(1);
+    auto now = std::chrono::steady_clock::now();
+    auto elapsed = std::chrono::duration<double>(now - m_lastFpsUpdate).count();
+    if (elapsed >= 1.0) {
+        double fps = m_frameCount.load() / elapsed;
+        m_streamFps.store(fps);
+        m_frameCount.store(0);
+        m_lastFpsUpdate = now;
+    }
+}
+
+bool Streamer::startServer() {
+    if (m_serverRunning.load()) {
+        return true;
+    }
+
+    if (!setupHttpServer()) {
+        return false;
+    }
+
+    m_serverRunning.store(true);
+    m_serverThread = std::thread(&Streamer::serverThread, this);
+
+    std::cout << "[Streamer] HTTP server started on port " << m_config.port << std::endl;
+    return true;
+}
+
+void Streamer::stopServer() {
+    if (!m_serverRunning.load()) {
+        return;
+    }
+
+    std::cout << "[Streamer] Stopping HTTP server..." << std::endl;
+    m_serverRunning.store(false);
+
+    // Close all client connections
+    {
+        std::lock_guard<std::mutex> lock(m_clientsMutex);
+        for (auto& client : m_clients) {
+            if (client->socket >= 0) {
+                close(client->socket);
+            }
+        }
+        m_clients.clear();
+    }
+}
+
+bool Streamer::isServerRunning() const {
+    return m_serverRunning.load();
+}
+
+size_t Streamer::getConnectedClients() const {
+    std::lock_guard<std::mutex> lock(m_clientsMutex);
+    return m_clients.size();
+}
+
+double Streamer::getStreamFps() const {
+    return m_streamFps.load();
+}
+
+std::string Streamer::getStreamUrl() const {
+    if (m_config.protocol == StreamProtocol::MJPEG) {
+        return "http://localhost:" + std::to_string(m_config.port) + m_config.endpoint;
+    } else if (m_config.protocol == StreamProtocol::RTMP) {
+        return m_config.rtmpUrl;
+    }
+    return "";
+}
+
+bool Streamer::setupHttpServer() {
+    // Create socket
+    m_serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (m_serverSocket < 0) {
+        std::cerr << "[Streamer] Failed to create socket: " << strerror(errno) << std::endl;
+        return false;
+    }
+
+    // Set socket options
+    int opt = 1;
+    if (setsockopt(m_serverSocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        std::cerr << "[Streamer] Failed to set socket options: " << strerror(errno) << std::endl;
+        close(m_serverSocket);
+        return false;
+    }
+
+    // Bind socket
+    struct sockaddr_in address;
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(m_config.port);
+
+    if (bind(m_serverSocket, (struct sockaddr*)&address, sizeof(address)) < 0) {
+        std::cerr << "[Streamer] Failed to bind socket to port " << m_config.port
+                  << ": " << strerror(errno) << std::endl;
+        close(m_serverSocket);
+        return false;
+    }
+
+    // Listen for connections
+    if (listen(m_serverSocket, LISTEN_BACKLOG) < 0) {
+        std::cerr << "[Streamer] Failed to listen on socket: " << strerror(errno) << std::endl;
+        close(m_serverSocket);
+        return false;
+    }
+
+    return true;
+}
+
+void Streamer::serverThread() {
+    std::cout << "[Streamer] Server thread started" << std::endl;
+
+    while (m_serverRunning.load()) {
+        struct sockaddr_in clientAddr;
+        socklen_t clientLen = sizeof(clientAddr);
+
+        int clientSocket = accept(m_serverSocket, (struct sockaddr*)&clientAddr, &clientLen);
+        if (clientSocket < 0) {
+            if (m_serverRunning.load()) {
+                std::cerr << "[Streamer] Failed to accept connection: " << strerror(errno) << std::endl;
+            }
+            continue;
+        }
+
+        // Check client limit
+        {
+            std::lock_guard<std::mutex> lock(m_clientsMutex);
+            if (m_clients.size() >= MAX_CLIENTS) {
+                std::cout << "[Streamer] Maximum clients reached, rejecting connection" << std::endl;
+                close(clientSocket);
+                continue;
+            }
+        }
+
+        // Get client address
+        std::string clientAddrStr = inet_ntoa(clientAddr.sin_addr);
+        std::cout << "[Streamer] New client connected: " << clientAddrStr << std::endl;
+
+        // Create client thread
+        m_clientThreads.emplace_back(&Streamer::clientHandlerThread, this, clientSocket, clientAddrStr);
+    }
+
+    std::cout << "[Streamer] Server thread stopped" << std::endl;
+}
+
+void Streamer::clientHandlerThread(int clientSocket, const std::string& clientAddr) {
+    std::cout << "[Streamer] Client handler started for " << clientAddr << std::endl;
+
+    // Add client to list
+    {
+        std::lock_guard<std::mutex> lock(m_clientsMutex);
+        m_clients.push_back(std::make_unique<ClientConnection>(clientSocket, clientAddr));
+    }
+
+    try {
+        // Read HTTP request
+        char buffer[1024] = {0};
+        ssize_t bytesRead = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+        if (bytesRead <= 0) {
+            std::cout << "[Streamer] Failed to read request from " << clientAddr << std::endl;
+            close(clientSocket);
+            return;
+        }
+
+        std::string request(buffer, bytesRead);
+        handleHttpRequest(clientSocket, request);
+
+    } catch (const std::exception& e) {
+        std::cerr << "[Streamer] Exception in client handler: " << e.what() << std::endl;
+    }
+
+    // Remove client from list
+    {
+        std::lock_guard<std::mutex> lock(m_clientsMutex);
+        m_clients.erase(
+            std::remove_if(m_clients.begin(), m_clients.end(),
+                [clientSocket](const std::unique_ptr<ClientConnection>& client) {
+                    return client->socket == clientSocket;
+                }),
+            m_clients.end()
+        );
+    }
+
+    close(clientSocket);
+    std::cout << "[Streamer] Client handler stopped for " << clientAddr << std::endl;
+}
+
+void Streamer::handleHttpRequest(int clientSocket, const std::string& request) {
+    // Parse request line
+    std::istringstream iss(request);
+    std::string method, path, version;
+    iss >> method >> path >> version;
+
+    std::cout << "[Streamer] HTTP Request: " << method << " " << path << std::endl;
+
+    // Check if this is a request for our MJPEG stream
+    if (method == "GET" && path == m_config.endpoint) {
+        // Send MJPEG headers
+        sendHttpHeaders(clientSocket);
+
+        // Stream frames
+        while (m_serverRunning.load()) {
+            FrameData frameData;
+            if (getLatestFrame(frameData)) {
+                sendMjpegFrame(clientSocket, frameData.jpegData);
+
+                // Control frame rate
+                std::this_thread::sleep_for(std::chrono::milliseconds(1000 / m_config.fps));
+            } else {
+                // No frame available, wait a bit
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+        }
+    } else {
+        // Send 404 response
+        std::string response = "HTTP/1.1 404 Not Found\r\n"
+                              "Content-Type: text/plain\r\n"
+                              "Content-Length: 13\r\n"
+                              "\r\n"
+                              "404 Not Found";
+        send(clientSocket, response.c_str(), response.length(), 0);
+    }
+}
+
+void Streamer::sendHttpHeaders(int clientSocket) {
+    std::string headers =
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: multipart/x-mixed-replace; boundary=--mjpegboundary\r\n"
+        "Cache-Control: no-cache\r\n"
+        "Pragma: no-cache\r\n"
+        "Connection: close\r\n"
+        "\r\n";
+
+    send(clientSocket, headers.c_str(), headers.length(), 0);
+}
+
+void Streamer::sendMjpegFrame(int clientSocket, const std::vector<uint8_t>& jpegData) {
+    if (jpegData.empty()) {
+        return;
+    }
+
+    // Send boundary and headers
+    std::ostringstream frameHeader;
+    frameHeader << "--mjpegboundary\r\n"
+                << "Content-Type: image/jpeg\r\n"
+                << "Content-Length: " << jpegData.size() << "\r\n"
+                << "\r\n";
+
+    std::string headerStr = frameHeader.str();
+    if (send(clientSocket, headerStr.c_str(), headerStr.length(), 0) < 0) {
+        return; // Client disconnected
+    }
+
+    // Send JPEG data
+    if (send(clientSocket, jpegData.data(), jpegData.size(), 0) < 0) {
+        return; // Client disconnected
+    }
+
+    // Send trailing CRLF
+    const char* trailer = "\r\n";
+    send(clientSocket, trailer, 2, 0);
+}
+
+void Streamer::frameProcessingThread() {
+    std::cout << "[Streamer] Frame processing thread started" << std::endl;
+
+    while (m_running.load()) {
+        std::unique_lock<std::mutex> lock(m_frameBufferMutex);
+
+        // Wait for frames or shutdown
+        m_frameCondition.wait_for(lock, std::chrono::milliseconds(FRAME_TIMEOUT_MS),
+            [this] { return !m_frameBuffer.empty() || !m_running.load(); });
+
+        if (!m_running.load()) {
+            break;
+        }
+
+        // Clean up old frames
+        cleanupOldFrames();
+
+        lock.unlock();
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    std::cout << "[Streamer] Frame processing thread stopped" << std::endl;
+}
+
+cv::Mat Streamer::renderOverlays(const cv::Mat& frame, const FrameResult& result) {
+    cv::Mat overlayFrame = frame.clone();
+
+    // Draw detections
+    if (!result.detections.empty()) {
+        drawDetections(overlayFrame, result.detections, result.labels);
+    }
+
+    // Draw tracking IDs
+    if (!result.trackIds.empty() && result.trackIds.size() == result.detections.size()) {
+        drawTrackingIds(overlayFrame, result.detections, result.trackIds);
+    }
+
+    // Draw timestamp
+    drawTimestamp(overlayFrame);
+
+    return overlayFrame;
+}
+
+void Streamer::drawDetections(cv::Mat& frame, const std::vector<cv::Rect>& detections,
+                             const std::vector<std::string>& labels) {
+    for (size_t i = 0; i < detections.size(); ++i) {
+        const cv::Rect& bbox = detections[i];
+
+        // Draw bounding box
+        cv::rectangle(frame, bbox, cv::Scalar(0, 255, 0), 2);
+
+        // Draw label if available
+        if (i < labels.size() && !labels[i].empty()) {
+            std::string label = labels[i];
+            int baseline = 0;
+            cv::Size textSize = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
+
+            cv::Point textOrg(bbox.x, bbox.y - 5);
+            cv::rectangle(frame,
+                         cv::Point(textOrg.x, textOrg.y - textSize.height - baseline),
+                         cv::Point(textOrg.x + textSize.width, textOrg.y + baseline),
+                         cv::Scalar(0, 255, 0), -1);
+
+            cv::putText(frame, label, textOrg, cv::FONT_HERSHEY_SIMPLEX, 0.5,
+                       cv::Scalar(0, 0, 0), 1);
+        }
+    }
+}
+
+void Streamer::drawTrackingIds(cv::Mat& frame, const std::vector<cv::Rect>& detections,
+                              const std::vector<int>& trackIds) {
+    for (size_t i = 0; i < std::min(detections.size(), trackIds.size()); ++i) {
+        const cv::Rect& bbox = detections[i];
+        int trackId = trackIds[i];
+
+        if (trackId >= 0) {
+            std::string idText = "ID:" + std::to_string(trackId);
+            cv::Point textPos(bbox.x + bbox.width - 60, bbox.y + 20);
+
+            cv::putText(frame, idText, textPos, cv::FONT_HERSHEY_SIMPLEX, 0.5,
+                       cv::Scalar(255, 255, 0), 1);
+        }
+    }
+}
+
+void Streamer::drawTimestamp(cv::Mat& frame) {
+    auto now = std::chrono::system_clock::now();
+    auto time_t = std::chrono::system_clock::to_time_t(now);
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        now.time_since_epoch()) % 1000;
+
+    std::ostringstream ss;
+    ss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+    ss << "." << std::setfill('0') << std::setw(3) << ms.count();
+
+    std::string timestamp = ss.str();
+    cv::Point textPos(10, frame.rows - 10);
+
+    // Draw background rectangle
+    int baseline = 0;
+    cv::Size textSize = cv::getTextSize(timestamp, cv::FONT_HERSHEY_SIMPLEX, 0.6, 1, &baseline);
+    cv::rectangle(frame,
+                 cv::Point(textPos.x - 5, textPos.y - textSize.height - baseline - 5),
+                 cv::Point(textPos.x + textSize.width + 5, textPos.y + baseline + 5),
+                 cv::Scalar(0, 0, 0), -1);
+
+    cv::putText(frame, timestamp, textPos, cv::FONT_HERSHEY_SIMPLEX, 0.6,
+               cv::Scalar(255, 255, 255), 1);
+}
+
+std::vector<uint8_t> Streamer::encodeJpeg(const cv::Mat& frame) {
+    std::vector<uint8_t> jpegData;
+
+    if (frame.empty()) {
+        return jpegData;
+    }
+
+    // Set JPEG compression parameters
+    std::vector<int> compressionParams;
+    compressionParams.push_back(cv::IMWRITE_JPEG_QUALITY);
+    compressionParams.push_back(m_config.quality);
+
+    // Encode frame to JPEG
+    if (!cv::imencode(".jpg", frame, jpegData, compressionParams)) {
+        std::cerr << "[Streamer] Failed to encode frame to JPEG" << std::endl;
+        jpegData.clear();
+    }
+
+    return jpegData;
+}
+
+cv::Mat Streamer::resizeFrame(const cv::Mat& frame, int targetWidth, int targetHeight) {
+    if (frame.empty()) {
+        return frame;
+    }
+
+    // Check if resize is needed
+    if (frame.cols == targetWidth && frame.rows == targetHeight) {
+        return frame;
+    }
+
+    cv::Mat resizedFrame;
+    cv::resize(frame, resizedFrame, cv::Size(targetWidth, targetHeight), 0, 0, cv::INTER_LINEAR);
+
+    return resizedFrame;
+}
+
+void Streamer::addFrameToBuffer(const FrameData& frameData) {
+    std::lock_guard<std::mutex> lock(m_frameBufferMutex);
+
+    // Add frame to buffer
+    m_frameBuffer.push(frameData);
+
+    // Remove old frames if buffer is full
+    while (m_frameBuffer.size() > MAX_BUFFER_SIZE) {
+        m_frameBuffer.pop();
+    }
+
+    // Notify waiting threads
+    m_frameCondition.notify_all();
+}
+
+bool Streamer::getLatestFrame(FrameData& frameData) {
+    std::lock_guard<std::mutex> lock(m_frameBufferMutex);
+
+    if (m_frameBuffer.empty()) {
+        return false;
+    }
+
+    // Get the latest frame (back of queue)
+    frameData = m_frameBuffer.back();
+
+    // Clear older frames, keep only the latest
+    while (m_frameBuffer.size() > 1) {
+        m_frameBuffer.pop();
+    }
+
+    return true;
+}
+
+void Streamer::cleanupOldFrames() {
+    // This method is called from frameProcessingThread with lock already held
+    auto now = std::chrono::steady_clock::now();
+
+    while (!m_frameBuffer.empty()) {
+        const auto& frontFrame = m_frameBuffer.front();
+        auto age = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now - frontFrame.timestamp).count();
+
+        if (age > FRAME_TIMEOUT_MS) {
+            m_frameBuffer.pop();
+        } else {
+            break; // Frames are ordered by time, so we can stop here
+        }
+    }
+}
+
+// RTMP streaming methods
+bool Streamer::startRtmpStream() {
+    if (m_rtmpStreaming.load()) {
+        return true;
+    }
+
+    if (m_config.rtmpUrl.empty()) {
+        std::cerr << "[Streamer] RTMP URL not configured" << std::endl;
+        return false;
+    }
+
+    if (!setupRtmpEncoder()) {
+        std::cerr << "[Streamer] Failed to setup RTMP encoder" << std::endl;
+        return false;
+    }
+
+    m_rtmpStreaming.store(true);
+    m_rtmpStreamingThread = std::thread(&Streamer::rtmpStreamingThread, this);
+
+    std::cout << "[Streamer] RTMP stream started to " << m_config.rtmpUrl << std::endl;
+    return true;
+}
+
+void Streamer::stopRtmpStream() {
+    if (!m_rtmpStreaming.load()) {
+        return;
+    }
+
+    std::cout << "[Streamer] Stopping RTMP stream..." << std::endl;
+    m_rtmpStreaming.store(false);
+
+    // Cleanup RTMP encoder
+    cleanupRtmpEncoder();
+}
+
+bool Streamer::isRtmpStreaming() const {
+    return m_rtmpStreaming.load();
+}
+
+bool Streamer::isStreamHealthy() const {
+    if (m_config.protocol == StreamProtocol::MJPEG) {
+        return isServerRunning();
+    } else if (m_config.protocol == StreamProtocol::RTMP) {
+        return isRtmpStreaming();
+    }
+    return false;
+}
+
+bool Streamer::setupRtmpEncoder() {
+    std::lock_guard<std::mutex> lock(m_rtmpMutex);
+
+    // Allocate format context
+    int ret = avformat_alloc_output_context2(&m_rtmpFormatContext, nullptr, "flv", m_config.rtmpUrl.c_str());
+    if (ret < 0) {
+        std::cerr << "[Streamer] Failed to allocate output context: " << ffmpeg_error_string(ret) << std::endl;
+        return false;
+    }
+
+    // Find H.264 encoder
+    const AVCodec* codec = avcodec_find_encoder(AV_CODEC_ID_H264);
+    if (!codec) {
+        std::cerr << "[Streamer] H.264 encoder not found" << std::endl;
+        return false;
+    }
+
+    // Create video stream
+    m_rtmpStream = avformat_new_stream(m_rtmpFormatContext, nullptr);
+    if (!m_rtmpStream) {
+        std::cerr << "[Streamer] Failed to create video stream" << std::endl;
+        return false;
+    }
+
+    // Allocate codec context
+    m_rtmpCodecContext = avcodec_alloc_context3(codec);
+    if (!m_rtmpCodecContext) {
+        std::cerr << "[Streamer] Failed to allocate codec context" << std::endl;
+        return false;
+    }
+
+    // Set codec parameters
+    m_rtmpCodecContext->codec_id = AV_CODEC_ID_H264;
+    m_rtmpCodecContext->codec_type = AVMEDIA_TYPE_VIDEO;
+    m_rtmpCodecContext->width = m_config.width;
+    m_rtmpCodecContext->height = m_config.height;
+    m_rtmpCodecContext->time_base = {1, m_config.fps};
+    m_rtmpCodecContext->framerate = {m_config.fps, 1};
+    m_rtmpCodecContext->bit_rate = m_config.bitrate;
+    m_rtmpCodecContext->pix_fmt = AV_PIX_FMT_YUV420P;
+    m_rtmpCodecContext->gop_size = m_config.fps; // I-frame every second
+
+    // Set H.264 specific options for low latency
+    av_opt_set(m_rtmpCodecContext->priv_data, "preset", "ultrafast", 0);
+    av_opt_set(m_rtmpCodecContext->priv_data, "tune", "zerolatency", 0);
+
+    // Some formats want stream headers to be separate
+    if (m_rtmpFormatContext->oformat->flags & AVFMT_GLOBALHEADER) {
+        m_rtmpCodecContext->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+    }
+
+    // Open codec
+    ret = avcodec_open2(m_rtmpCodecContext, codec, nullptr);
+    if (ret < 0) {
+        std::cerr << "[Streamer] Failed to open codec: " << ffmpeg_error_string(ret) << std::endl;
+        return false;
+    }
+
+    // Copy codec parameters to stream
+    ret = avcodec_parameters_from_context(m_rtmpStream->codecpar, m_rtmpCodecContext);
+    if (ret < 0) {
+        std::cerr << "[Streamer] Failed to copy codec parameters: " << ffmpeg_error_string(ret) << std::endl;
+        return false;
+    }
+
+    m_rtmpStream->time_base = m_rtmpCodecContext->time_base;
+
+    // Allocate frame
+    m_rtmpFrame = av_frame_alloc();
+    if (!m_rtmpFrame) {
+        std::cerr << "[Streamer] Failed to allocate frame" << std::endl;
+        return false;
+    }
+
+    m_rtmpFrame->format = m_rtmpCodecContext->pix_fmt;
+    m_rtmpFrame->width = m_rtmpCodecContext->width;
+    m_rtmpFrame->height = m_rtmpCodecContext->height;
+
+    ret = av_frame_get_buffer(m_rtmpFrame, 0);
+    if (ret < 0) {
+        std::cerr << "[Streamer] Failed to allocate frame buffer: " << ffmpeg_error_string(ret) << std::endl;
+        return false;
+    }
+
+    // Initialize SWS context for color conversion
+    m_swsContext = sws_getContext(
+        m_config.width, m_config.height, AV_PIX_FMT_BGR24,
+        m_config.width, m_config.height, AV_PIX_FMT_YUV420P,
+        SWS_BILINEAR, nullptr, nullptr, nullptr);
+
+    if (!m_swsContext) {
+        std::cerr << "[Streamer] Failed to initialize SWS context" << std::endl;
+        return false;
+    }
+
+    // Open output file
+    if (!(m_rtmpFormatContext->oformat->flags & AVFMT_NOFILE)) {
+        ret = avio_open(&m_rtmpFormatContext->pb, m_config.rtmpUrl.c_str(), AVIO_FLAG_WRITE);
+        if (ret < 0) {
+            std::cerr << "[Streamer] Failed to open output URL: " << ffmpeg_error_string(ret) << std::endl;
+            return false;
+        }
+    }
+
+    // Write stream header
+    ret = avformat_write_header(m_rtmpFormatContext, nullptr);
+    if (ret < 0) {
+        std::cerr << "[Streamer] Failed to write header: " << ffmpeg_error_string(ret) << std::endl;
+        return false;
+    }
+
+    m_rtmpFrameCount = 0;
+    std::cout << "[Streamer] RTMP encoder setup complete" << std::endl;
+    return true;
+}
+
+void Streamer::cleanupRtmpEncoder() {
+    std::lock_guard<std::mutex> lock(m_rtmpMutex);
+
+    // Write trailer
+    if (m_rtmpFormatContext) {
+        av_write_trailer(m_rtmpFormatContext);
+    }
+
+    // Free resources
+    if (m_swsContext) {
+        sws_freeContext(m_swsContext);
+        m_swsContext = nullptr;
+    }
+
+    if (m_rtmpFrame) {
+        av_frame_free(&m_rtmpFrame);
+    }
+
+    if (m_rtmpCodecContext) {
+        avcodec_free_context(&m_rtmpCodecContext);
+    }
+
+    if (m_rtmpFormatContext) {
+        if (!(m_rtmpFormatContext->oformat->flags & AVFMT_NOFILE)) {
+            avio_closep(&m_rtmpFormatContext->pb);
+        }
+        avformat_free_context(m_rtmpFormatContext);
+        m_rtmpFormatContext = nullptr;
+    }
+
+    m_rtmpStream = nullptr;
+    std::cout << "[Streamer] RTMP encoder cleanup complete" << std::endl;
+}
+
+bool Streamer::encodeAndSendRtmpFrame(const cv::Mat& frame) {
+    if (!m_rtmpStreaming.load() || frame.empty()) {
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(m_rtmpMutex);
+
+    if (!m_rtmpFormatContext || !m_rtmpCodecContext || !m_rtmpFrame || !m_swsContext) {
+        return false;
+    }
+
+    // Convert OpenCV Mat to AVFrame
+    const uint8_t* srcData[1] = { frame.data };
+    int srcLinesize[1] = { static_cast<int>(frame.step[0]) };
+
+    int ret = sws_scale(m_swsContext, srcData, srcLinesize, 0, frame.rows,
+                       m_rtmpFrame->data, m_rtmpFrame->linesize);
+    if (ret < 0) {
+        std::cerr << "[Streamer] Failed to convert frame: " << ffmpeg_error_string(ret) << std::endl;
+        return false;
+    }
+
+    // Set frame timestamp
+    m_rtmpFrame->pts = m_rtmpFrameCount++;
+
+    // Encode frame
+    ret = avcodec_send_frame(m_rtmpCodecContext, m_rtmpFrame);
+    if (ret < 0) {
+        std::cerr << "[Streamer] Failed to send frame to encoder: " << ffmpeg_error_string(ret) << std::endl;
+        return false;
+    }
+
+    // Receive encoded packets
+    AVPacket* packet = av_packet_alloc();
+    if (!packet) {
+        std::cerr << "[Streamer] Failed to allocate packet" << std::endl;
+        return false;
+    }
+
+    while (ret >= 0) {
+        ret = avcodec_receive_packet(m_rtmpCodecContext, packet);
+        if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+            break;
+        } else if (ret < 0) {
+            std::cerr << "[Streamer] Failed to receive packet: " << ffmpeg_error_string(ret) << std::endl;
+            av_packet_free(&packet);
+            return false;
+        }
+
+        // Rescale packet timestamp
+        av_packet_rescale_ts(packet, m_rtmpCodecContext->time_base, m_rtmpStream->time_base);
+        packet->stream_index = m_rtmpStream->index;
+
+        // Write packet
+        ret = av_interleaved_write_frame(m_rtmpFormatContext, packet);
+        if (ret < 0) {
+            std::cerr << "[Streamer] Failed to write packet: " << ffmpeg_error_string(ret) << std::endl;
+            av_packet_free(&packet);
+            return false;
+        }
+
+        av_packet_unref(packet);
+    }
+
+    av_packet_free(&packet);
+    return true;
+}
+
+void Streamer::rtmpStreamingThread() {
+    std::cout << "[Streamer] RTMP streaming thread started" << std::endl;
+
+    while (m_rtmpStreaming.load()) {
+        // This thread is mainly for monitoring and cleanup
+        // Actual frame encoding happens in processFrame()
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    std::cout << "[Streamer] RTMP streaming thread stopped" << std::endl;
 }

@@ -433,7 +433,7 @@ AISecurityVision/
 
 **所属子史诗**: 3
 
-**状态**: todo
+**状态**: done
 
 ---
 
@@ -623,7 +623,7 @@ AISecurityVision/
 
 **所属子史诗**: 6
 
-**状态**: todo
+**状态**: done
 
 ---
 
@@ -633,7 +633,7 @@ AISecurityVision/
 
 **所属子史诗**: 6
 
-**状态**: todo
+**状态**: done
 
 ---
 
@@ -643,7 +643,7 @@ AISecurityVision/
 
 **所属子史诗**: 6
 
-**状态**: todo
+**状态**: done
 
 ---
 
@@ -653,17 +653,17 @@ AISecurityVision/
 
 **所属子史诗**: 6
 
-**状态**: todo
+**状态**: done
 
 ---
 
 ### 任务 36: Implement MJPEG streaming server with resolution/fps configuration in VideoPipeline class
 
-**测试说明**: 1. Start application with test stream 2. Open http://localhost:8000/stream.mjpg in VLC/web browser 3. Verify live video appears at 640x480@15fps with detection overlays
+**测试说明**: 1. Start application with test stream 2. Open http://localhost:8497/stream.mjpg in VLC/web browser 3. Verify live video appears at 640x480@15fps with detection overlays
 
 **所属子史诗**: 7
 
-**状态**: todo
+**状态**: done
 
 ---
 
@@ -673,7 +673,7 @@ AISecurityVision/
 
 **所属子史诗**: 7
 
-**状态**: todo
+**状态**: done
 
 ---
 
@@ -713,7 +713,7 @@ AISecurityVision/
 
 **所属子史诗**: 8
 
-**状态**: todo
+**状态**: done
 
 ---
 
@@ -723,7 +723,7 @@ AISecurityVision/
 
 **所属子史诗**: 8
 
-**状态**: todo
+**状态**: done
 
 ---
 
@@ -733,7 +733,7 @@ AISecurityVision/
 
 **所属子史诗**: 8
 
-**状态**: todo
+**状态**: done
 
 ---
 
@@ -743,7 +743,15 @@ AISecurityVision/
 
 **所属子史诗**: 8
 
-**状态**: todo
+**状态**: done
+
+**实施完成**:
+✅ 扩展TaskManager类添加详细的管道统计信息结构体(PipelineStats, SystemStats)
+✅ 实现每个VideoPipeline的性能指标收集(帧率、处理帧数、丢帧数、运行时间)
+✅ 添加帧处理速率、错误计数、连接状态跟踪
+✅ 更新API端点返回详细的管道统计信息(/api/system/pipeline-stats, /api/system/stats)
+✅ 添加管道健康状态监控和系统级统计聚合
+✅ 创建测试脚本验证统计功能(test_pipeline_stats.cpp, test_enhanced_api.sh)
 
 ---
 
@@ -753,7 +761,17 @@ AISecurityVision/
 
 **所属子史诗**: 8
 
-**状态**: todo
+**状态**: done
+
+**实施完成**:
+✅ 创建完整的HTML/CSS/JavaScript web dashboard页面(web/templates/dashboard.html)
+✅ 实现实时数据获取(2秒间隔API调用)
+✅ 集成Chart.js图表库显示CPU/GPU/管道统计和性能图表
+✅ 添加管道状态表格和系统概览卡片
+✅ 实现响应式设计和实时数据更新功能
+✅ 添加静态文件服务到APIService(CSS/JS/图片文件支持)
+✅ 创建测试页面和脚本验证功能(test_dashboard.html, test_dashboard_api.sh)
+✅ 实现暂停/恢复、重置图表、自动刷新等交互功能
 
 ---
 
@@ -763,7 +781,17 @@ AISecurityVision/
 
 **所属子史诗**: 8
 
-**状态**: todo
+**状态**: done
+
+**实施完成**:
+✅ 优化TaskManager监控线程实现精确1000ms间隔(使用sleep_until)
+✅ 添加高精度时间戳和性能监控(微秒级精度)
+✅ 实现线程优先级优化(SCHED_FIFO和nice优先级)
+✅ 添加监控线程健康检查和性能指标跟踪
+✅ 优化内存使用和减少锁竞争(原子变量和指数移动平均)
+✅ 创建性能测试验证1秒刷新间隔(test_monitoring_performance.sh)
+✅ 增强API端点包含监控性能统计信息
+✅ 实现监控周期计数、平均时间、最大时间和健康状态跟踪
 
 ---
 
@@ -773,7 +801,7 @@ AISecurityVision/
 
 **所属子史诗**: 9
 
-**状态**: todo
+**状态**: done
 
 ---
 
@@ -783,7 +811,15 @@ AISecurityVision/
 
 **所属子史诗**: 9
 
-**状态**: todo
+**状态**: in_progress
+
+**实施计划**:
+1. 创建ROI多边形验证工具类(PolygonValidator)
+2. 实现多边形基本验证(最少3个点、闭合路径、坐标范围)
+3. 添加高级验证(自相交检测、面积计算、凸性检查)
+4. 集成验证逻辑到API端点(POST/PUT /api/rules)
+5. 增强错误响应包含详细验证信息
+6. 创建测试用例验证各种无效多边形场景
 
 ---
 

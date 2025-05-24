@@ -1,0 +1,18 @@
+{
+    "id": "parking_lot_intrusion",
+    "roi": {
+        "id": "parking_lot_roi",
+        "name": "Parking Lot Restricted Area",
+        "polygon": [
+            {"x": 150, "y": 150},
+            {"x": 450, "y": 150},
+            {"x": 450, "y": 350},
+            {"x": 150, "y": 350}
+        ],
+        "enabled": true,
+        "priority": 3
+    },
+    "min_duration": 8.0,
+    "confidence": 0.8,
+    "enabled": true
+}

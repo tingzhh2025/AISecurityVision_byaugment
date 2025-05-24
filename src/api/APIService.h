@@ -3,11 +3,17 @@
 #include <string>
 #include <thread>
 #include <atomic>
+#include <vector>
+#include <opencv2/opencv.hpp>
+
+// Forward declarations
+struct ROI;
+struct IntrusionRule;
 #include <memory>
 
 /**
  * @brief HTTP API Service for system control and monitoring
- * 
+ *
  * Provides RESTful endpoints for:
  * - Video source management
  * - System status and monitoring
@@ -19,12 +25,12 @@ class APIService {
 public:
     explicit APIService(int port = 8080);
     ~APIService();
-    
+
     // Service control
     bool start();
     void stop();
     bool isRunning() const;
-    
+
     // Configuration
     void setPort(int port);
     int getPort() const;
@@ -33,22 +39,75 @@ private:
     // HTTP server implementation
     void serverThread();
     void setupRoutes();
-    
+
     // Route handlers
     void handleGetStatus(const std::string& request, std::string& response);
     void handlePostVideoSource(const std::string& request, std::string& response);
     void handleDeleteVideoSource(const std::string& request, std::string& response);
     void handleGetVideoSources(const std::string& request, std::string& response);
-    
+
+    // Recording API handlers
+    void handlePostRecordStart(const std::string& request, std::string& response);
+    void handlePostRecordStop(const std::string& request, std::string& response);
+    void handlePostRecordConfig(const std::string& request, std::string& response);
+    void handleGetRecordStatus(const std::string& request, std::string& response);
+
+    // System monitoring handlers
+    void handleGetSystemMetrics(const std::string& request, std::string& response);
+    void handleGetPipelineStats(const std::string& request, std::string& response);
+    void handleGetSystemStats(const std::string& request, std::string& response);
+
+    // Streaming configuration handlers
+    void handlePostStreamConfig(const std::string& request, std::string& response);
+    void handleGetStreamConfig(const std::string& request, std::string& response);
+    void handlePostStreamStart(const std::string& request, std::string& response);
+    void handlePostStreamStop(const std::string& request, std::string& response);
+    void handleGetStreamStatus(const std::string& request, std::string& response);
+
+    // Behavior rule management handlers
+    void handlePostRules(const std::string& request, std::string& response);
+    void handleGetRules(const std::string& request, std::string& response);
+    void handleGetRule(const std::string& request, std::string& response, const std::string& ruleId);
+    void handlePutRule(const std::string& request, std::string& response, const std::string& ruleId);
+    void handleDeleteRule(const std::string& request, std::string& response, const std::string& ruleId);
+
+    // ROI management handlers
+    void handlePostROIs(const std::string& request, std::string& response);
+    void handleGetROIs(const std::string& request, std::string& response);
+
+    // Web dashboard handlers
+    void handleGetDashboard(const std::string& request, std::string& response);
+    void handleStaticFile(const std::string& request, std::string& response, const std::string& filePath);
+
     // Utility methods
     std::string createJsonResponse(const std::string& data, int statusCode = 200);
     std::string createErrorResponse(const std::string& error, int statusCode = 400);
-    
+    std::string parseJsonField(const std::string& json, const std::string& field);
+    int parseJsonInt(const std::string& json, const std::string& field, int defaultValue = 0);
+    std::string getCurrentTimestamp();
+
+    // File serving utilities
+    std::string readFile(const std::string& filePath);
+    std::string getMimeType(const std::string& filePath);
+    std::string createFileResponse(const std::string& content, const std::string& mimeType, int statusCode = 200);
+    bool fileExists(const std::string& filePath);
+
+    // JSON serialization for behavior rules
+    std::string serializeROI(const ROI& roi);
+    std::string serializeIntrusionRule(const IntrusionRule& rule);
+    std::string serializeROIList(const std::vector<ROI>& rois);
+    std::string serializeRuleList(const std::vector<IntrusionRule>& rules);
+
+    // JSON deserialization for behavior rules
+    bool deserializeROI(const std::string& json, ROI& roi);
+    bool deserializeIntrusionRule(const std::string& json, IntrusionRule& rule);
+    bool validateROIPolygon(const std::vector<cv::Point>& polygon);
+
     // Member variables
     int m_port;
     std::atomic<bool> m_running{false};
     std::thread m_serverThread;
-    
+
     // HTTP server implementation (placeholder)
     void* m_httpServer; // Will be replaced with actual HTTP library
 };
