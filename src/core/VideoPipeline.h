@@ -106,10 +106,13 @@ private:
     void processingThread();
     void processFrame(const cv::Mat& frame, int64_t timestamp);
 
-    // Error handling
+    // Error handling and health monitoring
     void handleError(const std::string& error);
     bool shouldReconnect() const;
     void attemptReconnection();
+    void updateHealthMetrics();
+    void checkStreamHealth();
+    bool isStreamStable() const;
 
     // Member variables
     VideoSource m_source;
@@ -142,14 +145,24 @@ private:
     mutable std::atomic<size_t> m_droppedFrames{0};
     mutable std::string m_lastError;
 
-    // Timing
+    // Health monitoring
+    std::atomic<size_t> m_consecutiveErrors{0};
+    std::atomic<size_t> m_totalReconnects{0};
     std::chrono::steady_clock::time_point m_lastFrameTime;
+    std::chrono::steady_clock::time_point m_lastHealthCheck;
+    std::atomic<bool> m_streamStable{true};
+    std::atomic<double> m_avgFrameInterval{0.0};
+
+    // Timing
     std::chrono::steady_clock::time_point m_startTime;
 
     // Constants
     static constexpr int MAX_RECONNECT_ATTEMPTS = 5;
     static constexpr int RECONNECT_DELAY_MS = 5000;
     static constexpr double HEALTH_CHECK_INTERVAL_S = 10.0;
+    static constexpr size_t MAX_CONSECUTIVE_ERRORS = 10;
+    static constexpr double FRAME_TIMEOUT_S = 30.0;
+    static constexpr double STABLE_FRAME_RATE_THRESHOLD = 0.5; // 50% of expected frame rate
 };
 
 /**

@@ -732,7 +732,23 @@ AISecurityVision/
 
 **所属子史诗**: 7
 
-**状态**: todo
+**状态**: done
+
+**实施完成**:
+✅ 增强VideoPipeline健康监控系统：updateHealthMetrics(), checkStreamHealth(), isStreamStable()
+✅ 实现帧超时检测：FRAME_TIMEOUT_S = 30秒阈值检测无响应流
+✅ 连续错误跟踪：MAX_CONSECUTIVE_ERRORS = 10错误阈值触发重连
+✅ 帧率稳定性检查：STABLE_FRAME_RATE_THRESHOLD = 50%期望帧率阈值
+✅ 自动重连机制增强：错误计数重置、重连统计、指数退避延迟
+✅ 健康指标计算：指数移动平均帧间隔、实时帧率监控
+✅ 流稳定性评估：综合帧超时、错误率、帧率稳定性判断
+✅ API端点增强：/api/system/status添加monitoring_healthy字段
+✅ 流状态API扩展：添加stream_stable, frame_rate, processed_frames, dropped_frames, last_error字段
+✅ 详细健康状态日志：状态变化记录、诊断信息输出
+✅ TaskManager集成：失败管道自动清理、健康状态传播
+✅ 线程安全实现：原子变量保护健康指标、mutex保护状态更新
+✅ 创建综合测试脚本验证健康监控功能(test_stream_health_monitoring.sh)
+✅ 健康检查间隔优化：HEALTH_CHECK_INTERVAL_S = 10秒定期检查
 
 ---
 

@@ -131,6 +131,7 @@ void APIService::handleGetStatus(const std::string& request, std::string& respon
          << "\"active_pipelines\":" << taskManager.getActivePipelineCount() << ","
          << "\"cpu_usage\":" << taskManager.getCpuUsage() << ","
          << "\"gpu_memory\":\"" << taskManager.getGpuMemoryUsage() << "\","
+         << "\"monitoring_healthy\":" << (taskManager.isMonitoringHealthy() ? "true" : "false") << ","
          << "\"timestamp\":" << std::chrono::duration_cast<std::chrono::seconds>(
                 std::chrono::system_clock::now().time_since_epoch()).count()
          << "}";
@@ -811,6 +812,13 @@ void APIService::handleGetStreamStatus(const std::string& request, std::string& 
                 double streamFps = pipeline->getStreamFps();
                 bool isHealthy = pipeline->isHealthy();
 
+                // Get additional health metrics
+                double frameRate = pipeline->getFrameRate();
+                size_t processedFrames = pipeline->getProcessedFrames();
+                size_t droppedFrames = pipeline->getDroppedFrames();
+                bool isStable = pipeline->isStreamStable();
+                std::string lastError = pipeline->getLastError();
+
                 json << "{"
                      << "\"camera_id\":\"" << cameraId << "\","
                      << "\"protocol\":\"" << (config.protocol == StreamProtocol::MJPEG ? "mjpeg" : "rtmp") << "\","
@@ -818,7 +826,12 @@ void APIService::handleGetStreamStatus(const std::string& request, std::string& 
                      << "\"stream_url\":\"" << streamUrl << "\","
                      << "\"connected_clients\":" << connectedClients << ","
                      << "\"stream_fps\":" << streamFps << ","
-                     << "\"health\":\"" << (isHealthy ? "healthy" : "unhealthy") << "\""
+                     << "\"health\":\"" << (isHealthy ? "healthy" : "unhealthy") << "\","
+                     << "\"stream_stable\":" << (isStable ? "true" : "false") << ","
+                     << "\"frame_rate\":" << frameRate << ","
+                     << "\"processed_frames\":" << processedFrames << ","
+                     << "\"dropped_frames\":" << droppedFrames << ","
+                     << "\"last_error\":\"" << lastError << "\""
                      << "}";
             } else {
                 json << "{"

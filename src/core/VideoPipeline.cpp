@@ -17,6 +17,12 @@
 VideoPipeline::VideoPipeline(const VideoSource& source)
     : m_source(source) {
     std::cout << "[VideoPipeline] Creating pipeline for: " << source.id << std::endl;
+
+    // Initialize health monitoring timestamps
+    auto now = std::chrono::steady_clock::now();
+    m_lastFrameTime = now;
+    m_lastHealthCheck = now;
+    m_startTime = now;
 }
 
 VideoPipeline::~VideoPipeline() {
@@ -151,14 +157,20 @@ void VideoPipeline::processingThread() {
 
     while (m_running.load()) {
         try {
+            // Check stream health periodically
+            checkStreamHealth();
+
             // Decode frame
             if (!m_decoder->getNextFrame(frame, timestamp)) {
+                m_consecutiveErrors.fetch_add(1);
+
                 if (shouldReconnect() && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
                     std::cout << "[VideoPipeline] Attempting reconnection: " << m_source.id
                               << " (attempt " << (reconnectAttempts + 1) << ")" << std::endl;
 
                     attemptReconnection();
                     reconnectAttempts++;
+                    m_totalReconnects.fetch_add(1);
                     std::this_thread::sleep_for(std::chrono::milliseconds(RECONNECT_DELAY_MS));
                     continue;
                 } else {
@@ -167,8 +179,12 @@ void VideoPipeline::processingThread() {
                 }
             }
 
-            // Reset reconnect counter on successful frame
+            // Reset reconnect counter and error count on successful frame
             reconnectAttempts = 0;
+            m_consecutiveErrors.store(0);
+
+            // Update health metrics
+            updateHealthMetrics();
 
             // Process frame through pipeline
             processFrame(frame, timestamp);
@@ -587,4 +603,83 @@ double VideoPipeline::getStreamFps() const {
     }
 
     return m_streamer->getStreamFps();
+}
+
+void VideoPipeline::updateHealthMetrics() {
+    auto now = std::chrono::steady_clock::now();
+
+    // Calculate frame interval
+    if (m_lastFrameTime.time_since_epoch().count() > 0) {
+        auto interval = std::chrono::duration<double>(now - m_lastFrameTime).count();
+
+        // Update average frame interval using exponential moving average
+        double currentAvg = m_avgFrameInterval.load();
+        double alpha = 0.1; // Smoothing factor
+        double newAvg = (currentAvg == 0.0) ? interval : (alpha * interval + (1.0 - alpha) * currentAvg);
+        m_avgFrameInterval.store(newAvg);
+
+        // Update frame rate
+        if (newAvg > 0.0) {
+            m_frameRate.store(1.0 / newAvg);
+        }
+    }
+
+    m_lastFrameTime = now;
+}
+
+void VideoPipeline::checkStreamHealth() {
+    auto now = std::chrono::steady_clock::now();
+
+    // Only check health at specified intervals
+    auto timeSinceLastCheck = std::chrono::duration<double>(now - m_lastHealthCheck).count();
+    if (timeSinceLastCheck < HEALTH_CHECK_INTERVAL_S) {
+        return;
+    }
+
+    m_lastHealthCheck = now;
+
+    // Check for frame timeout
+    auto timeSinceLastFrame = std::chrono::duration<double>(now - m_lastFrameTime).count();
+    bool frameTimeout = timeSinceLastFrame > FRAME_TIMEOUT_S;
+
+    // Check consecutive errors
+    bool tooManyErrors = m_consecutiveErrors.load() > MAX_CONSECUTIVE_ERRORS;
+
+    // Check frame rate stability
+    double currentFrameRate = m_frameRate.load();
+    double expectedFrameRate = 25.0; // Default expected frame rate
+    bool frameRateStable = (currentFrameRate >= expectedFrameRate * STABLE_FRAME_RATE_THRESHOLD);
+
+    // Update stream stability
+    bool wasStable = m_streamStable.load();
+    bool isStable = !frameTimeout && !tooManyErrors && frameRateStable;
+    m_streamStable.store(isStable);
+
+    // Log health status changes
+    if (wasStable != isStable) {
+        if (isStable) {
+            std::cout << "[VideoPipeline] Stream " << m_source.id << " is now STABLE" << std::endl;
+            m_healthy.store(true);
+        } else {
+            std::cout << "[VideoPipeline] Stream " << m_source.id << " is now UNSTABLE" << std::endl;
+            std::cout << "  - Frame timeout: " << (frameTimeout ? "YES" : "NO")
+                      << " (last frame: " << timeSinceLastFrame << "s ago)" << std::endl;
+            std::cout << "  - Too many errors: " << (tooManyErrors ? "YES" : "NO")
+                      << " (consecutive: " << m_consecutiveErrors.load() << ")" << std::endl;
+            std::cout << "  - Frame rate stable: " << (frameRateStable ? "YES" : "NO")
+                      << " (current: " << currentFrameRate << " fps)" << std::endl;
+            m_healthy.store(false);
+        }
+    }
+
+    // Trigger reconnection if stream is unhealthy for too long
+    if (!isStable && tooManyErrors) {
+        std::cout << "[VideoPipeline] Stream " << m_source.id
+                  << " requires reconnection due to health issues" << std::endl;
+        // The main processing loop will handle reconnection
+    }
+}
+
+bool VideoPipeline::isStreamStable() const {
+    return m_streamStable.load();
 }
