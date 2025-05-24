@@ -1647,26 +1647,23 @@ void APIService::handlePostAddDiscoveredDevice(const std::string& request, std::
             }
         }
 
-        // Create VideoSource from ONVIF device
-        VideoSource videoSource;
-        videoSource.id = "onvif_" + device->ipAddress + "_" + std::to_string(device->port);
-        videoSource.url = device->streamUri;
-        videoSource.protocol = "rtsp";
-        videoSource.username = device->username;
-        videoSource.password = device->password;
-        videoSource.enabled = true;
+        // Update device credentials if provided
+        if (!username.empty()) {
+            device->username = username;
+            device->password = password;
+            device->requiresAuth = true;
+        }
 
-        // Add to TaskManager
-        TaskManager& taskManager = TaskManager::getInstance();
-        if (!taskManager.addVideoSource(videoSource)) {
-            response = createErrorResponse("Failed to add video source to TaskManager", 500);
+        // Use ONVIFManager's configureDevice method for automatic configuration
+        if (!m_onvifManager->configureDevice(*device)) {
+            response = createErrorResponse("Failed to configure ONVIF device: " + m_onvifManager->getLastError(), 500);
             return;
         }
 
         std::ostringstream json;
         json << "{"
              << "\"status\":\"added\","
-             << "\"camera_id\":\"" << videoSource.id << "\","
+             << "\"camera_id\":\"" << device->uuid << "\","
              << "\"device_uuid\":\"" << device->uuid << "\","
              << "\"device_name\":\"" << device->name << "\","
              << "\"ip_address\":\"" << device->ipAddress << "\","
@@ -1677,7 +1674,7 @@ void APIService::handlePostAddDiscoveredDevice(const std::string& request, std::
 
         response = createJsonResponse(json.str(), 201);
 
-        std::cout << "[APIService] Added ONVIF device as video source: " << videoSource.id
+        std::cout << "[APIService] Added ONVIF device as video source: " << device->uuid
                   << " (" << device->name << ")" << std::endl;
 
     } catch (const std::exception& e) {

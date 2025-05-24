@@ -981,7 +981,20 @@ AISecurityVision/
 
 **所属子史诗**: 10
 
-**状态**: todo
+**状态**: done
+
+**实施完成**:
+✅ 实现完整的HTTP服务器：使用cpp-httplib库替换占位符实现
+✅ 添加httplib依赖到CMakeLists.txt，支持自动下载
+✅ 实现真实的HTTP路由系统：setupRoutes()方法配置所有端点
+✅ 完成GET /api/source/discover端点：触发ONVIF设备发现
+✅ 完成POST /api/source/add-discovered端点：添加发现的设备
+✅ 实现系统状态端点：GET /api/system/status, /api/system/metrics
+✅ 实现视频源管理端点：POST /api/source/add, GET /api/source/list
+✅ 修复编译错误：StreamConfig/StreamProtocol包含、BehaviorEvent声明
+✅ 解决重复变量声明和私有方法访问问题
+✅ 创建综合测试脚本验证HTTP服务器和API端点功能(test_onvif_api.sh)
+✅ HTTP响应处理：JSON内容提取、Content-Type头、错误处理
 
 ---
 

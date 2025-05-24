@@ -1,4 +1,6 @@
 #include "ONVIFDiscovery.h"
+#include "../core/TaskManager.h"
+#include "../core/VideoPipeline.h"
 #include <iostream>
 #include <sstream>
 #include <random>
@@ -9,6 +11,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netdb.h>
 #include <ifaddrs.h>
 #include <net/if.h>
 
@@ -310,6 +313,39 @@ std::vector<std::string> ONVIFDiscovery::extractXMLValues(const std::string& xml
     return values;
 }
 
+std::string ONVIFDiscovery::extractXMLAttribute(const std::string& xml, const std::string& tag, const std::string& attribute) {
+    // Find the tag
+    std::string openTag = "<" + tag;
+    size_t tagPos = xml.find(openTag);
+    if (tagPos == std::string::npos) {
+        return "";
+    }
+
+    // Find the end of the tag
+    size_t tagEnd = xml.find(">", tagPos);
+    if (tagEnd == std::string::npos) {
+        return "";
+    }
+
+    // Extract the tag content
+    std::string tagContent = xml.substr(tagPos, tagEnd - tagPos + 1);
+
+    // Find the attribute
+    std::string attrPattern = attribute + "=\"";
+    size_t attrPos = tagContent.find(attrPattern);
+    if (attrPos == std::string::npos) {
+        return "";
+    }
+
+    attrPos += attrPattern.length();
+    size_t attrEnd = tagContent.find("\"", attrPos);
+    if (attrEnd == std::string::npos) {
+        return "";
+    }
+
+    return tagContent.substr(attrPos, attrEnd - attrPos);
+}
+
 std::string ONVIFDiscovery::generateUUID() {
     // Simple UUID generation for message IDs
     std::random_device rd;
@@ -346,27 +382,324 @@ void ONVIFDiscovery::logError(const std::string& message) {
     std::cerr << "[ONVIFDiscovery] ERROR: " << message << std::endl;
 }
 
-// Stub implementations for methods that require full SOAP/ONVIF implementation
+bool ONVIFDiscovery::sendSOAPRequest(const std::string& url, const std::string& soapAction,
+                                    const std::string& soapBody, std::string& response,
+                                    const std::string& username, const std::string& password) {
+    // Create SOAP envelope
+    std::string envelope = createSOAPEnvelope(soapBody, username, password);
+
+    // Parse URL to extract host, port, and path
+    std::string host, path;
+    int port = 80;
+
+    if (!parseURL(url, host, port, path)) {
+        logError("Failed to parse URL: " + url);
+        return false;
+    }
+
+    // Create HTTP request
+    std::ostringstream request;
+    request << "POST " << path << " HTTP/1.1\r\n";
+    request << "Host: " << host << ":" << port << "\r\n";
+    request << "Content-Type: application/soap+xml; charset=utf-8\r\n";
+    request << "Content-Length: " << envelope.length() << "\r\n";
+    request << "SOAPAction: \"" << soapAction << "\"\r\n";
+    request << "Connection: close\r\n";
+    request << "\r\n";
+    request << envelope;
+
+    // Send HTTP request
+    return sendHTTPRequest(host, port, request.str(), response);
+}
+
+std::string ONVIFDiscovery::createSOAPEnvelope(const std::string& body, const std::string& username, const std::string& password) {
+    std::ostringstream envelope;
+    envelope << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>";
+    envelope << "<soap:Envelope xmlns:soap=\"http://www.w3.org/2003/05/soap-envelope\">";
+
+    // Add header with security if credentials provided
+    if (!username.empty()) {
+        envelope << "<soap:Header>";
+        envelope << generateWSSecurity(username, password);
+        envelope << "</soap:Header>";
+    }
+
+    envelope << "<soap:Body>";
+    envelope << body;
+    envelope << "</soap:Body>";
+    envelope << "</soap:Envelope>";
+
+    return envelope.str();
+}
+
+std::string ONVIFDiscovery::generateWSSecurity(const std::string& username, const std::string& password) {
+    // Basic WS-Security implementation
+    // In production, this should use proper nonce, timestamp, and password digest
+    std::ostringstream security;
+    security << "<wsse:Security xmlns:wsse=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd\">";
+    security << "<wsse:UsernameToken>";
+    security << "<wsse:Username>" << username << "</wsse:Username>";
+    security << "<wsse:Password Type=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText\">";
+    security << password << "</wsse:Password>";
+    security << "</wsse:UsernameToken>";
+    security << "</wsse:Security>";
+
+    return security.str();
+}
+
+bool ONVIFDiscovery::parseURL(const std::string& url, std::string& host, int& port, std::string& path) {
+    // Simple URL parsing for http://host:port/path format
+    std::string urlCopy = url;
+
+    // Remove protocol if present
+    if (urlCopy.find("http://") == 0) {
+        urlCopy = urlCopy.substr(7);
+    } else if (urlCopy.find("https://") == 0) {
+        urlCopy = urlCopy.substr(8);
+        port = 443; // Default HTTPS port
+    }
+
+    // Find path separator
+    size_t pathPos = urlCopy.find('/');
+    std::string hostPort;
+
+    if (pathPos != std::string::npos) {
+        hostPort = urlCopy.substr(0, pathPos);
+        path = urlCopy.substr(pathPos);
+    } else {
+        hostPort = urlCopy;
+        path = "/";
+    }
+
+    // Parse host and port
+    size_t colonPos = hostPort.find(':');
+    if (colonPos != std::string::npos) {
+        host = hostPort.substr(0, colonPos);
+        try {
+            port = std::stoi(hostPort.substr(colonPos + 1));
+        } catch (const std::exception&) {
+            return false;
+        }
+    } else {
+        host = hostPort;
+        // Keep default port (80 or 443)
+    }
+
+    return !host.empty();
+}
+
+bool ONVIFDiscovery::sendHTTPRequest(const std::string& host, int port, const std::string& request, std::string& response) {
+    // Create socket
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) {
+        logError("Failed to create socket");
+        return false;
+    }
+
+    // Set socket timeout
+    struct timeval timeout;
+    timeout.tv_sec = 10; // 10 second timeout
+    timeout.tv_usec = 0;
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+    setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+
+    // Connect to server
+    struct sockaddr_in serverAddr;
+    memset(&serverAddr, 0, sizeof(serverAddr));
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(port);
+
+    if (inet_pton(AF_INET, host.c_str(), &serverAddr.sin_addr) <= 0) {
+        // Try to resolve hostname
+        struct hostent* hostEntry = gethostbyname(host.c_str());
+        if (!hostEntry) {
+            close(sock);
+            logError("Failed to resolve hostname: " + host);
+            return false;
+        }
+        memcpy(&serverAddr.sin_addr, hostEntry->h_addr_list[0], hostEntry->h_length);
+    }
+
+    if (connect(sock, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
+        close(sock);
+        logError("Failed to connect to " + host + ":" + std::to_string(port));
+        return false;
+    }
+
+    // Send request
+    ssize_t sent = send(sock, request.c_str(), request.length(), 0);
+    if (sent < 0) {
+        close(sock);
+        logError("Failed to send HTTP request");
+        return false;
+    }
+
+    // Receive response
+    response.clear();
+    char buffer[4096];
+    ssize_t received;
+
+    while ((received = recv(sock, buffer, sizeof(buffer) - 1, 0)) > 0) {
+        buffer[received] = '\0';
+        response += buffer;
+    }
+
+    close(sock);
+
+    if (response.empty()) {
+        logError("No response received");
+        return false;
+    }
+
+    return true;
+}
+
+// Enhanced implementations for ONVIF SOAP communication
 bool ONVIFDiscovery::getDeviceInformation(ONVIFDevice& device) {
-    // TODO: Implement SOAP GetDeviceInformation request
-    device.name = "ONVIF Camera";
-    device.manufacturer = "Unknown";
-    device.model = "Unknown";
-    device.firmwareVersion = "Unknown";
-    device.serialNumber = "Unknown";
+    if (device.serviceUrl.empty()) {
+        logError("Device service URL is empty");
+        return false;
+    }
+
+    // Create SOAP request for GetDeviceInformation
+    std::string soapBody = R"(
+        <tds:GetDeviceInformation xmlns:tds="http://www.onvif.org/ver10/device/wsdl"/>
+    )";
+
+    std::string response;
+    if (!sendSOAPRequest(device.serviceUrl, "http://www.onvif.org/ver10/device/wsdl/GetDeviceInformation",
+                        soapBody, response, device.username, device.password)) {
+        // Fallback to default values if SOAP request fails
+        device.name = "ONVIF Camera (" + device.ipAddress + ")";
+        device.manufacturer = "Unknown";
+        device.model = "Unknown";
+        device.firmwareVersion = "Unknown";
+        device.serialNumber = "Unknown";
+        logDebug("Failed to get device information via SOAP, using defaults");
+        return true; // Don't fail completely
+    }
+
+    // Parse SOAP response
+    device.manufacturer = extractXMLValue(response, "tds:Manufacturer");
+    device.model = extractXMLValue(response, "tds:Model");
+    device.firmwareVersion = extractXMLValue(response, "tds:FirmwareVersion");
+    device.serialNumber = extractXMLValue(response, "tds:SerialNumber");
+
+    // Generate a friendly name
+    if (!device.manufacturer.empty() && !device.model.empty()) {
+        device.name = device.manufacturer + " " + device.model;
+    } else {
+        device.name = "ONVIF Camera (" + device.ipAddress + ")";
+    }
+
+    logDebug("Retrieved device information: " + device.name);
     return true;
 }
 
 bool ONVIFDiscovery::getMediaProfiles(ONVIFDevice& device) {
-    // TODO: Implement SOAP GetProfiles request
-    device.profileToken = "Profile_1";
+    if (device.serviceUrl.empty()) {
+        logError("Device service URL is empty");
+        return false;
+    }
+
+    // Construct media service URL (typically /onvif/Media)
+    std::string mediaUrl = device.serviceUrl;
+    if (mediaUrl.find("/onvif/device_service") != std::string::npos) {
+        mediaUrl = std::regex_replace(mediaUrl, std::regex("/onvif/device_service"), "/onvif/Media");
+    } else if (mediaUrl.back() != '/') {
+        mediaUrl += "/onvif/Media";
+    } else {
+        mediaUrl += "onvif/Media";
+    }
+
+    // Create SOAP request for GetProfiles
+    std::string soapBody = R"(
+        <trt:GetProfiles xmlns:trt="http://www.onvif.org/ver10/media/wsdl"/>
+    )";
+
+    std::string response;
+    if (!sendSOAPRequest(mediaUrl, "http://www.onvif.org/ver10/media/wsdl/GetProfiles",
+                        soapBody, response, device.username, device.password)) {
+        // Fallback to default profile
+        device.profileToken = "Profile_1";
+        logDebug("Failed to get media profiles via SOAP, using default");
+        return true; // Don't fail completely
+    }
+
+    // Parse SOAP response to extract profile token
+    std::string profileToken = extractXMLValue(response, "trt:Profiles");
+    if (profileToken.empty()) {
+        // Try alternative parsing
+        profileToken = extractXMLAttribute(response, "trt:Profiles", "token");
+    }
+
+    if (!profileToken.empty()) {
+        device.profileToken = profileToken;
+        logDebug("Retrieved media profile token: " + profileToken);
+    } else {
+        device.profileToken = "Profile_1";
+        logDebug("No profile token found, using default");
+    }
+
     return true;
 }
 
 bool ONVIFDiscovery::getStreamUri(ONVIFDevice& device) {
-    // TODO: Implement SOAP GetStreamUri request
-    // For now, construct a typical RTSP URL
-    device.streamUri = "rtsp://" + device.ipAddress + ":554/stream1";
+    if (device.serviceUrl.empty() || device.profileToken.empty()) {
+        logError("Device service URL or profile token is empty");
+        // Fallback to standard RTSP URL
+        device.streamUri = "rtsp://" + device.ipAddress + ":554/stream1";
+        return true;
+    }
+
+    // Construct media service URL
+    std::string mediaUrl = device.serviceUrl;
+    if (mediaUrl.find("/onvif/device_service") != std::string::npos) {
+        mediaUrl = std::regex_replace(mediaUrl, std::regex("/onvif/device_service"), "/onvif/Media");
+    } else if (mediaUrl.back() != '/') {
+        mediaUrl += "/onvif/Media";
+    } else {
+        mediaUrl += "onvif/Media";
+    }
+
+    // Create SOAP request for GetStreamUri
+    std::string soapBody = R"(
+        <trt:GetStreamUri xmlns:trt="http://www.onvif.org/ver10/media/wsdl">
+            <trt:StreamSetup>
+                <tt:Stream xmlns:tt="http://www.onvif.org/ver10/schema">RTP-Unicast</tt:Stream>
+                <tt:Transport xmlns:tt="http://www.onvif.org/ver10/schema">
+                    <tt:Protocol>RTSP</tt:Protocol>
+                </tt:Transport>
+            </trt:StreamSetup>
+            <trt:ProfileToken>)" + device.profileToken + R"(</trt:ProfileToken>
+        </trt:GetStreamUri>
+    )";
+
+    std::string response;
+    if (!sendSOAPRequest(mediaUrl, "http://www.onvif.org/ver10/media/wsdl/GetStreamUri",
+                        soapBody, response, device.username, device.password)) {
+        // Fallback to standard RTSP URL
+        device.streamUri = "rtsp://" + device.ipAddress + ":554/stream1";
+        logDebug("Failed to get stream URI via SOAP, using fallback");
+        return true; // Don't fail completely
+    }
+
+    // Parse SOAP response to extract stream URI
+    std::string streamUri = extractXMLValue(response, "tt:Uri");
+    if (streamUri.empty()) {
+        // Try alternative parsing
+        streamUri = extractXMLValue(response, "trt:Uri");
+    }
+
+    if (!streamUri.empty()) {
+        device.streamUri = streamUri;
+        logDebug("Retrieved stream URI: " + streamUri);
+    } else {
+        // Fallback to standard RTSP URL
+        device.streamUri = "rtsp://" + device.ipAddress + ":554/stream1";
+        logDebug("No stream URI found, using fallback");
+    }
+
     return true;
 }
 
@@ -468,7 +801,19 @@ bool ONVIFManager::addDiscoveredDevice(const ONVIFDevice& device) {
         }
     }
 
+    // Add to known devices
     m_knownDevices.push_back(device);
+
+    // Auto-configure device if enabled
+    if (m_autoAddDevices) {
+        ONVIFDevice deviceCopy = device; // Make a copy for configuration
+        if (configureDevice(deviceCopy)) {
+            std::cout << "[ONVIFManager] Successfully auto-configured device: " << deviceCopy.name << std::endl;
+        } else {
+            std::cerr << "[ONVIFManager] Failed to auto-configure device: " << deviceCopy.name << std::endl;
+        }
+    }
+
     return true;
 }
 
@@ -541,5 +886,51 @@ std::string ONVIFManager::generateDeviceId(const ONVIFDevice& device) {
         return device.uuid;
     } else {
         return "onvif_" + device.ipAddress + "_" + std::to_string(device.port);
+    }
+}
+
+bool ONVIFManager::configureDevice(ONVIFDevice& device) {
+    // Validate device has required information
+    if (device.ipAddress.empty() || device.streamUri.empty()) {
+        m_lastError = "Device missing required information (IP or stream URI)";
+        return false;
+    }
+
+    try {
+        // Create VideoSource from ONVIF device
+        VideoSource videoSource;
+        videoSource.id = generateDeviceId(device);
+        videoSource.url = device.streamUri;
+        videoSource.protocol = "rtsp";
+        videoSource.username = device.username;
+        videoSource.password = device.password;
+        videoSource.enabled = true;
+
+        // Set reasonable defaults for video parameters
+        videoSource.width = 1920;   // Default to Full HD
+        videoSource.height = 1080;
+        videoSource.fps = 25;       // Default frame rate
+
+        // Validate VideoSource
+        if (!videoSource.isValid()) {
+            m_lastError = "Generated VideoSource is invalid";
+            return false;
+        }
+
+        // Add to TaskManager
+        TaskManager& taskManager = TaskManager::getInstance();
+        if (!taskManager.addVideoSource(videoSource)) {
+            m_lastError = "Failed to add video source to TaskManager";
+            return false;
+        }
+
+        std::cout << "[ONVIFManager] Auto-configured ONVIF device: " << device.name
+                  << " (" << device.ipAddress << ") -> " << videoSource.id << std::endl;
+
+        return true;
+
+    } catch (const std::exception& e) {
+        m_lastError = "Exception during device configuration: " + std::string(e.what());
+        return false;
     }
 }
