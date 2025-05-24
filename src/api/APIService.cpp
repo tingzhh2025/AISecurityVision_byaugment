@@ -1,5 +1,6 @@
 #include "APIService.h"
 #include "../core/TaskManager.h"
+#include "../core/VideoPipeline.h"
 #include "../ai/BehaviorAnalyzer.h"
 #include "../utils/PolygonValidator.h"
 #include <iostream>
@@ -830,16 +831,19 @@ void APIService::handlePostRules(const std::string& request, std::string& respon
             return;
         }
 
-        // For now, add the rule to the first active pipeline
-        // TODO: Support specifying which pipeline to add the rule to
+        // Add the rule to the first active pipeline
+        // TODO: Support specifying which pipeline to add the rule to via camera_id
         auto pipeline = taskManager.getPipeline(activePipelines[0]);
         if (!pipeline) {
             response = createErrorResponse("Failed to access video pipeline", 500);
             return;
         }
 
-        // TODO: Access BehaviorAnalyzer from pipeline and add rule
-        // For now, simulate success
+        // Add rule to BehaviorAnalyzer through VideoPipeline
+        if (!pipeline->addIntrusionRule(rule)) {
+            response = createErrorResponse("Failed to add intrusion rule to behavior analyzer", 500);
+            return;
+        }
 
         std::ostringstream json;
         json << "{"
@@ -869,31 +873,25 @@ void APIService::handleGetRules(const std::string& request, std::string& respons
         auto activePipelines = taskManager.getActivePipelines();
 
         if (activePipelines.empty()) {
-            response = createJsonResponse("{\"rules\":[]}");
+            response = createJsonResponse("{\"rules\":[],\"count\":0,\"timestamp\":\"" + getCurrentTimestamp() + "\"}");
             return;
         }
 
-        // TODO: Access BehaviorAnalyzer from pipeline and get rules
-        // For now, return a sample rule list
+        // Get rules from the first active pipeline
+        // TODO: Support getting rules from specific pipeline via camera_id parameter
+        auto pipeline = taskManager.getPipeline(activePipelines[0]);
+        if (!pipeline) {
+            response = createErrorResponse("Failed to access video pipeline", 500);
+            return;
+        }
+
+        auto rules = pipeline->getIntrusionRules();
 
         std::ostringstream json;
         json << "{"
-             << "\"rules\":["
-             << "{"
-             << "\"id\":\"default_intrusion\","
-             << "\"roi\":{"
-             << "\"id\":\"default_roi\","
-             << "\"name\":\"Default Intrusion Zone\","
-             << "\"polygon\":[{\"x\":100,\"y\":100},{\"x\":500,\"y\":100},{\"x\":500,\"y\":400},{\"x\":100,\"y\":400}],"
-             << "\"enabled\":true,"
-             << "\"priority\":1"
-             << "},"
-             << "\"min_duration\":5.0,"
-             << "\"confidence\":0.7,"
-             << "\"enabled\":true"
-             << "}"
-             << "],"
-             << "\"count\":1,"
+             << "\"rules\":" << serializeRuleList(rules) << ","
+             << "\"count\":" << rules.size() << ","
+             << "\"pipeline_id\":\"" << activePipelines[0] << "\","
              << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
              << "}";
 
@@ -984,8 +982,25 @@ void APIService::handlePutRule(const std::string& request, std::string& response
             return;
         }
 
-        // TODO: Update rule in BehaviorAnalyzer
-        // For now, simulate success
+        // Update rule in BehaviorAnalyzer through VideoPipeline
+        TaskManager& taskManager = TaskManager::getInstance();
+        auto activePipelines = taskManager.getActivePipelines();
+
+        if (activePipelines.empty()) {
+            response = createErrorResponse("No active video pipelines found", 404);
+            return;
+        }
+
+        auto pipeline = taskManager.getPipeline(activePipelines[0]);
+        if (!pipeline) {
+            response = createErrorResponse("Failed to access video pipeline", 500);
+            return;
+        }
+
+        if (!pipeline->updateIntrusionRule(rule)) {
+            response = createErrorResponse("Failed to update intrusion rule in behavior analyzer", 500);
+            return;
+        }
 
         std::ostringstream json;
         json << "{"
@@ -1014,11 +1029,23 @@ void APIService::handleDeleteRule(const std::string& request, std::string& respo
             return;
         }
 
-        // TODO: Delete rule from BehaviorAnalyzer
-        // For now, simulate success for known rule
+        // Delete rule from BehaviorAnalyzer through VideoPipeline
+        TaskManager& taskManager = TaskManager::getInstance();
+        auto activePipelines = taskManager.getActivePipelines();
 
-        if (ruleId == "default_intrusion") {
-            response = createErrorResponse("Cannot delete default rule", 403);
+        if (activePipelines.empty()) {
+            response = createErrorResponse("No active video pipelines found", 404);
+            return;
+        }
+
+        auto pipeline = taskManager.getPipeline(activePipelines[0]);
+        if (!pipeline) {
+            response = createErrorResponse("Failed to access video pipeline", 500);
+            return;
+        }
+
+        if (!pipeline->removeIntrusionRule(ruleId)) {
+            response = createErrorResponse("Failed to remove intrusion rule from behavior analyzer", 500);
             return;
         }
 
@@ -1078,8 +1105,25 @@ void APIService::handlePostROIs(const std::string& request, std::string& respons
             return;
         }
 
-        // TODO: Add ROI to BehaviorAnalyzer
-        // For now, simulate success
+        // Add ROI to BehaviorAnalyzer through VideoPipeline
+        TaskManager& taskManager = TaskManager::getInstance();
+        auto activePipelines = taskManager.getActivePipelines();
+
+        if (activePipelines.empty()) {
+            response = createErrorResponse("No active video pipelines found", 404);
+            return;
+        }
+
+        auto pipeline = taskManager.getPipeline(activePipelines[0]);
+        if (!pipeline) {
+            response = createErrorResponse("Failed to access video pipeline", 500);
+            return;
+        }
+
+        if (!pipeline->addROI(roi)) {
+            response = createErrorResponse("Failed to add ROI to behavior analyzer", 500);
+            return;
+        }
 
         std::ostringstream json;
         json << "{"

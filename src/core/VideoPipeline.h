@@ -22,6 +22,10 @@ class AlarmTrigger;
 // Include BehaviorEvent for FrameResult
 struct BehaviorEvent;
 
+// Forward declarations for behavior analysis types
+struct ROI;
+struct IntrusionRule;
+
 // VideoSource definition (moved from TaskManager.h to avoid circular dependency)
 struct VideoSource {
     std::string id;
@@ -64,6 +68,15 @@ public:
     void setDetectionEnabled(bool enabled);
     void setRecordingEnabled(bool enabled);
     void setStreamingEnabled(bool enabled);
+
+    // Behavior analysis rule management
+    bool addIntrusionRule(const IntrusionRule& rule);
+    bool removeIntrusionRule(const std::string& ruleId);
+    bool updateIntrusionRule(const IntrusionRule& rule);
+    std::vector<IntrusionRule> getIntrusionRules() const;
+    bool addROI(const ROI& roi);
+    bool removeROI(const std::string& roiId);
+    std::vector<ROI> getROIs() const;
 
     // Statistics
     double getFrameRate() const;

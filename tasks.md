@@ -811,15 +811,18 @@ AISecurityVision/
 
 **所属子史诗**: 9
 
-**状态**: in_progress
+**状态**: done
 
-**实施计划**:
-1. 创建ROI多边形验证工具类(PolygonValidator)
-2. 实现多边形基本验证(最少3个点、闭合路径、坐标范围)
-3. 添加高级验证(自相交检测、面积计算、凸性检查)
-4. 集成验证逻辑到API端点(POST/PUT /api/rules)
-5. 增强错误响应包含详细验证信息
-6. 创建测试用例验证各种无效多边形场景
+**实施完成**:
+✅ 创建综合PolygonValidator工具类，支持高级多边形验证
+✅ 实现基础验证：点数量检查(最少3个点)、坐标范围验证(0-10000)
+✅ 实现几何验证：自相交检测、面积计算(shoelace公式)、凸性检查
+✅ 集成详细验证到API端点：POST/PUT /api/rules, POST /api/rois
+✅ 增强错误响应包含详细验证信息和错误代码
+✅ 创建全面测试套件验证各种无效多边形场景
+✅ 实现线段相交检测算法(orientation-based)
+✅ 支持可配置验证参数和灵活的验证策略
+✅ 提供详细错误代码：INSUFFICIENT_POINTS, COORDINATE_OUT_OF_RANGE, AREA_TOO_SMALL, SELF_INTERSECTION等
 
 ---
 
@@ -829,7 +832,20 @@ AISecurityVision/
 
 **所属子史诗**: 9
 
-**状态**: todo
+**状态**: done
+
+**实施完成**:
+✅ 扩展VideoPipeline类暴露BehaviorAnalyzer规则管理接口
+✅ 实现完整的规则管理方法：addIntrusionRule, removeIntrusionRule, updateIntrusionRule, getIntrusionRules
+✅ 实现ROI管理方法：addROI, removeROI, getROIs
+✅ 更新APIService集成实际的BehaviorAnalyzer调用，替换TODO占位符
+✅ 实现POST/PUT/DELETE /api/rules端点与VideoPipeline的完整集成
+✅ 实现POST /api/rois端点与VideoPipeline的完整集成
+✅ 添加线程安全的规则管理操作（mutex保护）
+✅ 实现详细的错误处理和状态报告
+✅ 创建综合集成测试脚本验证端到端工作流
+✅ 实现规则序列化/反序列化支持JSON格式
+✅ 集成增强的多边形验证到规则创建流程
 
 ---
 

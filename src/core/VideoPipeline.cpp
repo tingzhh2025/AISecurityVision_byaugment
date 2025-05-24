@@ -293,6 +293,114 @@ void VideoPipeline::setStreamingEnabled(bool enabled) {
     m_streamingEnabled.store(enabled);
 }
 
+// Behavior analysis rule management implementation
+bool VideoPipeline::addIntrusionRule(const IntrusionRule& rule) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_behaviorAnalyzer) {
+        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+        return false;
+    }
+
+    bool success = m_behaviorAnalyzer->addIntrusionRule(rule);
+    if (success) {
+        std::cout << "[VideoPipeline] Added intrusion rule: " << rule.id
+                  << " to pipeline: " << m_source.id << std::endl;
+    }
+
+    return success;
+}
+
+bool VideoPipeline::removeIntrusionRule(const std::string& ruleId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_behaviorAnalyzer) {
+        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+        return false;
+    }
+
+    bool success = m_behaviorAnalyzer->removeIntrusionRule(ruleId);
+    if (success) {
+        std::cout << "[VideoPipeline] Removed intrusion rule: " << ruleId
+                  << " from pipeline: " << m_source.id << std::endl;
+    }
+
+    return success;
+}
+
+bool VideoPipeline::updateIntrusionRule(const IntrusionRule& rule) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_behaviorAnalyzer) {
+        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+        return false;
+    }
+
+    bool success = m_behaviorAnalyzer->updateIntrusionRule(rule);
+    if (success) {
+        std::cout << "[VideoPipeline] Updated intrusion rule: " << rule.id
+                  << " in pipeline: " << m_source.id << std::endl;
+    }
+
+    return success;
+}
+
+std::vector<IntrusionRule> VideoPipeline::getIntrusionRules() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_behaviorAnalyzer) {
+        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+        return {};
+    }
+
+    return m_behaviorAnalyzer->getIntrusionRules();
+}
+
+bool VideoPipeline::addROI(const ROI& roi) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_behaviorAnalyzer) {
+        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+        return false;
+    }
+
+    bool success = m_behaviorAnalyzer->addROI(roi);
+    if (success) {
+        std::cout << "[VideoPipeline] Added ROI: " << roi.id
+                  << " to pipeline: " << m_source.id << std::endl;
+    }
+
+    return success;
+}
+
+bool VideoPipeline::removeROI(const std::string& roiId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_behaviorAnalyzer) {
+        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+        return false;
+    }
+
+    bool success = m_behaviorAnalyzer->removeROI(roiId);
+    if (success) {
+        std::cout << "[VideoPipeline] Removed ROI: " << roiId
+                  << " from pipeline: " << m_source.id << std::endl;
+    }
+
+    return success;
+}
+
+std::vector<ROI> VideoPipeline::getROIs() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_behaviorAnalyzer) {
+        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+        return {};
+    }
+
+    return m_behaviorAnalyzer->getROIs();
+}
+
 // Access methods
 const VideoSource& VideoPipeline::getSource() const {
     return m_source;
