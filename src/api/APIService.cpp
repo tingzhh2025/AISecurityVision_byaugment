@@ -3,6 +3,7 @@
 #include "../core/VideoPipeline.h"
 #include "../ai/BehaviorAnalyzer.h"
 #include "../utils/PolygonValidator.h"
+#include "../onvif/ONVIFDiscovery.h"
 #include <iostream>
 #include <sstream>
 #include <chrono>
@@ -12,8 +13,16 @@
 #include <algorithm>
 #include <fstream>
 
-APIService::APIService(int port) : m_port(port), m_httpServer(nullptr) {
+APIService::APIService(int port) : m_port(port), m_httpServer(nullptr), m_onvifManager(std::make_unique<ONVIFManager>()) {
     std::cout << "[APIService] Initializing API service on port " << port << std::endl;
+
+    // Initialize ONVIF manager
+    if (!m_onvifManager->initialize()) {
+        std::cerr << "[APIService] Warning: Failed to initialize ONVIF manager: "
+                  << m_onvifManager->getLastError() << std::endl;
+    } else {
+        std::cout << "[APIService] ONVIF discovery manager initialized" << std::endl;
+    }
 }
 
 APIService::~APIService() {
@@ -1489,6 +1498,129 @@ std::string APIService::getMimeType(const std::string& filePath) {
     if (extension == "txt") return "text/plain";
 
     return "application/octet-stream";
+}
+
+// ONVIF discovery handlers
+void APIService::handleGetDiscoverDevices(const std::string& request, std::string& response) {
+    try {
+        if (!m_onvifManager || !m_onvifManager->isInitialized()) {
+            response = createErrorResponse("ONVIF discovery not available", 503);
+            return;
+        }
+
+        std::cout << "[APIService] Starting ONVIF device discovery..." << std::endl;
+
+        // Perform network scan for ONVIF devices
+        auto devices = m_onvifManager->scanNetwork(5000); // 5 second timeout
+
+        std::ostringstream json;
+        json << "{"
+             << "\"status\":\"success\","
+             << "\"discovered_devices\":" << devices.size() << ","
+             << "\"devices\":[";
+
+        for (size_t i = 0; i < devices.size(); ++i) {
+            if (i > 0) json << ",";
+
+            const auto& device = devices[i];
+            json << "{"
+                 << "\"uuid\":\"" << device.uuid << "\","
+                 << "\"name\":\"" << device.name << "\","
+                 << "\"manufacturer\":\"" << device.manufacturer << "\","
+                 << "\"model\":\"" << device.model << "\","
+                 << "\"firmware_version\":\"" << device.firmwareVersion << "\","
+                 << "\"serial_number\":\"" << device.serialNumber << "\","
+                 << "\"ip_address\":\"" << device.ipAddress << "\","
+                 << "\"port\":" << device.port << ","
+                 << "\"service_url\":\"" << device.serviceUrl << "\","
+                 << "\"stream_uri\":\"" << device.streamUri << "\","
+                 << "\"requires_auth\":" << (device.requiresAuth ? "true" : "false") << ","
+                 << "\"discovered_at\":\"" << getCurrentTimestamp() << "\""
+                 << "}";
+        }
+
+        json << "],"
+             << "\"scan_duration_ms\":5000,"
+             << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+
+        std::cout << "[APIService] ONVIF discovery completed. Found " << devices.size() << " devices" << std::endl;
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("ONVIF discovery failed: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handlePostAddDiscoveredDevice(const std::string& request, std::string& response) {
+    try {
+        if (!m_onvifManager || !m_onvifManager->isInitialized()) {
+            response = createErrorResponse("ONVIF discovery not available", 503);
+            return;
+        }
+
+        // Parse device information from request
+        std::string deviceId = parseJsonField(request, "device_id");
+        std::string username = parseJsonField(request, "username");
+        std::string password = parseJsonField(request, "password");
+
+        if (deviceId.empty()) {
+            response = createErrorResponse("Device ID is required", 400);
+            return;
+        }
+
+        // Find the device in known devices
+        ONVIFDevice* device = m_onvifManager->findDevice(deviceId);
+        if (!device) {
+            response = createErrorResponse("Device not found: " + deviceId, 404);
+            return;
+        }
+
+        // Update credentials if provided
+        if (!username.empty()) {
+            if (!m_onvifManager->updateDeviceCredentials(deviceId, username, password)) {
+                response = createErrorResponse("Failed to update device credentials", 500);
+                return;
+            }
+        }
+
+        // Create VideoSource from ONVIF device
+        VideoSource videoSource;
+        videoSource.id = "onvif_" + device->ipAddress + "_" + std::to_string(device->port);
+        videoSource.url = device->streamUri;
+        videoSource.protocol = "rtsp";
+        videoSource.username = device->username;
+        videoSource.password = device->password;
+        videoSource.enabled = true;
+
+        // Add to TaskManager
+        TaskManager& taskManager = TaskManager::getInstance();
+        if (!taskManager.addVideoSource(videoSource)) {
+            response = createErrorResponse("Failed to add video source to TaskManager", 500);
+            return;
+        }
+
+        std::ostringstream json;
+        json << "{"
+             << "\"status\":\"added\","
+             << "\"camera_id\":\"" << videoSource.id << "\","
+             << "\"device_uuid\":\"" << device->uuid << "\","
+             << "\"device_name\":\"" << device->name << "\","
+             << "\"ip_address\":\"" << device->ipAddress << "\","
+             << "\"stream_uri\":\"" << device->streamUri << "\","
+             << "\"requires_auth\":" << (device->requiresAuth ? "true" : "false") << ","
+             << "\"added_at\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str(), 201);
+
+        std::cout << "[APIService] Added ONVIF device as video source: " << videoSource.id
+                  << " (" << device->name << ")" << std::endl;
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to add discovered device: " + std::string(e.what()), 500);
+    }
 }
 
 std::string APIService::createFileResponse(const std::string& content, const std::string& mimeType, int statusCode) {

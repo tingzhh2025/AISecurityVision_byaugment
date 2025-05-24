@@ -64,6 +64,10 @@ private:
     void handleDeleteVideoSource(const std::string& request, std::string& response);
     void handleGetVideoSources(const std::string& request, std::string& response);
 
+    // ONVIF discovery handlers
+    void handleGetDiscoverDevices(const std::string& request, std::string& response);
+    void handlePostAddDiscoveredDevice(const std::string& request, std::string& response);
+
     // Recording API handlers
     void handlePostRecordStart(const std::string& request, std::string& response);
     void handlePostRecordStop(const std::string& request, std::string& response);
@@ -123,6 +127,9 @@ private:
     // Member variables
     int m_port;
     std::atomic<bool> m_running{false};
+
+    // ONVIF discovery manager
+    std::unique_ptr<class ONVIFManager> m_onvifManager;
     std::thread m_serverThread;
 
     // HTTP server implementation (placeholder)

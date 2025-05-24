@@ -75,6 +75,7 @@ file(GLOB_RECURSE SOURCES
     "src/api/*.cpp"
     "src/database/*.cpp"
     "src/utils/*.cpp"
+    "src/onvif/*.cpp"
 )
 
 # Create executable

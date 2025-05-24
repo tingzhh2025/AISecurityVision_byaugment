@@ -952,7 +952,26 @@ AISecurityVision/
 
 **所属子史诗**: 10
 
-**状态**: todo
+**状态**: done
+
+**实施完成**:
+✅ 实现ONVIF设备发现核心功能：ONVIFDiscovery类和ONVIFManager类
+✅ WS-Discovery协议实现：多播UDP通信(端口3702, 地址239.255.255.250)
+✅ ONVIF设备结构定义：ONVIFDevice包含UUID、名称、制造商、型号、IP地址、服务URL等
+✅ 网络发现功能：sendProbeMessage()发送WS-Discovery探测消息
+✅ 设备响应解析：parseProbeMatch()解析ProbeMatch响应并提取设备信息
+✅ 多播套接字管理：initializeNetwork()创建和配置UDP多播套接字
+✅ 设备信息获取：getDeviceInformation(), getMediaProfiles(), getStreamUri()方法
+✅ 线程安全设备缓存：使用mutex保护设备列表和操作
+✅ API端点集成：GET /api/source/discover触发设备发现
+✅ 设备添加端点：POST /api/source/add-discovered添加发现的设备到TaskManager
+✅ 错误处理和超时管理：网络超时、设备验证、错误传播
+✅ 网络接口处理：本地IP检测、接口枚举、多播绑定
+✅ 设备认证支持：用户名/密码凭据管理和验证
+✅ 自动配置集成：发现的设备自动转换为VideoSource并添加到系统
+✅ 创建综合测试脚本验证ONVIF发现功能(test_onvif_discovery.sh)
+✅ CMakeLists.txt更新：添加src/onvif/*.cpp到构建系统
+✅ 性能优化：5秒发现超时、最大32设备限制、设备缓存机制
 
 ---
 
