@@ -30,14 +30,14 @@
                         <span id="discovery-status">Ready to scan</span>
                     </div>
                 </div>
-                
+
                 <div class="panel-content">
                     <div class="discovery-controls">
                         <button id="scan-btn" class="scan-button">
                             <span class="btn-icon">🔍</span>
                             <span class="btn-text">Scan for ONVIF Devices</span>
                         </button>
-                        
+
                         <div class="scan-options">
                             <label for="scan-timeout">Scan Timeout:</label>
                             <select id="scan-timeout">
@@ -48,7 +48,7 @@
                             </select>
                         </div>
                     </div>
-                    
+
                     <div class="discovery-progress" id="discovery-progress" style="display: none;">
                         <div class="progress-bar">
                             <div class="progress-fill" id="progress-fill"></div>
@@ -67,7 +67,7 @@
                         <button id="refresh-btn" class="control-btn" style="display: none;">🔄 Refresh</button>
                     </div>
                 </div>
-                
+
                 <div class="devices-container" id="devices-container">
                     <div class="no-devices" id="no-devices">
                         <div class="no-devices-icon">📷</div>
@@ -84,23 +84,23 @@
                         <h3>⚙️ Configure ONVIF Device</h3>
                         <button class="modal-close" id="modal-close">&times;</button>
                     </div>
-                    
+
                     <div class="modal-body">
                         <div class="device-info" id="modal-device-info">
                             <!-- Device information will be populated here -->
                         </div>
-                        
+
                         <form id="config-form">
                             <div class="form-group">
                                 <label for="device-username">Username:</label>
                                 <input type="text" id="device-username" placeholder="admin" autocomplete="username">
                             </div>
-                            
+
                             <div class="form-group">
                                 <label for="device-password">Password:</label>
                                 <input type="password" id="device-password" placeholder="Enter device password" autocomplete="current-password">
                             </div>
-                            
+
                             <div class="form-group">
                                 <label>
                                     <input type="checkbox" id="auto-start" checked>
@@ -109,9 +109,10 @@
                             </div>
                         </form>
                     </div>
-                    
+
                     <div class="modal-footer">
                         <button type="button" class="btn-secondary" id="cancel-btn">Cancel</button>
+                        <button type="button" class="btn-test" id="test-connection-btn">Test Connection</button>
                         <button type="button" class="btn-primary" id="configure-btn">Configure Device</button>
                     </div>
                 </div>

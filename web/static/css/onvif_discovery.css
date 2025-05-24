@@ -386,6 +386,26 @@
     background: #7f8c8d;
 }
 
+.btn-test {
+    background: #f39c12;
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background 0.3s ease;
+}
+
+.btn-test:hover {
+    background: #e67e22;
+}
+
+.btn-test:disabled {
+    background: #95a5a6;
+    cursor: not-allowed;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
     .discovery-controls {
@@ -393,15 +413,15 @@
         align-items: stretch;
         gap: 1rem;
     }
-    
+
     .scan-button {
         justify-content: center;
     }
-    
+
     .devices-grid {
         grid-template-columns: 1fr;
     }
-    
+
     .modal-content {
         width: 95%;
         margin: 1rem;

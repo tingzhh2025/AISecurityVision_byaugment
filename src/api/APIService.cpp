@@ -1650,6 +1650,7 @@ void APIService::handlePostAddDiscoveredDevice(const std::string& request, std::
         std::string deviceId = parseJsonField(request, "device_id");
         std::string username = parseJsonField(request, "username");
         std::string password = parseJsonField(request, "password");
+        std::string testOnly = parseJsonField(request, "test_only");
 
         if (deviceId.empty()) {
             response = createErrorResponse("Device ID is required", 400);
@@ -1663,16 +1664,46 @@ void APIService::handlePostAddDiscoveredDevice(const std::string& request, std::
             return;
         }
 
-        // Update credentials if provided
+        // Test authentication if credentials are provided
         if (!username.empty()) {
+            std::cout << "[APIService] Testing authentication for device: " << device->ipAddress
+                      << " with username: " << username << std::endl;
+
+            // Get the discovery instance to test authentication
+            auto discoveryInstance = std::make_unique<ONVIFDiscovery>();
+            if (!discoveryInstance->initialize()) {
+                response = createErrorResponse("Failed to initialize ONVIF discovery for authentication test", 500);
+                return;
+            }
+
+            // Test authentication before updating credentials
+            if (!discoveryInstance->testAuthentication(*device, username, password)) {
+                response = createErrorResponse("Authentication failed: Invalid username or password for device " + device->ipAddress, 401);
+                return;
+            }
+
+            std::cout << "[APIService] Authentication successful for device: " << device->ipAddress << std::endl;
+
+            // If this is just a test, return success without configuring
+            if (testOnly == "true") {
+                std::ostringstream json;
+                json << "{"
+                     << "\"status\":\"test_success\","
+                     << "\"message\":\"Authentication test successful\","
+                     << "\"device_ip\":\"" << device->ipAddress << "\","
+                     << "\"username\":\"" << username << "\""
+                     << "}";
+                response = createJsonResponse(json.str(), 200);
+                return;
+            }
+
+            // Update credentials after successful authentication
             if (!m_onvifManager->updateDeviceCredentials(deviceId, username, password)) {
                 response = createErrorResponse("Failed to update device credentials", 500);
                 return;
             }
-        }
 
-        // Update device credentials if provided
-        if (!username.empty()) {
+            // Update device object
             device->username = username;
             device->password = password;
             device->requiresAuth = true;

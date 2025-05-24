@@ -1063,7 +1063,21 @@ AISecurityVision/
 
 **所属子史诗**: 10
 
-**状态**: todo
+**状态**: done
+
+**实施完成**:
+✅ 实现完整的testAuthentication()方法：使用GetDeviceInformation SOAP请求测试认证
+✅ 增强WS-Security实现：添加nonce、timestamp和password digest支持
+✅ 实现加密工具函数：generateNonce(), generateTimestamp(), generatePasswordDigest()
+✅ 添加Base64编码/解码和SHA1哈希实现用于WS-Security
+✅ 增强API端点认证验证：在设备配置前测试认证凭据
+✅ 添加test_only标志支持：允许仅测试认证而不配置设备
+✅ 改进Web界面：添加"Test Connection"按钮到配置模态框
+✅ 实现JavaScript测试连接功能：实时认证验证和用户反馈
+✅ 增强错误处理：详细的认证失败消息和状态码
+✅ 添加CSS样式：专业的测试按钮样式和交互效果
+✅ 创建综合测试脚本：验证所有认证功能(test_onvif_authentication.sh)
+✅ 支持WS-UsernameToken认证：符合ONVIF标准的认证实现
 
 ---
 

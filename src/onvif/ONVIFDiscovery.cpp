@@ -433,18 +433,201 @@ std::string ONVIFDiscovery::createSOAPEnvelope(const std::string& body, const st
 }
 
 std::string ONVIFDiscovery::generateWSSecurity(const std::string& username, const std::string& password) {
-    // Basic WS-Security implementation
-    // In production, this should use proper nonce, timestamp, and password digest
+    // Enhanced WS-Security implementation with nonce and timestamp
     std::ostringstream security;
-    security << "<wsse:Security xmlns:wsse=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd\">";
-    security << "<wsse:UsernameToken>";
+
+    // Generate nonce (random bytes encoded in base64)
+    std::string nonce = generateNonce();
+
+    // Generate timestamp (ISO 8601 format)
+    std::string created = generateTimestamp();
+
+    security << "<wsse:Security xmlns:wsse=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd\" "
+             << "xmlns:wsu=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd\">";
+    security << "<wsse:UsernameToken wsu:Id=\"UsernameToken-1\">";
     security << "<wsse:Username>" << username << "</wsse:Username>";
-    security << "<wsse:Password Type=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText\">";
-    security << password << "</wsse:Password>";
+
+    // Use password digest for better security
+    std::string passwordDigest = generatePasswordDigest(nonce, created, password);
+    security << "<wsse:Password Type=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordDigest\">";
+    security << passwordDigest << "</wsse:Password>";
+
+    security << "<wsse:Nonce EncodingType=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary\">";
+    security << nonce << "</wsse:Nonce>";
+    security << "<wsu:Created>" << created << "</wsu:Created>";
     security << "</wsse:UsernameToken>";
     security << "</wsse:Security>";
 
     return security.str();
+}
+
+std::string ONVIFDiscovery::generateNonce() {
+    // Generate 16 random bytes and encode as base64
+    const size_t nonceSize = 16;
+    unsigned char nonce[nonceSize];
+
+    // Use current time and random seed for nonce generation
+    srand(time(nullptr) + rand());
+    for (size_t i = 0; i < nonceSize; ++i) {
+        nonce[i] = rand() % 256;
+    }
+
+    return base64Encode(nonce, nonceSize);
+}
+
+std::string ONVIFDiscovery::generateTimestamp() {
+    // Generate ISO 8601 timestamp (UTC)
+    auto now = std::chrono::system_clock::now();
+    auto time_t = std::chrono::system_clock::to_time_t(now);
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        now.time_since_epoch()) % 1000;
+
+    std::ostringstream oss;
+    oss << std::put_time(std::gmtime(&time_t), "%Y-%m-%dT%H:%M:%S");
+    oss << "." << std::setfill('0') << std::setw(3) << ms.count() << "Z";
+
+    return oss.str();
+}
+
+std::string ONVIFDiscovery::generatePasswordDigest(const std::string& nonce, const std::string& created, const std::string& password) {
+    // Password digest = Base64(SHA1(nonce + created + password))
+    std::string combined = base64Decode(nonce) + created + password;
+
+    // Simple SHA1 implementation (for production, use a proper crypto library)
+    unsigned char hash[20];
+    sha1Hash(combined, hash);
+
+    return base64Encode(hash, 20);
+}
+
+std::string ONVIFDiscovery::base64Encode(const unsigned char* data, size_t length) {
+    const std::string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string result;
+
+    for (size_t i = 0; i < length; i += 3) {
+        unsigned int val = (data[i] << 16);
+        if (i + 1 < length) val |= (data[i + 1] << 8);
+        if (i + 2 < length) val |= data[i + 2];
+
+        result += chars[(val >> 18) & 0x3F];
+        result += chars[(val >> 12) & 0x3F];
+        result += (i + 1 < length) ? chars[(val >> 6) & 0x3F] : '=';
+        result += (i + 2 < length) ? chars[val & 0x3F] : '=';
+    }
+
+    return result;
+}
+
+std::string ONVIFDiscovery::base64Decode(const std::string& encoded) {
+    const std::string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string result;
+
+    for (size_t i = 0; i < encoded.length(); i += 4) {
+        unsigned int val = 0;
+        for (int j = 0; j < 4; ++j) {
+            if (i + j < encoded.length() && encoded[i + j] != '=') {
+                val = (val << 6) | chars.find(encoded[i + j]);
+            } else {
+                val <<= 6;
+            }
+        }
+
+        result += static_cast<char>((val >> 16) & 0xFF);
+        if (i + 2 < encoded.length() && encoded[i + 2] != '=') {
+            result += static_cast<char>((val >> 8) & 0xFF);
+        }
+        if (i + 3 < encoded.length() && encoded[i + 3] != '=') {
+            result += static_cast<char>(val & 0xFF);
+        }
+    }
+
+    return result;
+}
+
+void ONVIFDiscovery::sha1Hash(const std::string& input, unsigned char* hash) {
+    // Simple SHA1 implementation (for production, use OpenSSL or similar)
+    // This is a basic implementation for demonstration
+    const unsigned char* data = reinterpret_cast<const unsigned char*>(input.c_str());
+    size_t length = input.length();
+
+    // Initialize hash values
+    unsigned int h[5] = {0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0};
+
+    // Pre-processing: adding padding bits
+    std::vector<unsigned char> padded(data, data + length);
+    padded.push_back(0x80);
+
+    while ((padded.size() % 64) != 56) {
+        padded.push_back(0x00);
+    }
+
+    // Append length as 64-bit big-endian
+    unsigned long long bitLength = length * 8;
+    for (int i = 7; i >= 0; --i) {
+        padded.push_back((bitLength >> (i * 8)) & 0xFF);
+    }
+
+    // Process message in 512-bit chunks
+    for (size_t chunk = 0; chunk < padded.size(); chunk += 64) {
+        unsigned int w[80];
+
+        // Break chunk into sixteen 32-bit big-endian words
+        for (int i = 0; i < 16; ++i) {
+            w[i] = (padded[chunk + i * 4] << 24) |
+                   (padded[chunk + i * 4 + 1] << 16) |
+                   (padded[chunk + i * 4 + 2] << 8) |
+                   (padded[chunk + i * 4 + 3]);
+        }
+
+        // Extend the sixteen 32-bit words into eighty 32-bit words
+        for (int i = 16; i < 80; ++i) {
+            unsigned int temp = w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16];
+            w[i] = (temp << 1) | (temp >> 31);
+        }
+
+        // Initialize hash value for this chunk
+        unsigned int a = h[0], b = h[1], c = h[2], d = h[3], e = h[4];
+
+        // Main loop
+        for (int i = 0; i < 80; ++i) {
+            unsigned int f, k;
+            if (i < 20) {
+                f = (b & c) | ((~b) & d);
+                k = 0x5A827999;
+            } else if (i < 40) {
+                f = b ^ c ^ d;
+                k = 0x6ED9EBA1;
+            } else if (i < 60) {
+                f = (b & c) | (b & d) | (c & d);
+                k = 0x8F1BBCDC;
+            } else {
+                f = b ^ c ^ d;
+                k = 0xCA62C1D6;
+            }
+
+            unsigned int temp = ((a << 5) | (a >> 27)) + f + e + k + w[i];
+            e = d;
+            d = c;
+            c = (b << 30) | (b >> 2);
+            b = a;
+            a = temp;
+        }
+
+        // Add this chunk's hash to result
+        h[0] += a;
+        h[1] += b;
+        h[2] += c;
+        h[3] += d;
+        h[4] += e;
+    }
+
+    // Produce the final hash value as a 160-bit number (20 bytes)
+    for (int i = 0; i < 5; ++i) {
+        hash[i * 4] = (h[i] >> 24) & 0xFF;
+        hash[i * 4 + 1] = (h[i] >> 16) & 0xFF;
+        hash[i * 4 + 2] = (h[i] >> 8) & 0xFF;
+        hash[i * 4 + 3] = h[i] & 0xFF;
+    }
 }
 
 bool ONVIFDiscovery::parseURL(const std::string& url, std::string& host, int& port, std::string& path) {
@@ -552,6 +735,50 @@ bool ONVIFDiscovery::sendHTTPRequest(const std::string& host, int port, const st
     }
 
     return true;
+}
+
+bool ONVIFDiscovery::testAuthentication(const ONVIFDevice& device, const std::string& username, const std::string& password) {
+    if (device.serviceUrl.empty()) {
+        logError("Device service URL is empty");
+        return false;
+    }
+
+    logDebug("Testing authentication for device: " + device.ipAddress + " with username: " + username);
+
+    // Create a simple GetDeviceInformation SOAP request to test authentication
+    std::string soapBody =
+        "<tds:GetDeviceInformation xmlns:tds=\"http://www.onvif.org/ver10/device/wsdl\"/>";
+
+    std::string response;
+    bool success = sendSOAPRequest(device.serviceUrl,
+                                  "http://www.onvif.org/ver10/device/wsdl/GetDeviceInformation",
+                                  soapBody, response, username, password);
+
+    if (!success) {
+        logError("SOAP request failed during authentication test");
+        return false;
+    }
+
+    // Check for authentication-related errors in the response
+    if (response.find("401") != std::string::npos ||
+        response.find("Unauthorized") != std::string::npos ||
+        response.find("Authentication") != std::string::npos ||
+        response.find("NotAuthorized") != std::string::npos ||
+        response.find("FailedAuthentication") != std::string::npos) {
+        logError("Authentication failed for device " + device.ipAddress);
+        return false;
+    }
+
+    // Check for successful SOAP response
+    if (response.find("GetDeviceInformationResponse") != std::string::npos ||
+        response.find("tds:GetDeviceInformationResponse") != std::string::npos) {
+        logDebug("Authentication successful for device " + device.ipAddress);
+        return true;
+    }
+
+    // If we get here, the response was unexpected
+    logError("Unexpected response during authentication test for device " + device.ipAddress);
+    return false;
 }
 
 // Enhanced implementations for ONVIF SOAP communication

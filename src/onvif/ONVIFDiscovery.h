@@ -7,6 +7,11 @@
 #include <mutex>
 #include <thread>
 #include <atomic>
+#include <iomanip>
+#include <sstream>
+#include <ctime>
+#include <cstdlib>
+#include <cstring>
 
 /**
  * @brief ONVIF device information structure
@@ -108,6 +113,14 @@ private:
     bool isValidIPAddress(const std::string& ip);
     bool parseURL(const std::string& url, std::string& host, int& port, std::string& path);
     bool sendHTTPRequest(const std::string& host, int port, const std::string& request, std::string& response);
+
+    // Cryptographic utilities for WS-Security
+    std::string generateNonce();
+    std::string generateTimestamp();
+    std::string generatePasswordDigest(const std::string& nonce, const std::string& created, const std::string& password);
+    std::string base64Encode(const unsigned char* data, size_t length);
+    std::string base64Decode(const std::string& encoded);
+    void sha1Hash(const std::string& input, unsigned char* hash);
 
     // Member variables
     bool m_initialized;
