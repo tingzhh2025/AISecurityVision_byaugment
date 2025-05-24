@@ -319,6 +319,61 @@ void APIService::setupRoutes() {
         res.set_content(response, "application/json");
     });
 
+    // ROI management endpoints - Task 68
+    m_httpServer->Post("/api/rois", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handlePostROIs(req.body, response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Get("/api/rois", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        std::string cameraId = req.get_param_value("camera_id");
+        handleGetROIs(cameraId, response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Get(R"(/api/rois/([^/]+))", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        std::string roiId = req.matches[1].str();
+        handleGetROI("", response, roiId);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Put(R"(/api/rois/([^/]+))", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        std::string roiId = req.matches[1].str();
+        handlePutROI(req.body, response, roiId);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Delete(R"(/api/rois/([^/]+))", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        std::string roiId = req.matches[1].str();
+        handleDeleteROI("", response, roiId);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
     // Web interface routes
     m_httpServer->Get("/", [this](const httplib::Request& req, httplib::Response& res) {
         std::string content = loadWebFile("web/templates/dashboard.html");
@@ -1384,6 +1439,13 @@ void APIService::handlePostROIs(const std::string& request, std::string& respons
             return;
         }
 
+        // Parse camera_id from request
+        std::string cameraId = parseJsonField(request, "camera_id");
+        if (cameraId.empty()) {
+            response = createErrorResponse("camera_id is required", 400);
+            return;
+        }
+
         // Validate the ROI
         if (roi.id.empty()) {
             response = createErrorResponse("ROI ID is required", 400);
@@ -1414,30 +1476,45 @@ void APIService::handlePostROIs(const std::string& request, std::string& respons
             return;
         }
 
-        // Add ROI to BehaviorAnalyzer through VideoPipeline
+        // Convert polygon to JSON string for database storage
+        std::ostringstream polygonJson;
+        polygonJson << "[";
+        for (size_t i = 0; i < roi.polygon.size(); ++i) {
+            if (i > 0) polygonJson << ",";
+            polygonJson << "{\"x\":" << roi.polygon[i].x << ",\"y\":" << roi.polygon[i].y << "}";
+        }
+        polygonJson << "]";
+
+        // Create ROI record for database
+        ROIRecord roiRecord(roi.id, cameraId, roi.name, polygonJson.str());
+        roiRecord.enabled = roi.enabled;
+        roiRecord.priority = roi.priority;
+
+        // Store in database
+        DatabaseManager dbManager;
+        if (!dbManager.initialize()) {
+            response = createErrorResponse("Database not available", 503);
+            return;
+        }
+
+        if (!dbManager.insertROI(roiRecord)) {
+            response = createErrorResponse("Failed to store ROI in database: " + dbManager.getErrorMessage(), 500);
+            return;
+        }
+
+        // Also add ROI to BehaviorAnalyzer through VideoPipeline if camera is active
         TaskManager& taskManager = TaskManager::getInstance();
-        auto activePipelines = taskManager.getActivePipelines();
-
-        if (activePipelines.empty()) {
-            response = createErrorResponse("No active video pipelines found", 404);
-            return;
-        }
-
-        auto pipeline = taskManager.getPipeline(activePipelines[0]);
-        if (!pipeline) {
-            response = createErrorResponse("Failed to access video pipeline", 500);
-            return;
-        }
-
-        if (!pipeline->addROI(roi)) {
-            response = createErrorResponse("Failed to add ROI to behavior analyzer", 500);
-            return;
+        auto pipeline = taskManager.getPipeline(cameraId);
+        if (pipeline) {
+            pipeline->addROI(roi);
+            std::cout << "[APIService] Added ROI to active pipeline: " << cameraId << std::endl;
         }
 
         std::ostringstream json;
         json << "{"
              << "\"status\":\"created\","
              << "\"roi_id\":\"" << roi.id << "\","
+             << "\"camera_id\":\"" << cameraId << "\","
              << "\"name\":\"" << roi.name << "\","
              << "\"polygon_points\":" << roi.polygon.size() << ","
              << "\"enabled\":" << (roi.enabled ? "true" : "false") << ","
@@ -1447,37 +1524,265 @@ void APIService::handlePostROIs(const std::string& request, std::string& respons
 
         response = createJsonResponse(json.str(), 201);
 
-        std::cout << "[APIService] Created ROI: " << roi.id << " (" << roi.name << ")" << std::endl;
+        std::cout << "[APIService] Created ROI: " << roi.id << " (" << roi.name << ") for camera: " << cameraId << std::endl;
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to create ROI: " + std::string(e.what()), 500);
     }
 }
 
-void APIService::handleGetROIs(const std::string& request, std::string& response) {
+void APIService::handleGetROIs(const std::string& cameraId, std::string& response) {
     try {
-        // TODO: Get all ROIs from BehaviorAnalyzer
-        // For now, return a sample ROI list
+        // Get ROIs from database
+        DatabaseManager dbManager;
+        if (!dbManager.initialize()) {
+            response = createErrorResponse("Database not available", 503);
+            return;
+        }
+
+        auto rois = dbManager.getROIs(cameraId);
 
         std::ostringstream json;
         json << "{"
-             << "\"rois\":["
-             << "{"
-             << "\"id\":\"default_roi\","
-             << "\"name\":\"Default Intrusion Zone\","
-             << "\"polygon\":[{\"x\":100,\"y\":100},{\"x\":500,\"y\":100},{\"x\":500,\"y\":400},{\"x\":100,\"y\":400}],"
-             << "\"enabled\":true,"
-             << "\"priority\":1"
-             << "}"
-             << "],"
-             << "\"count\":1,"
+             << "\"rois\":[";
+
+        for (size_t i = 0; i < rois.size(); ++i) {
+            if (i > 0) json << ",";
+
+            const auto& roi = rois[i];
+            json << "{"
+                 << "\"id\":\"" << roi.roi_id << "\","
+                 << "\"camera_id\":\"" << roi.camera_id << "\","
+                 << "\"name\":\"" << roi.name << "\","
+                 << "\"polygon\":" << roi.polygon_data << ","
+                 << "\"enabled\":" << (roi.enabled ? "true" : "false") << ","
+                 << "\"priority\":" << roi.priority << ","
+                 << "\"created_at\":\"" << roi.created_at << "\","
+                 << "\"updated_at\":\"" << roi.updated_at << "\""
+                 << "}";
+        }
+
+        json << "],"
+             << "\"count\":" << rois.size() << ","
+             << "\"camera_id\":\"" << cameraId << "\","
              << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
              << "}";
 
         response = createJsonResponse(json.str());
 
+        std::cout << "[APIService] Retrieved " << rois.size() << " ROIs"
+                  << (cameraId.empty() ? "" : " for camera: " + cameraId) << std::endl;
+
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to get ROIs: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handleGetROI(const std::string& request, std::string& response, const std::string& roiId) {
+    try {
+        if (roiId.empty()) {
+            response = createErrorResponse("ROI ID is required", 400);
+            return;
+        }
+
+        // Get ROI from database
+        DatabaseManager dbManager;
+        if (!dbManager.initialize()) {
+            response = createErrorResponse("Database not available", 503);
+            return;
+        }
+
+        auto roi = dbManager.getROIById(roiId);
+        if (roi.roi_id.empty()) {
+            response = createErrorResponse("ROI not found: " + roiId, 404);
+            return;
+        }
+
+        std::ostringstream json;
+        json << "{"
+             << "\"id\":\"" << roi.roi_id << "\","
+             << "\"camera_id\":\"" << roi.camera_id << "\","
+             << "\"name\":\"" << roi.name << "\","
+             << "\"polygon\":" << roi.polygon_data << ","
+             << "\"enabled\":" << (roi.enabled ? "true" : "false") << ","
+             << "\"priority\":" << roi.priority << ","
+             << "\"created_at\":\"" << roi.created_at << "\","
+             << "\"updated_at\":\"" << roi.updated_at << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+
+        std::cout << "[APIService] Retrieved ROI: " << roiId << std::endl;
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to get ROI: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handlePutROI(const std::string& request, std::string& response, const std::string& roiId) {
+    try {
+        if (roiId.empty()) {
+            response = createErrorResponse("ROI ID is required", 400);
+            return;
+        }
+
+        // Parse the JSON request to update the ROI
+        ROI roi;
+        if (!deserializeROI(request, roi)) {
+            response = createErrorResponse("Invalid ROI format", 400);
+            return;
+        }
+
+        // Parse camera_id from request
+        std::string cameraId = parseJsonField(request, "camera_id");
+        if (cameraId.empty()) {
+            response = createErrorResponse("camera_id is required", 400);
+            return;
+        }
+
+        // Ensure the ROI ID matches the URL parameter
+        roi.id = roiId;
+
+        // Validate the ROI
+        if (roi.name.empty()) {
+            response = createErrorResponse("ROI name is required", 400);
+            return;
+        }
+
+        // Enhanced polygon validation with detailed error reporting
+        auto validationResult = validateROIPolygonDetailed(roi.polygon);
+        if (!validationResult.isValid) {
+            std::ostringstream errorJson;
+            errorJson << "{"
+                     << "\"error\":\"" << validationResult.errorMessage << "\","
+                     << "\"error_code\":\"" << validationResult.errorCode << "\","
+                     << "\"polygon_points\":" << roi.polygon.size() << ","
+                     << "\"validation_details\":{"
+                     << "\"area\":" << validationResult.area << ","
+                     << "\"is_closed\":" << (validationResult.isClosed ? "true" : "false") << ","
+                     << "\"is_convex\":" << (validationResult.isConvex ? "true" : "false") << ","
+                     << "\"has_self_intersection\":" << (validationResult.hasSelfIntersection ? "true" : "false")
+                     << "}"
+                     << "}";
+            response = createJsonResponse(errorJson.str(), 400);
+            return;
+        }
+
+        // Get existing ROI from database
+        DatabaseManager dbManager;
+        if (!dbManager.initialize()) {
+            response = createErrorResponse("Database not available", 503);
+            return;
+        }
+
+        auto existingROI = dbManager.getROIById(roiId);
+        if (existingROI.roi_id.empty()) {
+            response = createErrorResponse("ROI not found: " + roiId, 404);
+            return;
+        }
+
+        // Convert polygon to JSON string for database storage
+        std::ostringstream polygonJson;
+        polygonJson << "[";
+        for (size_t i = 0; i < roi.polygon.size(); ++i) {
+            if (i > 0) polygonJson << ",";
+            polygonJson << "{\"x\":" << roi.polygon[i].x << ",\"y\":" << roi.polygon[i].y << "}";
+        }
+        polygonJson << "]";
+
+        // Update ROI record
+        ROIRecord roiRecord = existingROI;
+        roiRecord.camera_id = cameraId;
+        roiRecord.name = roi.name;
+        roiRecord.polygon_data = polygonJson.str();
+        roiRecord.enabled = roi.enabled;
+        roiRecord.priority = roi.priority;
+        roiRecord.updated_at = getCurrentTimestamp();
+
+        if (!dbManager.updateROI(roiRecord)) {
+            response = createErrorResponse("Failed to update ROI in database: " + dbManager.getErrorMessage(), 500);
+            return;
+        }
+
+        // Update ROI in BehaviorAnalyzer through VideoPipeline if camera is active
+        TaskManager& taskManager = TaskManager::getInstance();
+        auto pipeline = taskManager.getPipeline(cameraId);
+        if (pipeline) {
+            // Remove old ROI and add updated one
+            pipeline->removeROI(roiId);
+            pipeline->addROI(roi);
+            std::cout << "[APIService] Updated ROI in active pipeline: " << cameraId << std::endl;
+        }
+
+        std::ostringstream json;
+        json << "{"
+             << "\"status\":\"updated\","
+             << "\"roi_id\":\"" << roi.id << "\","
+             << "\"camera_id\":\"" << cameraId << "\","
+             << "\"name\":\"" << roi.name << "\","
+             << "\"polygon_points\":" << roi.polygon.size() << ","
+             << "\"enabled\":" << (roi.enabled ? "true" : "false") << ","
+             << "\"priority\":" << roi.priority << ","
+             << "\"updated_at\":\"" << roiRecord.updated_at << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+
+        std::cout << "[APIService] Updated ROI: " << roiId << " (" << roi.name << ") for camera: " << cameraId << std::endl;
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to update ROI: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handleDeleteROI(const std::string& request, std::string& response, const std::string& roiId) {
+    try {
+        if (roiId.empty()) {
+            response = createErrorResponse("ROI ID is required", 400);
+            return;
+        }
+
+        // Get existing ROI from database
+        DatabaseManager dbManager;
+        if (!dbManager.initialize()) {
+            response = createErrorResponse("Database not available", 503);
+            return;
+        }
+
+        auto existingROI = dbManager.getROIById(roiId);
+        if (existingROI.roi_id.empty()) {
+            response = createErrorResponse("ROI not found: " + roiId, 404);
+            return;
+        }
+
+        // Delete from database
+        if (!dbManager.deleteROI(roiId)) {
+            response = createErrorResponse("Failed to delete ROI from database: " + dbManager.getErrorMessage(), 500);
+            return;
+        }
+
+        // Remove ROI from BehaviorAnalyzer through VideoPipeline if camera is active
+        TaskManager& taskManager = TaskManager::getInstance();
+        auto pipeline = taskManager.getPipeline(existingROI.camera_id);
+        if (pipeline) {
+            pipeline->removeROI(roiId);
+            std::cout << "[APIService] Removed ROI from active pipeline: " << existingROI.camera_id << std::endl;
+        }
+
+        std::ostringstream json;
+        json << "{"
+             << "\"status\":\"deleted\","
+             << "\"roi_id\":\"" << roiId << "\","
+             << "\"camera_id\":\"" << existingROI.camera_id << "\","
+             << "\"deleted_at\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+
+        std::cout << "[APIService] Deleted ROI: " << roiId << " from camera: " << existingROI.camera_id << std::endl;
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to delete ROI: " + std::string(e.what()), 500);
     }
 }
 

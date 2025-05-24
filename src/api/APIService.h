@@ -98,6 +98,9 @@ private:
     // ROI management handlers
     void handlePostROIs(const std::string& request, std::string& response);
     void handleGetROIs(const std::string& request, std::string& response);
+    void handleGetROI(const std::string& request, std::string& response, const std::string& roiId);
+    void handlePutROI(const std::string& request, std::string& response, const std::string& roiId);
+    void handleDeleteROI(const std::string& request, std::string& response, const std::string& roiId);
 
     // Web dashboard handlers
     void handleGetDashboard(const std::string& request, std::string& response);

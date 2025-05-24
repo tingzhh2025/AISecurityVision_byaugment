@@ -18,9 +18,9 @@ struct EventRecord {
     std::string video_path;
     std::string metadata;  // JSON string for additional data
     double confidence = 0.0;
-    
+
     EventRecord() = default;
-    EventRecord(const std::string& cameraId, const std::string& eventType, 
+    EventRecord(const std::string& cameraId, const std::string& eventType,
                 const std::string& videoPath, double conf = 0.0)
         : camera_id(cameraId), event_type(eventType), video_path(videoPath), confidence(conf) {
         // Set current timestamp
@@ -42,7 +42,7 @@ struct FaceRecord {
     std::string image_path;
     std::vector<float> embedding;  // Face embedding vector
     std::string created_at;
-    
+
     FaceRecord() = default;
     FaceRecord(const std::string& faceName, const std::string& imagePath)
         : name(faceName), image_path(imagePath) {
@@ -65,9 +65,9 @@ struct LicensePlateRecord {
     std::string region;
     std::string image_path;
     std::string created_at;
-    
+
     LicensePlateRecord() = default;
-    LicensePlateRecord(const std::string& plateNumber, const std::string& plateRegion, 
+    LicensePlateRecord(const std::string& plateNumber, const std::string& plateRegion,
                       const std::string& imagePath)
         : plate_number(plateNumber), region(plateRegion), image_path(imagePath) {
         // Set current timestamp
@@ -81,8 +81,37 @@ struct LicensePlateRecord {
 };
 
 /**
+ * @brief ROI record structure for database storage
+ */
+struct ROIRecord {
+    int id = 0;
+    std::string roi_id;
+    std::string camera_id;
+    std::string name;
+    std::string polygon_data;  // JSON string of polygon coordinates
+    bool enabled = true;
+    int priority = 1;
+    std::string created_at;
+    std::string updated_at;
+
+    ROIRecord() = default;
+    ROIRecord(const std::string& roiId, const std::string& cameraId,
+              const std::string& roiName, const std::string& polygonData)
+        : roi_id(roiId), camera_id(cameraId), name(roiName), polygon_data(polygonData) {
+        // Set current timestamp
+        auto now = std::chrono::system_clock::now();
+        auto time_t = std::chrono::system_clock::to_time_t(now);
+        auto tm = *std::localtime(&time_t);
+        char buffer[32];
+        std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &tm);
+        created_at = buffer;
+        updated_at = buffer;
+    }
+};
+
+/**
  * @brief SQLite database manager with ORM-like functionality
- * 
+ *
  * This class provides thread-safe database operations for the AI Security Vision System.
  * It manages event recordings, face recognition data, and license plate records.
  */
@@ -98,7 +127,7 @@ public:
 
     // Event operations
     bool insertEvent(const EventRecord& event);
-    std::vector<EventRecord> getEvents(const std::string& cameraId = "", 
+    std::vector<EventRecord> getEvents(const std::string& cameraId = "",
                                      const std::string& eventType = "",
                                      int limit = 100);
     bool deleteEvent(int eventId);
@@ -118,6 +147,15 @@ public:
     LicensePlateRecord getLicensePlateById(int plateId);
     bool deleteLicensePlate(int plateId);
 
+    // ROI operations
+    bool insertROI(const ROIRecord& roi);
+    std::vector<ROIRecord> getROIs(const std::string& cameraId = "");
+    ROIRecord getROIById(const std::string& roiId);
+    ROIRecord getROIByDatabaseId(int id);
+    bool updateROI(const ROIRecord& roi);
+    bool deleteROI(const std::string& roiId);
+    bool deleteROIsByCameraId(const std::string& cameraId);
+
     // Utility operations
     bool executeQuery(const std::string& query);
     int getLastInsertId();
@@ -128,22 +166,24 @@ private:
     bool createTables();
     bool prepareStatements();
     void finalizeStatements();
-    
+
     // Helper methods
     std::string vectorToBlob(const std::vector<float>& vec);
     std::vector<float> blobToVector(const void* blob, int size);
-    
+
     // Member variables
     sqlite3* m_db;
     mutable std::mutex m_mutex;
     std::string m_dbPath;
     std::string m_lastError;
-    
+
     // Prepared statements for performance
     sqlite3_stmt* m_insertEventStmt;
     sqlite3_stmt* m_insertFaceStmt;
     sqlite3_stmt* m_insertPlateStmt;
+    sqlite3_stmt* m_insertROIStmt;
     sqlite3_stmt* m_selectEventsStmt;
     sqlite3_stmt* m_selectFacesStmt;
     sqlite3_stmt* m_selectPlatesStmt;
+    sqlite3_stmt* m_selectROIsStmt;
 };

@@ -5,8 +5,8 @@
 
 DatabaseManager::DatabaseManager()
     : m_db(nullptr), m_insertEventStmt(nullptr), m_insertFaceStmt(nullptr),
-      m_insertPlateStmt(nullptr), m_selectEventsStmt(nullptr),
-      m_selectFacesStmt(nullptr), m_selectPlatesStmt(nullptr) {
+      m_insertPlateStmt(nullptr), m_insertROIStmt(nullptr), m_selectEventsStmt(nullptr),
+      m_selectFacesStmt(nullptr), m_selectPlatesStmt(nullptr), m_selectROIsStmt(nullptr) {
 }
 
 DatabaseManager::~DatabaseManager() {
@@ -95,6 +95,20 @@ bool DatabaseManager::createTables() {
         );
     )";
 
+    const char* createROIsTable = R"(
+        CREATE TABLE IF NOT EXISTS rois (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            roi_id TEXT NOT NULL UNIQUE,
+            camera_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            polygon_data TEXT NOT NULL,
+            enabled BOOLEAN DEFAULT 1,
+            priority INTEGER DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+    )";
+
     // Create indexes for better performance
     const char* createIndexes = R"(
         CREATE INDEX IF NOT EXISTS idx_events_camera_id ON events(camera_id);
@@ -102,6 +116,10 @@ bool DatabaseManager::createTables() {
         CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
         CREATE INDEX IF NOT EXISTS idx_faces_name ON faces(name);
         CREATE INDEX IF NOT EXISTS idx_plates_number ON license_plates(plate_number);
+        CREATE INDEX IF NOT EXISTS idx_rois_roi_id ON rois(roi_id);
+        CREATE INDEX IF NOT EXISTS idx_rois_camera_id ON rois(camera_id);
+        CREATE INDEX IF NOT EXISTS idx_rois_enabled ON rois(enabled);
+        CREATE INDEX IF NOT EXISTS idx_rois_priority ON rois(priority);
     )";
 
     char* errMsg = nullptr;
@@ -121,6 +139,12 @@ bool DatabaseManager::createTables() {
 
     if (sqlite3_exec(m_db, createLicensePlatesTable, nullptr, nullptr, &errMsg) != SQLITE_OK) {
         m_lastError = "Failed to create license_plates table: " + std::string(errMsg);
+        sqlite3_free(errMsg);
+        return false;
+    }
+
+    if (sqlite3_exec(m_db, createROIsTable, nullptr, nullptr, &errMsg) != SQLITE_OK) {
+        m_lastError = "Failed to create rois table: " + std::string(errMsg);
         sqlite3_free(errMsg);
         return false;
     }
@@ -168,6 +192,17 @@ bool DatabaseManager::prepareStatements() {
         return false;
     }
 
+    // Prepare insert ROI statement
+    const char* insertROISql = R"(
+        INSERT INTO rois (roi_id, camera_id, name, polygon_data, enabled, priority, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+    )";
+
+    if (sqlite3_prepare_v2(m_db, insertROISql, -1, &m_insertROIStmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare insert ROI statement: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
     return true;
 }
 
@@ -184,6 +219,10 @@ void DatabaseManager::finalizeStatements() {
         sqlite3_finalize(m_insertPlateStmt);
         m_insertPlateStmt = nullptr;
     }
+    if (m_insertROIStmt) {
+        sqlite3_finalize(m_insertROIStmt);
+        m_insertROIStmt = nullptr;
+    }
     if (m_selectEventsStmt) {
         sqlite3_finalize(m_selectEventsStmt);
         m_selectEventsStmt = nullptr;
@@ -195,6 +234,10 @@ void DatabaseManager::finalizeStatements() {
     if (m_selectPlatesStmt) {
         sqlite3_finalize(m_selectPlatesStmt);
         m_selectPlatesStmt = nullptr;
+    }
+    if (m_selectROIsStmt) {
+        sqlite3_finalize(m_selectROIsStmt);
+        m_selectROIsStmt = nullptr;
     }
 }
 
@@ -611,4 +654,223 @@ bool DatabaseManager::deleteLicensePlate(int plateId) {
 
     std::string query = "DELETE FROM license_plates WHERE id = " + std::to_string(plateId);
     return executeQuery(query);
+}
+
+// ROI operations implementation
+bool DatabaseManager::insertROI(const ROIRecord& roi) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_insertROIStmt) {
+        m_lastError = "Insert ROI statement not prepared";
+        return false;
+    }
+
+    // Reset statement
+    sqlite3_reset(m_insertROIStmt);
+
+    // Bind parameters
+    sqlite3_bind_text(m_insertROIStmt, 1, roi.roi_id.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(m_insertROIStmt, 2, roi.camera_id.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(m_insertROIStmt, 3, roi.name.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(m_insertROIStmt, 4, roi.polygon_data.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int(m_insertROIStmt, 5, roi.enabled ? 1 : 0);
+    sqlite3_bind_int(m_insertROIStmt, 6, roi.priority);
+    sqlite3_bind_text(m_insertROIStmt, 7, roi.created_at.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(m_insertROIStmt, 8, roi.updated_at.c_str(), -1, SQLITE_STATIC);
+
+    // Execute
+    int rc = sqlite3_step(m_insertROIStmt);
+    if (rc != SQLITE_DONE) {
+        m_lastError = "Failed to insert ROI: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    return true;
+}
+
+std::vector<ROIRecord> DatabaseManager::getROIs(const std::string& cameraId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    std::vector<ROIRecord> rois;
+
+    std::string query = "SELECT id, roi_id, camera_id, name, polygon_data, enabled, priority, created_at, updated_at FROM rois";
+
+    if (!cameraId.empty()) {
+        query += " WHERE camera_id = '" + cameraId + "'";
+    }
+
+    query += " ORDER BY priority DESC, created_at ASC";
+
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(m_db, query.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare select ROIs query: " + std::string(sqlite3_errmsg(m_db));
+        return rois;
+    }
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        ROIRecord roi;
+        roi.id = sqlite3_column_int(stmt, 0);
+        roi.roi_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+        roi.camera_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+        roi.name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+        roi.polygon_data = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
+        roi.enabled = sqlite3_column_int(stmt, 5) != 0;
+        roi.priority = sqlite3_column_int(stmt, 6);
+
+        const char* createdAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 7));
+        if (createdAt) roi.created_at = createdAt;
+
+        const char* updatedAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 8));
+        if (updatedAt) roi.updated_at = updatedAt;
+
+        rois.push_back(roi);
+    }
+
+    sqlite3_finalize(stmt);
+    return rois;
+}
+
+ROIRecord DatabaseManager::getROIById(const std::string& roiId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    ROIRecord roi;
+
+    const char* query = "SELECT id, roi_id, camera_id, name, polygon_data, enabled, priority, created_at, updated_at FROM rois WHERE roi_id = ?";
+
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(m_db, query, -1, &stmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare select ROI by ID query: " + std::string(sqlite3_errmsg(m_db));
+        return roi;
+    }
+
+    sqlite3_bind_text(stmt, 1, roiId.c_str(), -1, SQLITE_STATIC);
+
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        roi.id = sqlite3_column_int(stmt, 0);
+        roi.roi_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+        roi.camera_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+        roi.name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+        roi.polygon_data = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
+        roi.enabled = sqlite3_column_int(stmt, 5) != 0;
+        roi.priority = sqlite3_column_int(stmt, 6);
+
+        const char* createdAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 7));
+        if (createdAt) roi.created_at = createdAt;
+
+        const char* updatedAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 8));
+        if (updatedAt) roi.updated_at = updatedAt;
+    }
+
+    sqlite3_finalize(stmt);
+    return roi;
+}
+
+ROIRecord DatabaseManager::getROIByDatabaseId(int id) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    ROIRecord roi;
+
+    const char* query = "SELECT id, roi_id, camera_id, name, polygon_data, enabled, priority, created_at, updated_at FROM rois WHERE id = ?";
+
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(m_db, query, -1, &stmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare select ROI by database ID query: " + std::string(sqlite3_errmsg(m_db));
+        return roi;
+    }
+
+    sqlite3_bind_int(stmt, 1, id);
+
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        roi.id = sqlite3_column_int(stmt, 0);
+        roi.roi_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+        roi.camera_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+        roi.name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+        roi.polygon_data = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
+        roi.enabled = sqlite3_column_int(stmt, 5) != 0;
+        roi.priority = sqlite3_column_int(stmt, 6);
+
+        const char* createdAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 7));
+        if (createdAt) roi.created_at = createdAt;
+
+        const char* updatedAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 8));
+        if (updatedAt) roi.updated_at = updatedAt;
+    }
+
+    sqlite3_finalize(stmt);
+    return roi;
+}
+
+bool DatabaseManager::updateROI(const ROIRecord& roi) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    const char* query = "UPDATE rois SET camera_id = ?, name = ?, polygon_data = ?, enabled = ?, priority = ?, updated_at = ? WHERE roi_id = ?";
+
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(m_db, query, -1, &stmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare update ROI query: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    sqlite3_bind_text(stmt, 1, roi.camera_id.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, roi.name.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, roi.polygon_data.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 4, roi.enabled ? 1 : 0);
+    sqlite3_bind_int(stmt, 5, roi.priority);
+    sqlite3_bind_text(stmt, 6, roi.updated_at.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 7, roi.roi_id.c_str(), -1, SQLITE_STATIC);
+
+    int rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE) {
+        m_lastError = "Failed to update ROI: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    return true;
+}
+
+bool DatabaseManager::deleteROI(const std::string& roiId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    const char* query = "DELETE FROM rois WHERE roi_id = ?";
+
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(m_db, query, -1, &stmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare delete ROI query: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    sqlite3_bind_text(stmt, 1, roiId.c_str(), -1, SQLITE_STATIC);
+
+    int rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE) {
+        m_lastError = "Failed to delete ROI: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    return true;
+}
+
+bool DatabaseManager::deleteROIsByCameraId(const std::string& cameraId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    const char* query = "DELETE FROM rois WHERE camera_id = ?";
+
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(m_db, query, -1, &stmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare delete ROIs by camera ID query: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    sqlite3_bind_text(stmt, 1, cameraId.c_str(), -1, SQLITE_STATIC);
+
+    int rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE) {
+        m_lastError = "Failed to delete ROIs by camera ID: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    return true;
 }

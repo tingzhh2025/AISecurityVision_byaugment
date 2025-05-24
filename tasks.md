@@ -1367,7 +1367,19 @@ AISecurityVision/
 
 **所属子史诗**: 13
 
-**状态**: todo
+**状态**: done
+
+**实施完成**:
+✅ 实现完整的ROI CRUD API端点：POST/GET/PUT/DELETE /api/rois
+✅ 数据库持久化：SQLite中新增rois表存储ROI数据
+✅ 多边形坐标验证：集成PolygonValidator进行坐标验证
+✅ 摄像头关联：支持按camera_id过滤和管理ROI
+✅ JSON序列化/反序列化：完整的ROI数据格式转换
+✅ 错误处理：完整的参数验证和异常处理
+✅ 数据库集成：ROIRecord结构体和CRUD操作方法
+✅ API路由配置：HTTP路由映射到处理器方法
+✅ 测试脚本：test_roi_api.py全面测试所有端点
+✅ 管道集成：与现有BehaviorAnalyzer管道集成
 
 ---
 
