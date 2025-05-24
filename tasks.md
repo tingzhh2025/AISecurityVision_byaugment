@@ -1311,7 +1311,19 @@ AISecurityVision/
 
 **所属子史诗**: 12
 
-**状态**: todo
+**状态**: done
+
+**实施完成**:
+✅ 实现POST /api/alarms/test API端点：接受event_type和camera_id参数
+✅ 集成AlarmTrigger.triggerTestAlarm()方法：生成测试报警负载
+✅ 测试模式标识：所有测试报警包含test_mode:true标志
+✅ 多渠道投递：测试报警通过所有配置的投递方法发送(HTTP/WebSocket/MQTT)
+✅ 参数验证：event_type必需，camera_id可选(默认test_camera)
+✅ JSON响应格式：包含状态、事件类型、摄像头ID、测试模式、触发时间
+✅ 错误处理：完整的参数验证和异常处理
+✅ 测试覆盖：集成到test_alarm_delivery.sh和test_websocket_alarms.sh
+✅ API文档：详细的端点说明和示例负载
+✅ 日志记录：测试报警触发的详细日志输出
 
 ---
 
