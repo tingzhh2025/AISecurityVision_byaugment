@@ -873,6 +873,65 @@ int APIService::parseJsonInt(const std::string& json, const std::string& field, 
     }
 }
 
+float APIService::parseJsonFloat(const std::string& json, const std::string& field, float defaultValue) {
+    // Simple JSON float field extraction
+    std::string searchStr = "\"" + field + "\":";
+    size_t start = json.find(searchStr);
+
+    if (start == std::string::npos) {
+        return defaultValue;
+    }
+
+    start += searchStr.length();
+
+    // Skip whitespace
+    while (start < json.length() && std::isspace(json[start])) {
+        start++;
+    }
+
+    // Find end of number (including decimal point)
+    size_t end = start;
+    while (end < json.length() && (std::isdigit(json[end]) || json[end] == '.' || json[end] == '-')) {
+        end++;
+    }
+
+    if (end == start) {
+        return defaultValue;
+    }
+
+    try {
+        return std::stof(json.substr(start, end - start));
+    } catch (const std::exception&) {
+        return defaultValue;
+    }
+}
+
+bool APIService::parseJsonBool(const std::string& json, const std::string& field, bool defaultValue) {
+    // Simple JSON boolean field extraction
+    std::string searchStr = "\"" + field + "\":";
+    size_t start = json.find(searchStr);
+
+    if (start == std::string::npos) {
+        return defaultValue;
+    }
+
+    start += searchStr.length();
+
+    // Skip whitespace
+    while (start < json.length() && std::isspace(json[start])) {
+        start++;
+    }
+
+    // Check for true/false
+    if (json.substr(start, 4) == "true") {
+        return true;
+    } else if (json.substr(start, 5) == "false") {
+        return false;
+    }
+
+    return defaultValue;
+}
+
 std::string APIService::getCurrentTimestamp() {
     auto now = std::chrono::system_clock::now();
     auto time_t = std::chrono::system_clock::to_time_t(now);
@@ -3628,11 +3687,11 @@ void APIService::handleGetAlarmStatus(const std::string& request, std::string& r
 void APIService::handlePostReIDConfig(const std::string& request, std::string& response) {
     try {
         // Parse ReID configuration from request
-        bool enabled = parseJsonField(request, "enabled") == "true";
-        float threshold = std::stof(parseJsonField(request, "similarity_threshold"));
+        bool enabled = parseJsonBool(request, "enabled", true);
+        float threshold = parseJsonFloat(request, "similarity_threshold", 0.7f);
         int maxMatches = parseJsonInt(request, "max_matches", 5);
-        double matchTimeout = std::stod(parseJsonField(request, "match_timeout"));
-        bool crossCameraEnabled = parseJsonField(request, "cross_camera_enabled") == "true";
+        float matchTimeout = parseJsonFloat(request, "match_timeout", 30.0f);
+        bool crossCameraEnabled = parseJsonBool(request, "cross_camera_enabled", true);
 
         // Validate threshold
         if (threshold < 0.5f || threshold > 0.95f) {
@@ -3753,13 +3812,11 @@ void APIService::handleGetReIDConfig(const std::string& request, std::string& re
 void APIService::handlePutReIDThreshold(const std::string& request, std::string& response) {
     try {
         // Parse threshold from request
-        std::string thresholdStr = parseJsonField(request, "threshold");
-        if (thresholdStr.empty()) {
+        float threshold = parseJsonFloat(request, "threshold", -1.0f);
+        if (threshold < 0.0f) {
             response = createErrorResponse("threshold field is required", 400);
             return;
         }
-
-        float threshold = std::stof(thresholdStr);
 
         // Validate threshold
         if (threshold < 0.5f || threshold > 0.95f) {
@@ -3814,7 +3871,7 @@ void APIService::handleGetReIDStatus(const std::string& request, std::string& re
              << "\"enabled_pipelines\":0,"
              << "\"avg_similarity_threshold\":0.0,"
              << "\"total_matches\":0,"
-             << "\"cross_camera_tracks\":" << taskManager.getCrossCameraTrackCount()
+             << "\"cross_camera_tracks\":" << taskManager.getActiveCrossCameraTrackCount()
              << "},"
              << "\"pipelines\":[";
 

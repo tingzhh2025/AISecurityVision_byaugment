@@ -142,6 +142,8 @@ private:
     std::string createErrorResponse(const std::string& error, int statusCode = 400);
     std::string parseJsonField(const std::string& json, const std::string& field);
     int parseJsonInt(const std::string& json, const std::string& field, int defaultValue = 0);
+    float parseJsonFloat(const std::string& json, const std::string& field, float defaultValue = 0.0f);
+    bool parseJsonBool(const std::string& json, const std::string& field, bool defaultValue = false);
     std::string getCurrentTimestamp();
 
     // File serving utilities

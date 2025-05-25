@@ -103,6 +103,9 @@ public:
     const VideoSource& getSource() const;
     std::chrono::steady_clock::time_point getStartTime() const;
 
+    // Task 76: BehaviorAnalyzer access for ReID configuration
+    BehaviorAnalyzer* getBehaviorAnalyzer() const;
+
 private:
     // Processing thread
     void processingThread();

@@ -500,6 +500,12 @@ std::chrono::steady_clock::time_point VideoPipeline::getStartTime() const {
     return m_startTime;
 }
 
+// Task 76: BehaviorAnalyzer access for ReID configuration
+BehaviorAnalyzer* VideoPipeline::getBehaviorAnalyzer() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_behaviorAnalyzer.get();
+}
+
 // VideoSource implementation
 bool VideoSource::isValid() const {
     if (id.empty() || url.empty()) {
