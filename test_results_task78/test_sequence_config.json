@@ -1,0 +1,10 @@
+{
+    "sequenceName": "task78_multi_camera_test",
+    "cameraIds": ["test_camera_1", "test_camera_2", "test_camera_3"],
+    "duration": 60,
+    "objectCount": 5,
+    "transitionInterval": 10.0,
+    "validationThreshold": 0.9,
+    "outputPath": "./test_results_task78/results",
+    "enableLogging": true
+}
