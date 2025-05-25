@@ -124,6 +124,13 @@ private:
     void handlePostTestAlarm(const std::string& request, std::string& response);
     void handleGetAlarmStatus(const std::string& request, std::string& response);
 
+    // Task 75: Cross-camera tracking handlers
+    void handleGetCrossCameraTracks(const std::string& request, std::string& response);
+    void handleGetCrossCameraConfig(const std::string& request, std::string& response);
+    void handlePostCrossCameraConfig(const std::string& request, std::string& response);
+    void handleGetCrossCameraStats(const std::string& request, std::string& response);
+    void handlePostCrossCameraReset(const std::string& request, std::string& response);
+
     // Utility methods
     std::string createJsonResponse(const std::string& data, int statusCode = 200);
     std::string createErrorResponse(const std::string& error, int statusCode = 400);
@@ -153,6 +160,12 @@ private:
 
     // JSON deserialization for alarm configurations
     bool deserializeAlarmConfig(const std::string& json, struct AlarmConfig& config);
+
+    // Task 75: Cross-camera tracking serialization
+    std::string serializeCrossCameraTrack(const struct CrossCameraTrack& track);
+    std::string serializeCrossCameraTrackList(const std::vector<struct CrossCameraTrack>& tracks);
+    std::string serializeReIDMatch(const struct ReIDMatch& match);
+    std::string serializeReIDMatchList(const std::vector<struct ReIDMatch>& matches);
 
     // Web interface utilities
     std::string loadWebFile(const std::string& filePath);

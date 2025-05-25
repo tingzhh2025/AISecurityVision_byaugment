@@ -175,6 +175,7 @@ struct FrameResult {
     int64_t timestamp;
     std::vector<cv::Rect> detections;
     std::vector<int> trackIds;
+    std::vector<int> globalTrackIds;  // Task 75: Global cross-camera track IDs
     std::vector<std::string> labels;  // Detection class labels
     std::vector<std::vector<float>> reidEmbeddings;  // Task 74: ReID feature vectors
     std::vector<std::string> faceIds;

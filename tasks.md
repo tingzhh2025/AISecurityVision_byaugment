@@ -1520,7 +1520,9 @@ AISecurityVision/
 
 **所属子史诗**: 14
 
-**状态**: todo
+**状态**: completed
+
+**完成总结**: ✅ Cross-camera tracking logic successfully implemented in TaskManager with ReID feature sharing between VideoPipeline instances. Key features: Global track registry with 1000 track limit, ReID similarity matching (cosine similarity, configurable threshold 0.7), automatic track expiration (30s default), exponential moving average for feature updates, thread-safe operations with mutex protection, comprehensive API endpoints for configuration and monitoring, and integration with VideoPipeline for real-time track reporting. Core tests passed: track creation/update, multi-camera scenarios, feature averaging, and expiration handling.
 
 ---
 

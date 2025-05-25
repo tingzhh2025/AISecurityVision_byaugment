@@ -5,6 +5,7 @@
 #include <fstream>
 #include <chrono>
 #include <algorithm>
+#include <cmath>
 
 // NVML includes for GPU monitoring
 #ifdef HAVE_NVML
@@ -230,6 +231,13 @@ void TaskManager::monitoringThread() {
             for (const auto& id : failedPipelines) {
                 std::cout << "[TaskManager] Cleaning up failed pipeline: " << id << std::endl;
                 removeVideoSource(id);
+            }
+
+            // Task 75: Periodic cross-camera tracking cleanup
+            if (m_crossCameraTrackingEnabled.load()) {
+                std::lock_guard<std::mutex> crossCameraLock(m_crossCameraMutex);
+                cleanupExpiredTracks();
+                updateCrossCameraTrackingStats();
             }
 
             // Update monitoring performance metrics
@@ -598,4 +606,346 @@ void TaskManager::resetMonitoringStats() {
     std::cout << "[TaskManager] Monitoring statistics reset" << std::endl;
 }
 
+// Task 75: Cross-camera tracking implementation
+void TaskManager::reportTrackUpdate(const std::string& cameraId, int localTrackId,
+                                   const std::vector<float>& reidFeatures, const cv::Rect& bbox,
+                                   int classId, float confidence) {
+    if (!m_crossCameraTrackingEnabled.load() || reidFeatures.empty()) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(m_crossCameraMutex);
+
+    // Check if this local track already has a global track ID
+    auto cameraIt = m_localToGlobalTrackMap.find(cameraId);
+    if (cameraIt != m_localToGlobalTrackMap.end()) {
+        auto trackIt = cameraIt->second.find(localTrackId);
+        if (trackIt != cameraIt->second.end()) {
+            // Update existing global track
+            int globalId = trackIt->second;
+            auto globalTrackIt = m_globalTracks.find(globalId);
+            if (globalTrackIt != m_globalTracks.end()) {
+                globalTrackIt->second->updateTrack(cameraId, localTrackId, reidFeatures, bbox, confidence);
+                return;
+            }
+        }
+    }
+
+    // Try to find a matching global track using ReID features
+    if (m_crossCameraMatchingEnabled.load()) {
+        auto bestMatch = findBestMatch(reidFeatures, cameraId);
+        if (bestMatch) {
+            // Match found - associate with existing global track
+            bestMatch->updateTrack(cameraId, localTrackId, reidFeatures, bbox, confidence);
+            m_localToGlobalTrackMap[cameraId][localTrackId] = bestMatch->globalTrackId;
+            m_totalCrossCameraMatches.fetch_add(1);
+
+            std::cout << "[TaskManager] Cross-camera match: camera " << cameraId
+                      << " local track " << localTrackId << " -> global track "
+                      << bestMatch->globalTrackId << std::endl;
+            return;
+        }
+    }
+
+    // No match found - create new global track
+    int globalId = createNewGlobalTrack(cameraId, localTrackId, reidFeatures, bbox, classId, confidence);
+    m_localToGlobalTrackMap[cameraId][localTrackId] = globalId;
+}
+
+int TaskManager::getGlobalTrackId(const std::string& cameraId, int localTrackId) const {
+    std::lock_guard<std::mutex> lock(m_crossCameraMutex);
+
+    auto cameraIt = m_localToGlobalTrackMap.find(cameraId);
+    if (cameraIt != m_localToGlobalTrackMap.end()) {
+        auto trackIt = cameraIt->second.find(localTrackId);
+        if (trackIt != cameraIt->second.end()) {
+            return trackIt->second;
+        }
+    }
+    return -1; // No global track ID found
+}
+
+std::vector<CrossCameraTrack> TaskManager::getActiveCrossCameraTracks() const {
+    std::lock_guard<std::mutex> lock(m_crossCameraMutex);
+
+    std::vector<CrossCameraTrack> activeTracks;
+    for (const auto& [globalId, track] : m_globalTracks) {
+        if (track && track->isActive && !track->isExpired(m_maxTrackAge.load())) {
+            activeTracks.push_back(*track);
+        }
+    }
+    return activeTracks;
+}
+
+std::vector<ReIDMatch> TaskManager::findReIDMatches(const std::vector<float>& features,
+                                                   const std::string& excludeCameraId) const {
+    std::lock_guard<std::mutex> lock(m_crossCameraMutex);
+
+    std::vector<ReIDMatch> matches;
+    float threshold = m_reidSimilarityThreshold.load();
+
+    for (const auto& [globalId, track] : m_globalTracks) {
+        if (!track || track->isExpired(m_maxTrackAge.load())) {
+            continue;
+        }
+
+        // Skip tracks from the excluded camera
+        if (!excludeCameraId.empty() && track->hasCamera(excludeCameraId)) {
+            continue;
+        }
+
+        float similarity = computeReIDSimilarity(features, track->reidFeatures);
+        if (similarity >= threshold) {
+            // Find the camera and local track ID for this match
+            for (const auto& [cameraId, localId] : track->localTrackIds) {
+                if (cameraId != excludeCameraId) {
+                    matches.emplace_back(globalId, similarity, cameraId, localId);
+                    break; // Only add one match per global track
+                }
+            }
+        }
+    }
+
+    // Sort by similarity (highest first)
+    std::sort(matches.begin(), matches.end(),
+              [](const ReIDMatch& a, const ReIDMatch& b) {
+                  return a.similarity > b.similarity;
+              });
+
+    return matches;
+}
+
+// Cross-camera tracking configuration methods
+void TaskManager::setCrossCameraTrackingEnabled(bool enabled) {
+    m_crossCameraTrackingEnabled.store(enabled);
+    std::cout << "[TaskManager] Cross-camera tracking " << (enabled ? "enabled" : "disabled") << std::endl;
+}
+
+void TaskManager::setReIDSimilarityThreshold(float threshold) {
+    if (threshold >= 0.0f && threshold <= 1.0f) {
+        m_reidSimilarityThreshold.store(threshold);
+        std::cout << "[TaskManager] ReID similarity threshold set to " << threshold << std::endl;
+    }
+}
+
+void TaskManager::setMaxTrackAge(double ageSeconds) {
+    if (ageSeconds > 0.0) {
+        m_maxTrackAge.store(ageSeconds);
+        std::cout << "[TaskManager] Max track age set to " << ageSeconds << " seconds" << std::endl;
+    }
+}
+
+void TaskManager::setCrossCameraMatchingEnabled(bool enabled) {
+    m_crossCameraMatchingEnabled.store(enabled);
+    std::cout << "[TaskManager] Cross-camera matching " << (enabled ? "enabled" : "disabled") << std::endl;
+}
+
+bool TaskManager::isCrossCameraTrackingEnabled() const {
+    return m_crossCameraTrackingEnabled.load();
+}
+
+float TaskManager::getReIDSimilarityThreshold() const {
+    return m_reidSimilarityThreshold.load();
+}
+
+double TaskManager::getMaxTrackAge() const {
+    return m_maxTrackAge.load();
+}
+
+// Cross-camera tracking statistics methods
+size_t TaskManager::getGlobalTrackCount() const {
+    std::lock_guard<std::mutex> lock(m_crossCameraMutex);
+    return m_globalTracks.size();
+}
+
+size_t TaskManager::getActiveCrossCameraTrackCount() const {
+    std::lock_guard<std::mutex> lock(m_crossCameraMutex);
+
+    size_t activeCount = 0;
+    double maxAge = m_maxTrackAge.load();
+    for (const auto& [globalId, track] : m_globalTracks) {
+        if (track && track->isActive && !track->isExpired(maxAge)) {
+            activeCount++;
+        }
+    }
+    return activeCount;
+}
+
+size_t TaskManager::getCrossCameraMatchCount() const {
+    return m_totalCrossCameraMatches.load();
+}
+
+void TaskManager::resetCrossCameraTrackingStats() {
+    std::lock_guard<std::mutex> lock(m_crossCameraMutex);
+    m_totalCrossCameraMatches.store(0);
+    m_activeCrossCameraTracks.store(0);
+    std::cout << "[TaskManager] Cross-camera tracking statistics reset" << std::endl;
+}
+
 // VideoSource implementation is now in VideoPipeline.cpp
+
+// Task 75: CrossCameraTrack implementation
+CrossCameraTrack::CrossCameraTrack(int globalId, const std::string& cameraId, int localId,
+                                  const std::vector<float>& features, const cv::Rect& bbox,
+                                  int cls, float conf)
+    : globalTrackId(globalId), primaryCameraId(cameraId), reidFeatures(features),
+      lastBbox(bbox), classId(cls), confidence(conf), isActive(true) {
+
+    auto now = std::chrono::steady_clock::now();
+    firstSeen = now;
+    lastSeen = now;
+    localTrackIds[cameraId] = localId;
+
+    std::cout << "[CrossCameraTrack] Created global track " << globalTrackId
+              << " for camera " << cameraId << " local track " << localId << std::endl;
+}
+
+void CrossCameraTrack::updateTrack(const std::string& cameraId, int localId,
+                                  const std::vector<float>& features, const cv::Rect& bbox,
+                                  float conf) {
+    lastSeen = std::chrono::steady_clock::now();
+    lastBbox = bbox;
+    confidence = conf;
+    isActive = true;
+
+    // Update ReID features (exponential moving average)
+    if (!features.empty() && features.size() == reidFeatures.size()) {
+        const float alpha = 0.3f; // Learning rate
+        for (size_t i = 0; i < reidFeatures.size(); ++i) {
+            reidFeatures[i] = alpha * features[i] + (1.0f - alpha) * reidFeatures[i];
+        }
+    } else if (!features.empty()) {
+        reidFeatures = features; // Replace if dimensions don't match
+    }
+
+    // Update local track ID for this camera
+    localTrackIds[cameraId] = localId;
+
+    std::cout << "[CrossCameraTrack] Updated global track " << globalTrackId
+              << " from camera " << cameraId << " local track " << localId << std::endl;
+}
+
+bool CrossCameraTrack::hasCamera(const std::string& cameraId) const {
+    return localTrackIds.find(cameraId) != localTrackIds.end();
+}
+
+int CrossCameraTrack::getLocalTrackId(const std::string& cameraId) const {
+    auto it = localTrackIds.find(cameraId);
+    return (it != localTrackIds.end()) ? it->second : -1;
+}
+
+double CrossCameraTrack::getTimeSinceLastSeen() const {
+    auto now = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastSeen);
+    return duration.count() / 1000.0; // Convert to seconds
+}
+
+bool CrossCameraTrack::isExpired(double maxAgeSeconds) const {
+    return getTimeSinceLastSeen() > maxAgeSeconds;
+}
+
+// Task 75: Internal cross-camera tracking helper methods
+int TaskManager::createNewGlobalTrack(const std::string& cameraId, int localTrackId,
+                                     const std::vector<float>& reidFeatures, const cv::Rect& bbox,
+                                     int classId, float confidence) {
+    int globalId = m_nextGlobalTrackId.fetch_add(1);
+
+    auto globalTrack = std::make_shared<CrossCameraTrack>(
+        globalId, cameraId, localTrackId, reidFeatures, bbox, classId, confidence);
+
+    m_globalTracks[globalId] = globalTrack;
+
+    // Cleanup expired tracks if we're approaching the limit
+    if (m_globalTracks.size() > MAX_GLOBAL_TRACKS * 0.8) {
+        cleanupExpiredTracks();
+    }
+
+    std::cout << "[TaskManager] Created new global track " << globalId
+              << " for camera " << cameraId << " local track " << localTrackId << std::endl;
+
+    return globalId;
+}
+
+std::shared_ptr<CrossCameraTrack> TaskManager::findBestMatch(const std::vector<float>& features,
+                                                           const std::string& excludeCameraId) const {
+    std::shared_ptr<CrossCameraTrack> bestMatch = nullptr;
+    float bestSimilarity = 0.0f;
+    float threshold = m_reidSimilarityThreshold.load();
+    double maxAge = m_maxTrackAge.load();
+
+    for (const auto& [globalId, track] : m_globalTracks) {
+        if (!track || track->isExpired(maxAge)) {
+            continue;
+        }
+
+        // Skip tracks from the same camera
+        if (track->hasCamera(excludeCameraId)) {
+            continue;
+        }
+
+        float similarity = computeReIDSimilarity(features, track->reidFeatures);
+        if (similarity >= threshold && similarity > bestSimilarity) {
+            bestSimilarity = similarity;
+            bestMatch = track;
+        }
+    }
+
+    return bestMatch;
+}
+
+void TaskManager::cleanupExpiredTracks() {
+    double maxAge = m_maxTrackAge.load();
+    auto it = m_globalTracks.begin();
+
+    while (it != m_globalTracks.end()) {
+        if (!it->second || it->second->isExpired(maxAge)) {
+            // Remove from local-to-global mapping
+            for (const auto& [cameraId, localId] : it->second->localTrackIds) {
+                auto cameraIt = m_localToGlobalTrackMap.find(cameraId);
+                if (cameraIt != m_localToGlobalTrackMap.end()) {
+                    cameraIt->second.erase(localId);
+                    if (cameraIt->second.empty()) {
+                        m_localToGlobalTrackMap.erase(cameraIt);
+                    }
+                }
+            }
+
+            std::cout << "[TaskManager] Cleaned up expired global track " << it->first << std::endl;
+            it = m_globalTracks.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+float TaskManager::computeReIDSimilarity(const std::vector<float>& features1,
+                                        const std::vector<float>& features2) const {
+    if (features1.empty() || features2.empty() || features1.size() != features2.size()) {
+        return 0.0f;
+    }
+
+    // Compute cosine similarity
+    float dotProduct = 0.0f;
+    float norm1 = 0.0f;
+    float norm2 = 0.0f;
+
+    for (size_t i = 0; i < features1.size(); ++i) {
+        dotProduct += features1[i] * features2[i];
+        norm1 += features1[i] * features1[i];
+        norm2 += features2[i] * features2[i];
+    }
+
+    if (norm1 == 0.0f || norm2 == 0.0f) {
+        return 0.0f;
+    }
+
+    return dotProduct / (std::sqrt(norm1) * std::sqrt(norm2));
+}
+
+void TaskManager::updateCrossCameraTrackingStats() {
+    // This method can be called periodically to update statistics
+    // Currently, statistics are updated in real-time, but this provides
+    // a hook for future batch updates if needed
+    size_t activeCount = getActiveCrossCameraTrackCount();
+    m_activeCrossCameraTracks.store(activeCount);
+}

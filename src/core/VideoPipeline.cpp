@@ -268,16 +268,35 @@ void VideoPipeline::processFrame(const cv::Mat& frame, int64_t timestamp) {
                 result.trackIds = m_tracker->updateWithReIDFeatures(
                     result.detections, confidences, classIds, reidFeatures);
 
+                // Task 75: Report track updates to TaskManager for cross-camera tracking
+                TaskManager& taskManager = TaskManager::getInstance();
+                result.globalTrackIds.resize(result.trackIds.size(), -1);
+
+                for (size_t i = 0; i < result.trackIds.size() && i < reidFeatures.size(); ++i) {
+                    if (result.trackIds[i] >= 0 && !reidFeatures[i].empty()) {
+                        // Report track update to TaskManager
+                        taskManager.reportTrackUpdate(
+                            m_source.id, result.trackIds[i], reidFeatures[i],
+                            result.detections[i], classIds[i], confidences[i]);
+
+                        // Get global track ID
+                        result.globalTrackIds[i] = taskManager.getGlobalTrackId(m_source.id, result.trackIds[i]);
+                    }
+                }
+
                 std::cout << "[VideoPipeline] Processed " << result.detections.size()
                           << " detections with " << reidEmbeddings.size()
                           << " ReID embeddings (dim="
                           << (reidEmbeddings.empty() ? 0 : reidEmbeddings[0].getDimension())
-                          << ")" << std::endl;
+                          << "), global tracks: " << result.globalTrackIds.size() << std::endl;
             }
         } else {
             // Fallback to regular tracking without ReID
             if (m_tracker) {
                 result.trackIds = m_tracker->updateWithClasses(result.detections, confidences, classIds);
+
+                // Initialize global track IDs as empty for non-ReID tracking
+                result.globalTrackIds.resize(result.trackIds.size(), -1);
             }
         }
     }
