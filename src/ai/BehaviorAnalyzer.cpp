@@ -12,6 +12,16 @@
 BehaviorAnalyzer::BehaviorAnalyzer()
     : m_minObjectSize(DEFAULT_MIN_WIDTH, DEFAULT_MIN_HEIGHT),
       m_trackingTimeout(DEFAULT_TRACKING_TIMEOUT) {
+
+    // Initialize ReID configuration
+    m_reidConfig.enabled = true;
+    m_reidConfig.similarityThreshold = DEFAULT_REID_SIMILARITY_THRESHOLD;
+    m_reidConfig.maxMatches = 5;
+    m_reidConfig.matchTimeout = DEFAULT_REID_MATCH_TIMEOUT;
+    m_reidConfig.crossCameraEnabled = true;
+
+    m_reidEnabled.store(true);
+    m_reidSimilarityThreshold.store(DEFAULT_REID_SIMILARITY_THRESHOLD);
 }
 
 BehaviorAnalyzer::~BehaviorAnalyzer() {}
@@ -31,7 +41,8 @@ bool BehaviorAnalyzer::initialize() {
     m_intrusionRules[defaultRule.id] = defaultRule;
     m_rois[defaultROI.id] = defaultROI;
 
-    std::cout << "[BehaviorAnalyzer] Initialized with default intrusion rule" << std::endl;
+    std::cout << "[BehaviorAnalyzer] Initialized with default intrusion rule and ReID matching (threshold: "
+              << m_reidSimilarityThreshold.load() << ")" << std::endl;
     return true;
 }
 
@@ -51,6 +62,29 @@ std::vector<BehaviorEvent> BehaviorAnalyzer::analyze(const cv::Mat& frame,
 
     // Cleanup old objects
     cleanupOldObjects();
+
+    return events;
+}
+
+std::vector<BehaviorEvent> BehaviorAnalyzer::analyzeWithReID(const cv::Mat& frame,
+                                                           const std::vector<cv::Rect>& detections,
+                                                           const std::vector<int>& trackIds,
+                                                           const std::vector<std::vector<float>>& reidFeatures,
+                                                           const std::string& cameraId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    std::vector<BehaviorEvent> events;
+
+    // Update object states with ReID features
+    updateObjectStatesWithReID(detections, trackIds, reidFeatures, cameraId);
+
+    // Check intrusion rules with priority-based conflict resolution
+    auto intrusionEvents = checkIntrusionRulesWithPriority();
+    events.insert(events.end(), intrusionEvents.begin(), intrusionEvents.end());
+
+    // Cleanup old objects and expired ReID matches
+    cleanupOldObjects();
+    cleanupExpiredReIDMatches();
 
     return events;
 }
@@ -111,6 +145,101 @@ void BehaviorAnalyzer::updateObjectStates(const std::vector<cv::Rect>& detection
         } else {
             // Create new object state
             ObjectState newState(trackId, center);
+            m_objectStates[trackId] = newState;
+        }
+    }
+}
+
+void BehaviorAnalyzer::updateObjectStatesWithReID(const std::vector<cv::Rect>& detections,
+                                                  const std::vector<int>& trackIds,
+                                                  const std::vector<std::vector<float>>& reidFeatures,
+                                                  const std::string& cameraId) {
+    auto now = std::chrono::steady_clock::now();
+
+    // Update existing objects and add new ones with ReID features
+    for (size_t i = 0; i < detections.size() && i < trackIds.size(); ++i) {
+        const cv::Rect& bbox = detections[i];
+        int trackId = trackIds[i];
+
+        // Skip objects that are too small
+        if (bbox.width < m_minObjectSize.width || bbox.height < m_minObjectSize.height) {
+            continue;
+        }
+
+        cv::Point2f center(bbox.x + bbox.width / 2.0f, bbox.y + bbox.height / 2.0f);
+
+        auto it = m_objectStates.find(trackId);
+        if (it != m_objectStates.end()) {
+            // Update existing object
+            ObjectState& state = it->second;
+
+            // Calculate velocity
+            auto timeDiff = std::chrono::duration<double>(now - state.lastSeen).count();
+            if (timeDiff > 0) {
+                state.velocity.x = (center.x - state.position.x) / timeDiff;
+                state.velocity.y = (center.y - state.position.y) / timeDiff;
+            }
+
+            state.position = center;
+            state.lastSeen = now;
+            state.trajectory.push_back(center);
+            state.cameraId = cameraId;
+
+            // Update ReID features if available
+            if (i < reidFeatures.size() && !reidFeatures[i].empty() && m_reidEnabled.load()) {
+                updateReIDFeatures(state, reidFeatures[i]);
+
+                // Find ReID matches with other objects
+                auto matches = findReIDMatches(reidFeatures[i], trackId);
+                state.reidMatches = matches;
+
+                if (!matches.empty()) {
+                    std::cout << "[BehaviorAnalyzer] Found " << matches.size()
+                              << " ReID matches for track " << trackId
+                              << " (threshold: " << m_reidSimilarityThreshold.load() << ")" << std::endl;
+                }
+            }
+
+            // Limit trajectory size
+            if (state.trajectory.size() > 100) {
+                state.trajectory.erase(state.trajectory.begin());
+            }
+
+            // Check ROI entry/exit
+            for (const auto& roiPair : m_rois) {
+                const ROI& roi = roiPair.second;
+                if (!roi.enabled) continue;
+
+                bool inROI = isObjectInROI(bbox, roi);
+                auto roiEntryIt = state.roiEntryTimes.find(roi.id);
+
+                if (inROI && roiEntryIt == state.roiEntryTimes.end()) {
+                    // Object entered ROI
+                    state.roiEntryTimes[roi.id] = now;
+                } else if (!inROI && roiEntryIt != state.roiEntryTimes.end()) {
+                    // Object left ROI
+                    state.roiEntryTimes.erase(roiEntryIt);
+                }
+            }
+        } else {
+            // Create new object state
+            ObjectState newState(trackId, center);
+            newState.cameraId = cameraId;
+
+            // Set ReID features if available
+            if (i < reidFeatures.size() && !reidFeatures[i].empty() && m_reidEnabled.load()) {
+                newState.reidFeatures = reidFeatures[i];
+
+                // Find ReID matches for new object
+                auto matches = findReIDMatches(reidFeatures[i], trackId);
+                newState.reidMatches = matches;
+
+                if (!matches.empty()) {
+                    std::cout << "[BehaviorAnalyzer] New track " << trackId
+                              << " has " << matches.size() << " ReID matches" << std::endl;
+                }
+            }
+
             m_objectStates[trackId] = newState;
         }
     }
@@ -713,4 +842,197 @@ std::string BehaviorAnalyzer::formatConflictMetadata(const ConflictResolutionRes
     }
 
     return metadata.str();
+}
+
+// ReID matching methods implementation
+
+std::vector<ReIDMatchResult> BehaviorAnalyzer::findReIDMatches(const std::vector<float>& features,
+                                                              int excludeTrackId) const {
+    std::vector<ReIDMatchResult> matches;
+
+    if (features.empty() || !m_reidEnabled.load()) {
+        return matches;
+    }
+
+    float threshold = m_reidSimilarityThreshold.load();
+
+    // Search through all existing object states for matches
+    for (const auto& statePair : m_objectStates) {
+        const ObjectState& state = statePair.second;
+
+        // Skip the same track and objects without ReID features
+        if (state.trackId == excludeTrackId || !state.hasValidReIDFeatures()) {
+            continue;
+        }
+
+        // Compute similarity
+        float similarity = computeReIDSimilarity(features, state.reidFeatures);
+
+        if (similarity >= threshold) {
+            ReIDMatchResult match(state.trackId, similarity, state.cameraId);
+            if (isValidReIDMatch(match)) {
+                matches.push_back(match);
+            }
+        }
+    }
+
+    // Sort matches by similarity (highest first)
+    std::sort(matches.begin(), matches.end(),
+              [](const ReIDMatchResult& a, const ReIDMatchResult& b) {
+                  return a.similarity > b.similarity;
+              });
+
+    // Limit to maximum number of matches
+    if (matches.size() > static_cast<size_t>(m_reidConfig.maxMatches)) {
+        matches.resize(m_reidConfig.maxMatches);
+    }
+
+    return matches;
+}
+
+float BehaviorAnalyzer::computeReIDSimilarity(const std::vector<float>& features1,
+                                             const std::vector<float>& features2) const {
+    if (features1.empty() || features2.empty() || features1.size() != features2.size()) {
+        return 0.0f;
+    }
+
+    // Compute cosine similarity
+    float dotProduct = 0.0f;
+    float norm1 = 0.0f;
+    float norm2 = 0.0f;
+
+    for (size_t i = 0; i < features1.size(); ++i) {
+        dotProduct += features1[i] * features2[i];
+        norm1 += features1[i] * features1[i];
+        norm2 += features2[i] * features2[i];
+    }
+
+    if (norm1 == 0.0f || norm2 == 0.0f) {
+        return 0.0f;
+    }
+
+    return dotProduct / (std::sqrt(norm1) * std::sqrt(norm2));
+}
+
+bool BehaviorAnalyzer::isValidReIDMatch(const ReIDMatchResult& match) const {
+    if (!match.isValid) {
+        return false;
+    }
+
+    // Check if similarity meets threshold
+    float threshold = m_reidSimilarityThreshold.load();
+    if (match.similarity < threshold) {
+        return false;
+    }
+
+    // Additional validation can be added here
+    // For example, temporal constraints, spatial constraints, etc.
+
+    return true;
+}
+
+void BehaviorAnalyzer::updateReIDFeatures(ObjectState& state, const std::vector<float>& newFeatures) {
+    if (newFeatures.empty()) {
+        return;
+    }
+
+    if (state.reidFeatures.empty()) {
+        // First time setting features
+        state.reidFeatures = newFeatures;
+    } else {
+        // Update using exponential moving average (similar to TaskManager)
+        const float alpha = 0.3f; // Learning rate
+
+        if (state.reidFeatures.size() == newFeatures.size()) {
+            for (size_t i = 0; i < state.reidFeatures.size(); ++i) {
+                state.reidFeatures[i] = alpha * newFeatures[i] + (1.0f - alpha) * state.reidFeatures[i];
+            }
+        } else {
+            // Size mismatch, replace entirely
+            state.reidFeatures = newFeatures;
+        }
+    }
+}
+
+void BehaviorAnalyzer::cleanupExpiredReIDMatches() {
+    auto now = std::chrono::steady_clock::now();
+    double timeout = m_reidConfig.matchTimeout;
+
+    for (auto& statePair : m_objectStates) {
+        ObjectState& state = statePair.second;
+
+        // Remove expired matches
+        auto it = state.reidMatches.begin();
+        while (it != state.reidMatches.end()) {
+            // For now, we don't have timestamp in ReIDMatchResult
+            // This could be enhanced to track match timestamps
+            ++it;
+        }
+
+        // Clean up old ReID features if object hasn't been seen for a while
+        double timeSinceLastSeen = std::chrono::duration<double>(now - state.lastSeen).count();
+        if (timeSinceLastSeen > timeout) {
+            state.reidFeatures.clear();
+            state.reidMatches.clear();
+        }
+    }
+}
+
+// ReID configuration methods implementation
+
+void BehaviorAnalyzer::setReIDConfig(const ReIDConfig& config) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    // Validate threshold
+    if (!config.isValidThreshold(config.similarityThreshold)) {
+        std::cout << "[BehaviorAnalyzer] Invalid ReID similarity threshold: "
+                  << config.similarityThreshold << " (valid range: "
+                  << MIN_REID_SIMILARITY_THRESHOLD << "-" << MAX_REID_SIMILARITY_THRESHOLD << ")" << std::endl;
+        return;
+    }
+
+    m_reidConfig = config;
+    m_reidEnabled.store(config.enabled);
+    m_reidSimilarityThreshold.store(config.similarityThreshold);
+
+    std::cout << "[BehaviorAnalyzer] ReID config updated: enabled=" << config.enabled
+              << ", threshold=" << config.similarityThreshold
+              << ", maxMatches=" << config.maxMatches
+              << ", timeout=" << config.matchTimeout << "s" << std::endl;
+}
+
+ReIDConfig BehaviorAnalyzer::getReIDConfig() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_reidConfig;
+}
+
+void BehaviorAnalyzer::setReIDSimilarityThreshold(float threshold) {
+    if (threshold < MIN_REID_SIMILARITY_THRESHOLD || threshold > MAX_REID_SIMILARITY_THRESHOLD) {
+        std::cout << "[BehaviorAnalyzer] Invalid ReID similarity threshold: " << threshold
+                  << " (valid range: " << MIN_REID_SIMILARITY_THRESHOLD
+                  << "-" << MAX_REID_SIMILARITY_THRESHOLD << ")" << std::endl;
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_reidConfig.similarityThreshold = threshold;
+    m_reidSimilarityThreshold.store(threshold);
+
+    std::cout << "[BehaviorAnalyzer] ReID similarity threshold set to " << threshold << std::endl;
+}
+
+float BehaviorAnalyzer::getReIDSimilarityThreshold() const {
+    return m_reidSimilarityThreshold.load();
+}
+
+void BehaviorAnalyzer::setReIDEnabled(bool enabled) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_reidConfig.enabled = enabled;
+    m_reidEnabled.store(enabled);
+
+    std::cout << "[BehaviorAnalyzer] ReID matching " << (enabled ? "enabled" : "disabled") << std::endl;
+}
+
+bool BehaviorAnalyzer::isReIDEnabled() const {
+    return m_reidEnabled.load();
 }

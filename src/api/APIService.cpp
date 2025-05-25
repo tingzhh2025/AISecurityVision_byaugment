@@ -385,6 +385,47 @@ void APIService::setupRoutes() {
         res.set_content(response, "application/json");
     });
 
+    // ReID configuration endpoints - Task 76
+    m_httpServer->Post("/api/reid/config", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handlePostReIDConfig(req.body, response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Get("/api/reid/config", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handleGetReIDConfig("", response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Put("/api/reid/threshold", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handlePutReIDThreshold(req.body, response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Get("/api/reid/status", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handleGetReIDStatus("", response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
     // Web interface routes
     m_httpServer->Get("/", [this](const httplib::Request& req, httplib::Response& res) {
         std::string content = loadWebFile("web/templates/dashboard.html");
@@ -3579,6 +3620,257 @@ void APIService::handleGetAlarmStatus(const std::string& request, std::string& r
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to get alarm status: " + std::string(e.what()), 500);
+    }
+}
+
+// Task 76: ReID configuration handlers implementation
+
+void APIService::handlePostReIDConfig(const std::string& request, std::string& response) {
+    try {
+        // Parse ReID configuration from request
+        bool enabled = parseJsonField(request, "enabled") == "true";
+        float threshold = std::stof(parseJsonField(request, "similarity_threshold"));
+        int maxMatches = parseJsonInt(request, "max_matches", 5);
+        double matchTimeout = std::stod(parseJsonField(request, "match_timeout"));
+        bool crossCameraEnabled = parseJsonField(request, "cross_camera_enabled") == "true";
+
+        // Validate threshold
+        if (threshold < 0.5f || threshold > 0.95f) {
+            response = createErrorResponse("similarity_threshold must be between 0.5 and 0.95", 400);
+            return;
+        }
+
+        // Validate max matches
+        if (maxMatches < 1 || maxMatches > 20) {
+            response = createErrorResponse("max_matches must be between 1 and 20", 400);
+            return;
+        }
+
+        // Validate match timeout
+        if (matchTimeout < 5.0 || matchTimeout > 300.0) {
+            response = createErrorResponse("match_timeout must be between 5.0 and 300.0 seconds", 400);
+            return;
+        }
+
+        // Apply configuration to all active pipelines
+        TaskManager& taskManager = TaskManager::getInstance();
+        auto activePipelines = taskManager.getActivePipelines();
+
+        int updatedPipelines = 0;
+        for (const auto& pipelineId : activePipelines) {
+            auto pipeline = taskManager.getPipeline(pipelineId);
+            if (pipeline) {
+                auto behaviorAnalyzer = pipeline->getBehaviorAnalyzer();
+                if (behaviorAnalyzer) {
+                    ReIDConfig config;
+                    config.enabled = enabled;
+                    config.similarityThreshold = threshold;
+                    config.maxMatches = maxMatches;
+                    config.matchTimeout = matchTimeout;
+                    config.crossCameraEnabled = crossCameraEnabled;
+
+                    behaviorAnalyzer->setReIDConfig(config);
+                    updatedPipelines++;
+                }
+            }
+        }
+
+        std::ostringstream json;
+        json << "{"
+             << "\"status\":\"config_updated\","
+             << "\"config\":{"
+             << "\"enabled\":" << (enabled ? "true" : "false") << ","
+             << "\"similarity_threshold\":" << threshold << ","
+             << "\"max_matches\":" << maxMatches << ","
+             << "\"match_timeout\":" << matchTimeout << ","
+             << "\"cross_camera_enabled\":" << (crossCameraEnabled ? "true" : "false")
+             << "},"
+             << "\"updated_pipelines\":" << updatedPipelines << ","
+             << "\"total_pipelines\":" << activePipelines.size() << ","
+             << "\"updated_at\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+
+        std::cout << "[APIService] ReID configuration updated: enabled=" << enabled
+                  << ", threshold=" << threshold << ", pipelines=" << updatedPipelines << std::endl;
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to update ReID config: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handleGetReIDConfig(const std::string& request, std::string& response) {
+    try {
+        TaskManager& taskManager = TaskManager::getInstance();
+        auto activePipelines = taskManager.getActivePipelines();
+
+        if (activePipelines.empty()) {
+            response = createErrorResponse("No active pipelines found", 404);
+            return;
+        }
+
+        // Get configuration from first active pipeline
+        auto pipeline = taskManager.getPipeline(activePipelines[0]);
+        if (!pipeline) {
+            response = createErrorResponse("Failed to access pipeline", 500);
+            return;
+        }
+
+        auto behaviorAnalyzer = pipeline->getBehaviorAnalyzer();
+        if (!behaviorAnalyzer) {
+            response = createErrorResponse("BehaviorAnalyzer not available", 500);
+            return;
+        }
+
+        ReIDConfig config = behaviorAnalyzer->getReIDConfig();
+
+        std::ostringstream json;
+        json << "{"
+             << "\"config\":{"
+             << "\"enabled\":" << (config.enabled ? "true" : "false") << ","
+             << "\"similarity_threshold\":" << config.similarityThreshold << ","
+             << "\"max_matches\":" << config.maxMatches << ","
+             << "\"match_timeout\":" << config.matchTimeout << ","
+             << "\"cross_camera_enabled\":" << (config.crossCameraEnabled ? "true" : "false")
+             << "},"
+             << "\"constraints\":{"
+             << "\"threshold_range\":{\"min\":0.5,\"max\":0.95},"
+             << "\"max_matches_range\":{\"min\":1,\"max\":20},"
+             << "\"timeout_range\":{\"min\":5.0,\"max\":300.0}"
+             << "},"
+             << "\"active_pipelines\":" << activePipelines.size() << ","
+             << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to get ReID config: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handlePutReIDThreshold(const std::string& request, std::string& response) {
+    try {
+        // Parse threshold from request
+        std::string thresholdStr = parseJsonField(request, "threshold");
+        if (thresholdStr.empty()) {
+            response = createErrorResponse("threshold field is required", 400);
+            return;
+        }
+
+        float threshold = std::stof(thresholdStr);
+
+        // Validate threshold
+        if (threshold < 0.5f || threshold > 0.95f) {
+            response = createErrorResponse("threshold must be between 0.5 and 0.95", 400);
+            return;
+        }
+
+        // Apply threshold to all active pipelines
+        TaskManager& taskManager = TaskManager::getInstance();
+        auto activePipelines = taskManager.getActivePipelines();
+
+        int updatedPipelines = 0;
+        for (const auto& pipelineId : activePipelines) {
+            auto pipeline = taskManager.getPipeline(pipelineId);
+            if (pipeline) {
+                auto behaviorAnalyzer = pipeline->getBehaviorAnalyzer();
+                if (behaviorAnalyzer) {
+                    behaviorAnalyzer->setReIDSimilarityThreshold(threshold);
+                    updatedPipelines++;
+                }
+            }
+        }
+
+        std::ostringstream json;
+        json << "{"
+             << "\"status\":\"threshold_updated\","
+             << "\"threshold\":" << threshold << ","
+             << "\"updated_pipelines\":" << updatedPipelines << ","
+             << "\"total_pipelines\":" << activePipelines.size() << ","
+             << "\"updated_at\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+
+        std::cout << "[APIService] ReID similarity threshold updated to " << threshold
+                  << " for " << updatedPipelines << " pipelines" << std::endl;
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to update ReID threshold: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handleGetReIDStatus(const std::string& request, std::string& response) {
+    try {
+        TaskManager& taskManager = TaskManager::getInstance();
+        auto activePipelines = taskManager.getActivePipelines();
+
+        std::ostringstream json;
+        json << "{"
+             << "\"reid_system\":{"
+             << "\"total_pipelines\":" << activePipelines.size() << ","
+             << "\"enabled_pipelines\":0,"
+             << "\"avg_similarity_threshold\":0.0,"
+             << "\"total_matches\":0,"
+             << "\"cross_camera_tracks\":" << taskManager.getCrossCameraTrackCount()
+             << "},"
+             << "\"pipelines\":[";
+
+        int enabledPipelines = 0;
+        float totalThreshold = 0.0f;
+        int totalMatches = 0;
+
+        for (size_t i = 0; i < activePipelines.size(); ++i) {
+            if (i > 0) json << ",";
+
+            const auto& pipelineId = activePipelines[i];
+            auto pipeline = taskManager.getPipeline(pipelineId);
+
+            bool reidEnabled = false;
+            float threshold = 0.0f;
+            int matches = 0;
+
+            if (pipeline) {
+                auto behaviorAnalyzer = pipeline->getBehaviorAnalyzer();
+                if (behaviorAnalyzer) {
+                    reidEnabled = behaviorAnalyzer->isReIDEnabled();
+                    threshold = behaviorAnalyzer->getReIDSimilarityThreshold();
+
+                    if (reidEnabled) {
+                        enabledPipelines++;
+                        totalThreshold += threshold;
+                        // TODO: Get actual match count from behavior analyzer
+                        matches = 0; // Placeholder
+                        totalMatches += matches;
+                    }
+                }
+            }
+
+            json << "{"
+                 << "\"pipeline_id\":\"" << pipelineId << "\","
+                 << "\"reid_enabled\":" << (reidEnabled ? "true" : "false") << ","
+                 << "\"similarity_threshold\":" << threshold << ","
+                 << "\"active_matches\":" << matches
+                 << "}";
+        }
+
+        json << "],"
+             << "\"statistics\":{"
+             << "\"enabled_ratio\":" << (activePipelines.size() > 0 ?
+                 (double)enabledPipelines / activePipelines.size() * 100.0 : 0.0) << ","
+             << "\"avg_threshold\":" << (enabledPipelines > 0 ?
+                 totalThreshold / enabledPipelines : 0.0f) << ","
+             << "\"total_active_matches\":" << totalMatches
+             << "},"
+             << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to get ReID status: " + std::string(e.what()), 500);
     }
 }
 
