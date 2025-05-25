@@ -48,7 +48,11 @@ struct IntrusionRule {
 struct BehaviorEvent {
     std::string eventType;
     std::string ruleId;
-    std::string objectId;
+    std::string objectId;        // Local track ID (for backward compatibility)
+    std::string reidId;          // Task 77: Global ReID track ID for cross-camera persistence
+    int localTrackId = -1;       // Task 77: Local track ID as integer
+    int globalTrackId = -1;      // Task 77: Global track ID as integer
+    std::string cameraId;        // Task 77: Camera ID for cross-camera tracking
     cv::Rect boundingBox;
     double confidence;
     std::string timestamp;
@@ -58,6 +62,18 @@ struct BehaviorEvent {
     BehaviorEvent(const std::string& type, const std::string& rule,
                  const std::string& objId, const cv::Rect& bbox, double conf)
         : eventType(type), ruleId(rule), objectId(objId), boundingBox(bbox), confidence(conf) {}
+
+    // Task 77: Enhanced constructor with ReID information
+    BehaviorEvent(const std::string& type, const std::string& rule,
+                 const std::string& objId, const cv::Rect& bbox, double conf,
+                 int localId, int globalId, const std::string& camId)
+        : eventType(type), ruleId(rule), objectId(objId), boundingBox(bbox), confidence(conf),
+          localTrackId(localId), globalTrackId(globalId), cameraId(camId) {
+        // Generate ReID string from global track ID
+        if (globalId >= 0) {
+            reidId = "reid_" + std::to_string(globalId);
+        }
+    }
 };
 
 /**
@@ -173,6 +189,10 @@ public:
     void setReIDEnabled(bool enabled);
     bool isReIDEnabled() const;
 
+    // Task 77: Camera ID management for cross-camera tracking
+    void setCameraId(const std::string& cameraId) { m_cameraId = cameraId; }
+    std::string getCameraId() const { return m_cameraId; }
+
     // Visualization
     void drawROIs(cv::Mat& frame) const;
     void drawObjectStates(cv::Mat& frame) const;
@@ -235,6 +255,9 @@ private:
     ReIDConfig m_reidConfig;
     std::atomic<bool> m_reidEnabled{true};
     std::atomic<float> m_reidSimilarityThreshold{0.7f};
+
+    // Task 77: Camera ID for cross-camera tracking
+    std::string m_cameraId;
 
     // Thread safety
     mutable std::mutex m_mutex;

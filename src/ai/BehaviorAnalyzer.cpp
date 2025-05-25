@@ -1,4 +1,5 @@
 #include "BehaviorAnalyzer.h"
+#include "../core/TaskManager.h"  // Task 77: For cross-camera tracking
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -275,8 +276,13 @@ std::vector<BehaviorEvent> BehaviorAnalyzer::checkIntrusionRules() {
                         50, 50
                     );
 
+                    // Task 77: Get global track ID from TaskManager for cross-camera persistence
+                    TaskManager& taskManager = TaskManager::getInstance();
+                    int globalTrackId = taskManager.getGlobalTrackId(m_cameraId, state.trackId);
+
+                    // Create enhanced BehaviorEvent with ReID information
                     BehaviorEvent event("intrusion", rule.id, std::to_string(state.trackId),
-                                      bbox, rule.confidence);
+                                      bbox, rule.confidence, state.trackId, globalTrackId, m_cameraId);
                     event.timestamp = generateTimestamp();
                     event.metadata = "Duration: " + std::to_string(duration) + "s, ROI: " + rule.roi.name;
 
@@ -561,8 +567,13 @@ std::vector<BehaviorEvent> BehaviorAnalyzer::checkIntrusionRulesWithPriority() {
                     50, 50
                 );
 
+                // Task 77: Get global track ID from TaskManager for cross-camera persistence
+                TaskManager& taskManager = TaskManager::getInstance();
+                int globalTrackId = taskManager.getGlobalTrackId(m_cameraId, state.trackId);
+
+                // Create enhanced BehaviorEvent with ReID information
                 BehaviorEvent event("intrusion", activeRule->id, std::to_string(state.trackId),
-                                  bbox, activeRule->confidence);
+                                  bbox, activeRule->confidence, state.trackId, globalTrackId, m_cameraId);
                 event.timestamp = generateTimestamp();
 
                 // Enhanced metadata with detailed conflict resolution information

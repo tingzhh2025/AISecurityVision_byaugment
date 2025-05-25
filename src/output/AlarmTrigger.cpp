@@ -30,6 +30,9 @@ std::string AlarmPayload::toJson() const {
          << "\"camera_id\":\"" << camera_id << "\","
          << "\"rule_id\":\"" << rule_id << "\","
          << "\"object_id\":\"" << object_id << "\","
+         << "\"reid_id\":\"" << reid_id << "\","                    // Task 77: Global ReID track ID
+         << "\"local_track_id\":" << local_track_id << ","         // Task 77: Local track ID
+         << "\"global_track_id\":" << global_track_id << ","       // Task 77: Global track ID
          << "\"confidence\":" << std::fixed << std::setprecision(3) << confidence << ","
          << "\"priority\":" << priority << ","
          << "\"timestamp\":\"" << timestamp << "\","
@@ -139,6 +142,12 @@ void AlarmTrigger::triggerTestAlarm(const std::string& eventType, const std::str
     payload.camera_id = cameraId;
     payload.rule_id = "test_rule";
     payload.object_id = "test_object";
+
+    // Task 77: Add ReID information for test alarms
+    payload.reid_id = "reid_test_999";  // Test ReID ID
+    payload.local_track_id = 999;       // Test local track ID
+    payload.global_track_id = 999;      // Test global track ID
+
     payload.confidence = 0.95;
     payload.timestamp = getCurrentTimestamp();
     payload.metadata = "Test alarm generated via API";
@@ -458,9 +467,17 @@ AlarmPayload AlarmTrigger::createAlarmPayload(const FrameResult& result, const B
     AlarmPayload payload;
 
     payload.event_type = event.eventType;
-    payload.camera_id = "camera_" + std::to_string(std::hash<std::string>{}(result.frame.data ? "active" : "inactive"));
+    payload.camera_id = event.cameraId.empty() ?
+        ("camera_" + std::to_string(std::hash<std::string>{}(result.frame.data ? "active" : "inactive"))) :
+        event.cameraId;
     payload.rule_id = event.ruleId;
     payload.object_id = event.objectId;
+
+    // Task 77: Populate ReID tracking information
+    payload.reid_id = event.reidId;
+    payload.local_track_id = event.localTrackId;
+    payload.global_track_id = event.globalTrackId;
+
     payload.confidence = event.confidence;
     payload.timestamp = event.timestamp.empty() ? getCurrentTimestamp() : event.timestamp;
     payload.metadata = event.metadata;

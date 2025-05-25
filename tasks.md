@@ -1538,13 +1538,15 @@ AISecurityVision/
 
 ---
 
-### 任务 77: Add unique ID persistence in API output for alarm events and video streams
+### 任务 77: Add unique ID persistence in API output for alarm events and video streams ✅
 
 **测试说明**: Trigger cross-camera movement event and verify through API response (HTTP POST/WebSocket) that the same 'reid_id' appears in alarms from different camera streams within 5-second window.
 
 **所属子史诗**: 14
 
-**状态**: todo
+**状态**: completed
+
+**完成总结**: ✅ ReID persistence in API output successfully implemented! Enhanced BehaviorEvent structure with reidId, localTrackId, globalTrackId, and cameraId fields. Updated AlarmPayload with reid_id, local_track_id, and global_track_id fields. Enhanced JSON serialization to include ReID information. Integrated TaskManager for global track ID lookup. Added camera ID management to BehaviorAnalyzer. Updated VideoPipeline to set camera ID automatically. Created comprehensive test suite for verification. All alarm events now include persistent unique identifiers for cross-camera tracking and correlation.
 
 ---
 

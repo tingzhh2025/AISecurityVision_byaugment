@@ -86,6 +86,9 @@ bool VideoPipeline::initialize() {
             return false;
         }
 
+        // Task 77: Set camera ID for cross-camera tracking
+        m_behaviorAnalyzer->setCameraId(m_source.id);
+
         // Initialize output modules
         m_recorder = std::make_unique<Recorder>();
         m_streamer = std::make_unique<Streamer>();

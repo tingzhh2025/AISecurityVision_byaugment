@@ -101,6 +101,9 @@ struct AlarmPayload {
     std::string camera_id;
     std::string rule_id;
     std::string object_id;
+    std::string reid_id;           // Task 77: Global ReID track ID for cross-camera persistence
+    int local_track_id = -1;       // Task 77: Local track ID as integer
+    int global_track_id = -1;      // Task 77: Global track ID as integer
     double confidence;
     std::string timestamp;
     std::string metadata;
