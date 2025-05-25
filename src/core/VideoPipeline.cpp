@@ -3,6 +3,7 @@
 #include "../video/FFmpegDecoder.h"
 #include "../ai/YOLOv8Detector.h"
 #include "../ai/ByteTracker.h"
+#include "../ai/ReIDExtractor.h"
 #include "../recognition/FaceRecognizer.h"
 #include "../recognition/LicensePlateRecognizer.h"
 #include "../ai/BehaviorAnalyzer.h"
@@ -54,6 +55,18 @@ bool VideoPipeline::initialize() {
             handleError("Failed to initialize ByteTracker");
             return false;
         }
+
+        // Initialize ReID extractor
+        m_reidExtractor = std::make_unique<ReIDExtractor>();
+        if (!m_reidExtractor->initialize()) {
+            handleError("Failed to initialize ReID extractor");
+            return false;
+        }
+
+        // Enable ReID tracking in ByteTracker
+        m_tracker->enableReIDTracking(true);
+        m_tracker->setReIDSimilarityThreshold(0.7f);
+        m_tracker->setReIDWeight(0.3f);
 
         // Initialize recognition modules
         m_faceRecognizer = std::make_unique<FaceRecognizer>();
@@ -222,12 +235,51 @@ void VideoPipeline::processFrame(const cv::Mat& frame, int64_t timestamp) {
 
     // Object detection
     if (m_detectionEnabled.load() && m_detector) {
-        result.detections = m_detector->detect(frame);
-    }
+        auto detectionResults = m_detector->detectObjects(frame);
 
-    // Object tracking
-    if (m_tracker && !result.detections.empty()) {
-        result.trackIds = m_tracker->update(result.detections);
+        // Extract bounding boxes and class information
+        for (const auto& detection : detectionResults) {
+            result.detections.push_back(detection.bbox);
+            result.labels.push_back(detection.className);
+        }
+
+        // Extract confidences and class IDs for tracking
+        std::vector<float> confidences;
+        std::vector<int> classIds;
+        for (const auto& detection : detectionResults) {
+            confidences.push_back(detection.confidence);
+            classIds.push_back(detection.classId);
+        }
+
+        // ReID feature extraction
+        if (m_reidExtractor && !result.detections.empty()) {
+            auto reidEmbeddings = m_reidExtractor->extractFeatures(
+                frame, result.detections, {}, classIds, confidences);
+
+            // Extract feature vectors for tracking
+            std::vector<std::vector<float>> reidFeatures;
+            for (const auto& embedding : reidEmbeddings) {
+                reidFeatures.push_back(embedding.features);
+                result.reidEmbeddings.push_back(embedding.features);
+            }
+
+            // Object tracking with ReID features
+            if (m_tracker) {
+                result.trackIds = m_tracker->updateWithReIDFeatures(
+                    result.detections, confidences, classIds, reidFeatures);
+
+                std::cout << "[VideoPipeline] Processed " << result.detections.size()
+                          << " detections with " << reidEmbeddings.size()
+                          << " ReID embeddings (dim="
+                          << (reidEmbeddings.empty() ? 0 : reidEmbeddings[0].getDimension())
+                          << ")" << std::endl;
+            }
+        } else {
+            // Fallback to regular tracking without ReID
+            if (m_tracker) {
+                result.trackIds = m_tracker->updateWithClasses(result.detections, confidences, classIds);
+            }
+        }
     }
 
     // Face recognition

@@ -1,13 +1,15 @@
 #include "ByteTracker.h"
+#include "ReIDExtractor.h"
 #include <iostream>
 #include <algorithm>
 #include <numeric>
+#include <chrono>
 
 // Track implementation
 ByteTracker::Track::Track(int id, const cv::Rect& box, float conf, int cls)
     : trackId(id), bbox(box), confidence(conf), classId(cls)
     , state(TrackState::New), framesSinceUpdate(0), age(0)
-    , velocity(0, 0) {
+    , velocity(0, 0), hasReIDFeatures(false), lastReIDUpdate(0) {
 
     // Initialize Kalman filter for this track
     kalmanFilter.init(8, 4, 0); // 8 state variables, 4 measurements
@@ -91,6 +93,42 @@ cv::Rect ByteTracker::Track::getPredictedBbox() const {
     return bbox;
 }
 
+void ByteTracker::Track::updateReIDFeatures(const std::vector<float>& features) {
+    if (!features.empty()) {
+        reidFeatures = features;
+        hasReIDFeatures = true;
+        lastReIDUpdate = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+    }
+}
+
+bool ByteTracker::Track::hasValidReIDFeatures() const {
+    return hasReIDFeatures && !reidFeatures.empty();
+}
+
+float ByteTracker::Track::computeReIDSimilarity(const Track& other) const {
+    if (!hasValidReIDFeatures() || !other.hasValidReIDFeatures()) {
+        return 0.0f;
+    }
+
+    // Compute cosine similarity
+    float dotProduct = 0.0f;
+    float norm1 = 0.0f;
+    float norm2 = 0.0f;
+
+    for (size_t i = 0; i < reidFeatures.size() && i < other.reidFeatures.size(); ++i) {
+        dotProduct += reidFeatures[i] * other.reidFeatures[i];
+        norm1 += reidFeatures[i] * reidFeatures[i];
+        norm2 += other.reidFeatures[i] * other.reidFeatures[i];
+    }
+
+    if (norm1 == 0.0f || norm2 == 0.0f) {
+        return 0.0f;
+    }
+
+    return dotProduct / (std::sqrt(norm1) * std::sqrt(norm2));
+}
+
 // ByteTracker implementation
 ByteTracker::ByteTracker()
     : m_trackThreshold(0.5f)
@@ -98,6 +136,9 @@ ByteTracker::ByteTracker()
     , m_matchThreshold(0.8f)
     , m_maxLostFrames(30)
     , m_minTrackLength(3)
+    , m_reidSimilarityThreshold(0.7f)
+    , m_reidWeight(0.3f)
+    , m_reidTrackingEnabled(false)
     , m_nextTrackId(1)
     , m_frameCount(0)
     , m_totalTracks(0) {
@@ -212,6 +253,22 @@ void ByteTracker::setMaxLostFrames(int frames) {
 
 void ByteTracker::setMinTrackLength(int length) {
     m_minTrackLength = std::max(1, length);
+}
+
+// ReID configuration methods
+void ByteTracker::setReIDSimilarityThreshold(float threshold) {
+    m_reidSimilarityThreshold = std::max(0.0f, std::min(1.0f, threshold));
+    std::cout << "[ByteTracker] ReID similarity threshold set to: " << m_reidSimilarityThreshold << std::endl;
+}
+
+void ByteTracker::setReIDWeight(float weight) {
+    m_reidWeight = std::max(0.0f, std::min(1.0f, weight));
+    std::cout << "[ByteTracker] ReID weight set to: " << m_reidWeight << std::endl;
+}
+
+void ByteTracker::enableReIDTracking(bool enabled) {
+    m_reidTrackingEnabled = enabled;
+    std::cout << "[ByteTracker] ReID tracking " << (enabled ? "enabled" : "disabled") << std::endl;
 }
 
 // Statistics methods
@@ -456,4 +513,212 @@ cv::KalmanFilter ByteTracker::createKalmanFilter(const cv::Rect& bbox) const {
     cv::setIdentity(kf.errorCovPost, cv::Scalar::all(1));
 
     return kf;
+}
+
+// ReID-enhanced tracking methods
+std::vector<int> ByteTracker::updateWithReIDFeatures(const std::vector<cv::Rect>& detections,
+                                                    const std::vector<float>& confidences,
+                                                    const std::vector<int>& classIds,
+                                                    const std::vector<std::vector<float>>& reidFeatures) {
+    m_frameCount++;
+
+    // Predict all existing tracks
+    predictTracks();
+
+    // Associate detections with tracks using ReID features
+    if (m_reidTrackingEnabled && !reidFeatures.empty()) {
+        associateDetectionsWithReID(detections, confidences, classIds, reidFeatures);
+    } else {
+        associateDetections(detections, confidences, classIds);
+    }
+
+    // Update track states and remove dead tracks
+    updateTrackStates();
+    removeDeadTracks();
+
+    // Return track IDs for active tracks
+    std::vector<int> trackIds;
+    for (const auto& track : m_activeTracks) {
+        trackIds.push_back(track->trackId);
+    }
+
+    return trackIds;
+}
+
+void ByteTracker::associateDetectionsWithReID(const std::vector<cv::Rect>& detections,
+                                             const std::vector<float>& confidences,
+                                             const std::vector<int>& classIds,
+                                             const std::vector<std::vector<float>>& reidFeatures) {
+
+    // Separate high and low confidence detections
+    std::vector<cv::Rect> highDetections, lowDetections;
+    std::vector<float> highConfidences, lowConfidences;
+    std::vector<int> highClassIds, lowClassIds;
+    std::vector<std::vector<float>> highReIDFeatures, lowReIDFeatures;
+
+    for (size_t i = 0; i < detections.size(); ++i) {
+        if (confidences[i] >= m_highThreshold) {
+            highDetections.push_back(detections[i]);
+            highConfidences.push_back(confidences[i]);
+            highClassIds.push_back(classIds[i]);
+            if (i < reidFeatures.size()) {
+                highReIDFeatures.push_back(reidFeatures[i]);
+            }
+        } else if (confidences[i] >= m_trackThreshold) {
+            lowDetections.push_back(detections[i]);
+            lowConfidences.push_back(confidences[i]);
+            lowClassIds.push_back(classIds[i]);
+            if (i < reidFeatures.size()) {
+                lowReIDFeatures.push_back(reidFeatures[i]);
+            }
+        }
+    }
+
+    // Compute IoU and ReID similarity matrices
+    auto iouMatrix = computeIoUMatrix(highDetections, m_activeTracks);
+    auto reidMatrix = computeReIDSimilarityMatrix(highReIDFeatures, m_activeTracks);
+
+    // Combine IoU and ReID similarities
+    auto combinedMatrix = computeCombinedCostMatrix(iouMatrix, reidMatrix);
+    auto assignments = hungarianAssignment(combinedMatrix);
+
+    std::vector<bool> detectionMatched(highDetections.size(), false);
+    std::vector<bool> trackMatched(m_activeTracks.size(), false);
+
+    // Update matched tracks with ReID features
+    for (const auto& assignment : assignments) {
+        int detIdx = assignment.first;
+        int trackIdx = assignment.second;
+
+        m_activeTracks[trackIdx]->update(highDetections[detIdx], highConfidences[detIdx]);
+
+        // Update ReID features if available
+        if (detIdx < static_cast<int>(highReIDFeatures.size())) {
+            m_activeTracks[trackIdx]->updateReIDFeatures(highReIDFeatures[detIdx]);
+        }
+
+        detectionMatched[detIdx] = true;
+        trackMatched[trackIdx] = true;
+    }
+
+    // Move unmatched active tracks to lost
+    for (size_t i = 0; i < m_activeTracks.size(); ++i) {
+        if (!trackMatched[i]) {
+            m_activeTracks[i]->state = TrackState::Lost;
+            m_lostTracks.push_back(m_activeTracks[i]);
+        }
+    }
+
+    // Remove matched tracks from active list
+    auto newEnd = std::remove_if(m_activeTracks.begin(), m_activeTracks.end(),
+        [](const std::shared_ptr<Track>& track) {
+            return track->state == TrackState::Lost;
+        });
+    m_activeTracks.erase(newEnd, m_activeTracks.end());
+
+    // Create new tracks from unmatched high confidence detections
+    std::vector<cv::Rect> unmatchedDetections;
+    std::vector<float> unmatchedConfidences;
+    std::vector<int> unmatchedClassIds;
+    std::vector<std::vector<float>> unmatchedReIDFeatures;
+
+    for (size_t i = 0; i < highDetections.size(); ++i) {
+        if (!detectionMatched[i]) {
+            unmatchedDetections.push_back(highDetections[i]);
+            unmatchedConfidences.push_back(highConfidences[i]);
+            unmatchedClassIds.push_back(highClassIds[i]);
+            if (i < highReIDFeatures.size()) {
+                unmatchedReIDFeatures.push_back(highReIDFeatures[i]);
+            }
+        }
+    }
+
+    initNewTracksWithReID(unmatchedDetections, unmatchedConfidences, unmatchedClassIds, unmatchedReIDFeatures);
+}
+
+void ByteTracker::initNewTracksWithReID(const std::vector<cv::Rect>& unmatched_detections,
+                                       const std::vector<float>& confidences,
+                                       const std::vector<int>& classIds,
+                                       const std::vector<std::vector<float>>& reidFeatures) {
+
+    for (size_t i = 0; i < unmatched_detections.size(); ++i) {
+        auto newTrack = std::make_shared<Track>(m_nextTrackId++,
+                                               unmatched_detections[i],
+                                               confidences[i],
+                                               classIds[i]);
+
+        // Add ReID features if available
+        if (i < reidFeatures.size() && !reidFeatures[i].empty()) {
+            newTrack->updateReIDFeatures(reidFeatures[i]);
+        }
+
+        m_tracks[newTrack->trackId] = newTrack;
+        m_activeTracks.push_back(newTrack);
+        m_totalTracks++;
+    }
+}
+
+// ReID utility methods
+std::vector<std::vector<float>> ByteTracker::computeReIDSimilarityMatrix(
+    const std::vector<std::vector<float>>& detectionFeatures,
+    const std::vector<std::shared_ptr<Track>>& tracks) {
+
+    std::vector<std::vector<float>> similarityMatrix(detectionFeatures.size(),
+                                                    std::vector<float>(tracks.size(), 0.0f));
+
+    for (size_t i = 0; i < detectionFeatures.size(); ++i) {
+        for (size_t j = 0; j < tracks.size(); ++j) {
+            if (!detectionFeatures[i].empty() && tracks[j]->hasValidReIDFeatures()) {
+                similarityMatrix[i][j] = computeReIDSimilarity(detectionFeatures[i], tracks[j]->reidFeatures);
+            }
+        }
+    }
+
+    return similarityMatrix;
+}
+
+std::vector<std::vector<float>> ByteTracker::computeCombinedCostMatrix(
+    const std::vector<std::vector<float>>& iouMatrix,
+    const std::vector<std::vector<float>>& reidMatrix) {
+
+    if (iouMatrix.size() != reidMatrix.size() ||
+        (iouMatrix.size() > 0 && iouMatrix[0].size() != reidMatrix[0].size())) {
+        return iouMatrix; // Fallback to IoU only
+    }
+
+    std::vector<std::vector<float>> combinedMatrix(iouMatrix.size(),
+                                                  std::vector<float>(iouMatrix.empty() ? 0 : iouMatrix[0].size(), 0.0f));
+
+    for (size_t i = 0; i < iouMatrix.size(); ++i) {
+        for (size_t j = 0; j < iouMatrix[i].size(); ++j) {
+            // Combine IoU and ReID similarity with weights
+            float iouWeight = 1.0f - m_reidWeight;
+            combinedMatrix[i][j] = iouWeight * iouMatrix[i][j] + m_reidWeight * reidMatrix[i][j];
+        }
+    }
+
+    return combinedMatrix;
+}
+
+float ByteTracker::computeReIDSimilarity(const std::vector<float>& features1,
+                                        const std::vector<float>& features2) const {
+    if (features1.size() != features2.size() || features1.empty()) {
+        return 0.0f;
+    }
+
+    float dotProduct = 0.0f;
+    float norm1 = 0.0f;
+    float norm2 = 0.0f;
+
+    for (size_t i = 0; i < features1.size(); ++i) {
+        dotProduct += features1[i] * features2[i];
+        norm1 += features1[i] * features1[i];
+        norm2 += features2[i] * features2[i];
+    }
+
+    if (norm1 == 0.0f || norm2 == 0.0f) {
+        return 0.0f;
+    }
+
+    return dotProduct / (std::sqrt(norm1) * std::sqrt(norm2));
 }

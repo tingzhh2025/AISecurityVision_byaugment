@@ -12,6 +12,7 @@
 class FFmpegDecoder;
 class YOLOv8Detector;
 class ByteTracker;
+class ReIDExtractor;
 class FaceRecognizer;
 class LicensePlateRecognizer;
 class BehaviorAnalyzer;
@@ -125,6 +126,7 @@ private:
     std::unique_ptr<FFmpegDecoder> m_decoder;
     std::unique_ptr<YOLOv8Detector> m_detector;
     std::unique_ptr<ByteTracker> m_tracker;
+    std::unique_ptr<ReIDExtractor> m_reidExtractor;
     std::unique_ptr<FaceRecognizer> m_faceRecognizer;
     std::unique_ptr<LicensePlateRecognizer> m_plateRecognizer;
     std::unique_ptr<BehaviorAnalyzer> m_behaviorAnalyzer;
@@ -174,6 +176,7 @@ struct FrameResult {
     std::vector<cv::Rect> detections;
     std::vector<int> trackIds;
     std::vector<std::string> labels;  // Detection class labels
+    std::vector<std::vector<float>> reidEmbeddings;  // Task 74: ReID feature vectors
     std::vector<std::string> faceIds;
     std::vector<std::string> plateNumbers;
     std::vector<BehaviorEvent> events;  // Changed from std::string to BehaviorEvent
