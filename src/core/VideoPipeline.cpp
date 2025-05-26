@@ -515,7 +515,8 @@ bool VideoSource::isValid() const {
         return false;
     }
 
-    if (protocol != "rtsp" && protocol != "onvif" && protocol != "gb28181") {
+    if (protocol != "rtsp" && protocol != "onvif" && protocol != "gb28181" &&
+        protocol != "rtmp" && protocol != "http" && protocol != "file") {
         return false;
     }
 

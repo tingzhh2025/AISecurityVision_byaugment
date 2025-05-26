@@ -281,7 +281,7 @@ std::vector<float> ReIDExtractor::generateHandcraftedFeatures(const cv::Mat& roi
         for (int c = 0; c < 3 && featureIdx < m_featureDimension - 16; ++c) {
             cv::Mat hist;
             int histSize = 16;
-            float range[] = {0, c == 0 ? 180 : 256}; // Hue range is 0-180
+            float range[] = {0.0f, c == 0 ? 180.0f : 256.0f}; // Hue range is 0-180
             const float* histRange = {range};
             cv::calcHist(&channels[c], 1, 0, cv::Mat(), hist, 1, &histSize, &histRange);
             cv::normalize(hist, hist, 0, 1, cv::NORM_L2);

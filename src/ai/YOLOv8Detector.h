@@ -1,23 +1,42 @@
 #pragma once
 
 #include <opencv2/opencv.hpp>
+#include <opencv2/dnn.hpp>
 #include <vector>
 #include <string>
 #include <memory>
 
+#ifdef HAVE_RKNN
+#include "rknn_api.h"
+#else
+// Forward declaration for RKNN when not available
+typedef void* rknn_context;
+#endif
+
 /**
- * @brief YOLOv8 object detector with TensorRT optimization
+ * @brief YOLOv8 object detector with multiple backend support
  *
  * This class implements object detection using YOLOv8 model
- * optimized for TensorRT inference on NVIDIA GPUs.
+ * with support for multiple inference backends:
+ * - RKNN RKNPU2 (for RK3588 and other Rockchip NPUs)
+ * - OpenCV DNN (CPU fallback)
+ * - TensorRT (NVIDIA GPUs)
  *
  * Features:
  * - YOLOv8n/s/m/l/x model support
+ * - RKNN NPU acceleration for RK3588
  * - TensorRT FP16/INT8 optimization
  * - Batch processing capability
  * - NMS post-processing
  * - COCO class detection
  */
+
+enum class InferenceBackend {
+    AUTO,      // Automatically select best available backend
+    RKNN,      // RKNN NPU backend
+    OPENCV,    // OpenCV DNN backend
+    TENSORRT   // TensorRT backend
+};
 class YOLOv8Detector {
 public:
     // Detection result structure
@@ -32,9 +51,14 @@ public:
     ~YOLOv8Detector();
 
     // Initialization
-    bool initialize(const std::string& modelPath = "models/yolov8n.onnx");
+    bool initialize(const std::string& modelPath = "models/yolov8n.onnx",
+                   InferenceBackend backend = InferenceBackend::AUTO);
     void cleanup();
     bool isInitialized() const;
+
+    // Backend information
+    InferenceBackend getCurrentBackend() const;
+    std::string getBackendName() const;
 
     // Detection
     std::vector<Detection> detectObjects(const cv::Mat& frame);
@@ -58,6 +82,18 @@ public:
     float getAverageInferenceTime() const;
 
 private:
+    // Backend selection
+    InferenceBackend m_backend;
+    InferenceBackend m_requestedBackend;
+
+    // RKNN context and buffers
+    rknn_context m_rknnContext;
+    void* m_rknnInputBuffer;
+    void* m_rknnOutputBuffer;
+
+    // OpenCV DNN network
+    cv::dnn::Net m_dnnNet;
+
     // TensorRT engine and context
     void* m_engine;
     void* m_context;
@@ -96,4 +132,27 @@ private:
     void initializeClassNames();
     bool allocateBuffers();
     void deallocateBuffers();
+
+    // Backend-specific methods
+    bool initializeRKNN(const std::string& modelPath);
+    bool initializeOpenCV(const std::string& modelPath);
+    bool initializeTensorRT(const std::string& modelPath);
+
+    std::vector<Detection> detectWithRKNN(const cv::Mat& frame);
+    std::vector<Detection> detectWithOpenCV(const cv::Mat& frame);
+    std::vector<Detection> detectWithTensorRT(const cv::Mat& frame);
+
+    void cleanupRKNN();
+    void cleanupOpenCV();
+    void cleanupTensorRT();
+
+    // RKNN-specific helper methods
+    cv::Mat preprocessImageForRKNN(const cv::Mat& image);
+    std::vector<Detection> postprocessRKNNResults(const float* output, const cv::Size& originalSize);
+
+    // Simulation method for fallback
+    std::vector<Detection> simulateDetection(const cv::Mat& frame);
+
+    // Backend detection
+    InferenceBackend detectBestBackend() const;
 };

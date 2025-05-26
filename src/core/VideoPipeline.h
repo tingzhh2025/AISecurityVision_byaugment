@@ -33,8 +33,9 @@ struct StreamConfig;
 // VideoSource definition (moved from TaskManager.h to avoid circular dependency)
 struct VideoSource {
     std::string id;
+    std::string name;
     std::string url;
-    std::string protocol; // "rtsp", "onvif", "gb28181"
+    std::string protocol; // "rtsp", "onvif", "gb28181", "rtmp", "http", "file"
     std::string username;
     std::string password;
     int width = 1920;

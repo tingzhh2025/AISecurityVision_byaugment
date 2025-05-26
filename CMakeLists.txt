@@ -84,6 +84,34 @@ if(NVML_LIBRARIES)
     )
 endif()
 
+# Find RKNN libraries for Rockchip NPU support
+find_library(RKNN_API_LIBRARY rknn_api
+    PATHS
+    /usr/lib
+    /usr/local/lib
+    /usr/lib/aarch64-linux-gnu
+    /usr/lib/arm-linux-gnueabihf
+    /opt/rknn/lib
+    /opt/rknn/lib64
+)
+
+find_path(RKNN_API_INCLUDE_DIR rknn_api.h
+    PATHS
+    /usr/include
+    /usr/local/include
+    /opt/rknn/include
+)
+
+if(RKNN_API_LIBRARY AND RKNN_API_INCLUDE_DIR)
+    set(RKNN_FOUND TRUE)
+    set(RKNN_LIBRARIES ${RKNN_API_LIBRARY})
+    set(RKNN_INCLUDE_DIRS ${RKNN_API_INCLUDE_DIR})
+    message(STATUS "Found RKNN API: ${RKNN_API_LIBRARY}")
+else()
+    set(RKNN_FOUND FALSE)
+    message(STATUS "RKNN API not found - NPU acceleration will not be available")
+endif()
+
 # Find libcurl for HTTP alarm delivery
 find_package(CURL REQUIRED)
 if(CURL_FOUND)
@@ -265,6 +293,18 @@ add_executable(${PROJECT_NAME}
 # Link libraries
 set(LINK_LIBRARIES ${OpenCV_LIBS} pthread dl)
 
+# Explicitly add OpenCV DNN library if not included
+list(FIND OpenCV_LIBS "opencv_dnn" DNN_FOUND)
+if(DNN_FOUND EQUAL -1)
+    find_library(OPENCV_DNN_LIB opencv_dnn PATHS ${OpenCV_INSTALL_PATH}/lib)
+    if(OPENCV_DNN_LIB)
+        list(APPEND LINK_LIBRARIES ${OPENCV_DNN_LIB})
+        message(STATUS "Added OpenCV DNN library: ${OPENCV_DNN_LIB}")
+    else()
+        message(WARNING "OpenCV DNN library not found, some features may not work")
+    endif()
+endif()
+
 # Add SQLite3 if found
 if(SQLITE3_FOUND)
     list(APPEND LINK_LIBRARIES ${SQLITE3_LIBRARIES})
@@ -287,6 +327,13 @@ if(NVML_FOUND)
         include_directories(${NVML_INCLUDE_DIRS})
     endif()
     target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_NVML)
+endif()
+
+# Add RKNN if found
+if(RKNN_FOUND)
+    list(APPEND LINK_LIBRARIES ${RKNN_LIBRARIES})
+    include_directories(${RKNN_INCLUDE_DIRS})
+    target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_RKNN)
 endif()
 
 # Add libcurl
@@ -317,10 +364,58 @@ target_link_libraries(${PROJECT_NAME} ${LINK_LIBRARIES})
 # Compiler-specific options
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_17)
 
+# Create test executable for RKNN YOLOv8
+add_executable(test_rknn_yolov8
+    test_rknn_yolov8.cpp
+    ${SOURCES}
+)
+
+# Create test executable for RTSP streams
+add_executable(test_rtsp_streams
+    test_rtsp_streams.cpp
+    ${SOURCES}
+)
+
+target_link_libraries(test_rknn_yolov8 ${LINK_LIBRARIES})
+target_compile_features(test_rknn_yolov8 PRIVATE cxx_std_17)
+
+target_link_libraries(test_rtsp_streams ${LINK_LIBRARIES})
+target_compile_features(test_rtsp_streams PRIVATE cxx_std_17)
+
+# Add compile definitions for test executables
+if(RKNN_FOUND)
+    target_compile_definitions(test_rknn_yolov8 PRIVATE HAVE_RKNN)
+    target_compile_definitions(test_rtsp_streams PRIVATE HAVE_RKNN)
+endif()
+if(LIBAV_FOUND)
+    target_compile_definitions(test_rknn_yolov8 PRIVATE HAVE_FFMPEG)
+    target_compile_definitions(test_rtsp_streams PRIVATE HAVE_FFMPEG)
+endif()
+if(NVML_FOUND)
+    target_compile_definitions(test_rknn_yolov8 PRIVATE HAVE_NVML)
+    target_compile_definitions(test_rtsp_streams PRIVATE HAVE_NVML)
+endif()
+if(WEBSOCKETPP_INCLUDE_DIR)
+    if(Boost_FOUND)
+        target_compile_definitions(test_rknn_yolov8 PRIVATE HAVE_WEBSOCKETPP)
+        target_compile_definitions(test_rtsp_streams PRIVATE HAVE_WEBSOCKETPP)
+    else()
+        target_compile_definitions(test_rknn_yolov8 PRIVATE HAVE_WEBSOCKETPP ASIO_STANDALONE)
+        target_compile_definitions(test_rtsp_streams PRIVATE HAVE_WEBSOCKETPP ASIO_STANDALONE)
+    endif()
+endif()
+if(PAHO_MQTT_CPP_FOUND AND PAHO_MQTT_CPP_LIBRARIES)
+    target_compile_definitions(test_rknn_yolov8 PRIVATE HAVE_PAHO_MQTT)
+    target_compile_definitions(test_rtsp_streams PRIVATE HAVE_PAHO_MQTT)
+endif()
+
 # Install targets
-install(TARGETS ${PROJECT_NAME} DESTINATION bin)
-install(DIRECTORY models/ DESTINATION share/${PROJECT_NAME}/models)
-install(DIRECTORY config/ DESTINATION share/${PROJECT_NAME}/config)
+install(TARGETS ${PROJECT_NAME} test_rknn_yolov8 test_rtsp_streams DESTINATION bin)
+install(DIRECTORY models/ DESTINATION share/${PROJECT_NAME}/models OPTIONAL)
+install(DIRECTORY config/ DESTINATION share/${PROJECT_NAME}/config OPTIONAL)
+install(FILES scripts/convert_yolov8_to_rknn.py DESTINATION share/${PROJECT_NAME}/scripts
+        PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+install(FILES docs/RKNN_SETUP_GUIDE.md DESTINATION share/${PROJECT_NAME}/docs)
 
 # Testing
 enable_testing()
@@ -333,4 +428,5 @@ message(STATUS "OpenCV version: ${OpenCV_VERSION}")
 message(STATUS "SQLite3 found: ${SQLITE3_FOUND}")
 message(STATUS "FFmpeg found: ${LIBAV_FOUND}")
 message(STATUS "NVML found: ${NVML_FOUND}")
+message(STATUS "RKNN found: ${RKNN_FOUND}")
 message(STATUS "libcurl found: ${CURL_FOUND}")

@@ -489,10 +489,74 @@ void APIService::handleGetStatus(const std::string& request, std::string& respon
 }
 
 void APIService::handlePostVideoSource(const std::string& request, std::string& response) {
-    // TODO: Parse JSON request to extract video source parameters
-    // For now, return a placeholder response
+    try {
+        // Parse JSON request to extract video source parameters
+        std::string id = parseJsonField(request, "id");
+        std::string name = parseJsonField(request, "name");
+        std::string url = parseJsonField(request, "url");
+        std::string protocol = parseJsonField(request, "protocol");
+        int width = parseJsonInt(request, "width", 1920);
+        int height = parseJsonInt(request, "height", 1080);
+        int fps = parseJsonInt(request, "fps", 25);
+        bool enabled = parseJsonBool(request, "enabled", true);
 
-    response = createJsonResponse("{\"message\":\"Video source endpoint not implemented yet\"}");
+        // Validate required fields
+        if (id.empty()) {
+            response = createErrorResponse("id is required", 400);
+            return;
+        }
+        if (url.empty()) {
+            response = createErrorResponse("url is required", 400);
+            return;
+        }
+        if (protocol.empty()) {
+            response = createErrorResponse("protocol is required", 400);
+            return;
+        }
+
+        // Validate protocol
+        if (protocol != "rtsp" && protocol != "rtmp" && protocol != "http" && protocol != "file") {
+            response = createErrorResponse("Invalid protocol. Supported: rtsp, rtmp, http, file", 400);
+            return;
+        }
+
+        // Create VideoSource object
+        VideoSource source;
+        source.id = id;
+        source.name = name.empty() ? id : name;
+        source.url = url;
+        source.protocol = protocol;
+        source.width = width;
+        source.height = height;
+        source.fps = fps;
+        source.enabled = enabled;
+
+        // Add to TaskManager
+        TaskManager& taskManager = TaskManager::getInstance();
+        if (taskManager.addVideoSource(source)) {
+            std::ostringstream json;
+            json << "{"
+                 << "\"status\":\"added\","
+                 << "\"id\":\"" << id << "\","
+                 << "\"name\":\"" << source.name << "\","
+                 << "\"url\":\"" << url << "\","
+                 << "\"protocol\":\"" << protocol << "\","
+                 << "\"width\":" << width << ","
+                 << "\"height\":" << height << ","
+                 << "\"fps\":" << fps << ","
+                 << "\"enabled\":" << (enabled ? "true" : "false") << ","
+                 << "\"added_at\":\"" << getCurrentTimestamp() << "\""
+                 << "}";
+
+            response = createJsonResponse(json.str(), 201);
+            std::cout << "[APIService] Added video source: " << id << " (" << protocol << ")" << std::endl;
+        } else {
+            response = createErrorResponse("Failed to add video source. Check if ID already exists or maximum limit reached.", 409);
+        }
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to parse video source request: " + std::string(e.what()), 400);
+    }
 }
 
 void APIService::handleDeleteVideoSource(const std::string& request, std::string& response) {
