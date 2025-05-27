@@ -75,18 +75,32 @@ bool YOLOv8Detector::initialize(const std::string& modelPath, InferenceBackend b
         if (!success && m_requestedBackend == InferenceBackend::AUTO) {
             std::cout << "[YOLOv8Detector] Primary backend failed, trying fallbacks..." << std::endl;
 
-            // Try RKNN first if not already tried
+            // Try RKNN first if not already tried and RKNN model exists
             if (m_backend != InferenceBackend::RKNN) {
-                std::cout << "[YOLOv8Detector] Trying RKNN backend..." << std::endl;
-                m_backend = InferenceBackend::RKNN;
-                success = initializeRKNN(modelPath);
+                std::string rknnModelPath = modelPath;
+                // If original path is ONNX, try to find corresponding RKNN model
+                if (modelPath.find(".onnx") != std::string::npos) {
+                    rknnModelPath = modelPath.substr(0, modelPath.find_last_of(".")) + ".rknn";
+                }
+
+                std::ifstream rknnFile(rknnModelPath);
+                if (rknnFile.good()) {
+                    std::cout << "[YOLOv8Detector] Trying RKNN backend with model: " << rknnModelPath << std::endl;
+                    m_backend = InferenceBackend::RKNN;
+                    success = initializeRKNN(rknnModelPath);
+                }
             }
 
             // Try OpenCV as fallback
             if (!success) {
                 std::cout << "[YOLOv8Detector] Trying OpenCV backend..." << std::endl;
                 m_backend = InferenceBackend::OPENCV;
-                success = initializeOpenCV(modelPath);
+                // For OpenCV, try ONNX model if available
+                std::string onnxModelPath = modelPath;
+                if (modelPath.find(".rknn") != std::string::npos) {
+                    onnxModelPath = modelPath.substr(0, modelPath.find_last_of(".")) + ".onnx";
+                }
+                success = initializeOpenCV(onnxModelPath);
             }
         }
 
@@ -582,12 +596,11 @@ cv::Mat YOLOv8Detector::preprocessImageForRKNN(const cv::Mat& image) {
 std::vector<YOLOv8Detector::Detection> YOLOv8Detector::postprocessRKNNResults(const float* output, const cv::Size& originalSize) {
     std::vector<Detection> detections;
 
-    // YOLOv8 output format: [batch, 84, 8400] where 84 = 4 (bbox) + 80 (classes)
-    // For now, implement a simplified post-processing
-    // In a real implementation, this would parse the actual RKNN output format
-
+    // YOLOv8 output format: [1, 84, 8400] where 84 = 4 (bbox) + 80 (classes)
+    // The output is transposed compared to the original format
     const int numClasses = 80;
     const int numBoxes = 8400;
+    const int outputDim = 84; // 4 bbox + 80 classes
     const float confThreshold = m_confidenceThreshold;
 
     std::vector<cv::Rect> boxes;
@@ -598,21 +611,20 @@ std::vector<YOLOv8Detector::Detection> YOLOv8Detector::postprocessRKNNResults(co
     float scaleX = static_cast<float>(originalSize.width) / m_inputWidth;
     float scaleY = static_cast<float>(originalSize.height) / m_inputHeight;
 
-    // Parse output (simplified - actual format may vary)
+    // YOLOv8 RKNN output format: [84, 8400] (transposed)
+    // Each column represents one detection
     for (int i = 0; i < numBoxes; i++) {
-        const float* detection = output + i * (4 + numClasses);
-
         // Get bounding box coordinates (center_x, center_y, width, height)
-        float centerX = detection[0];
-        float centerY = detection[1];
-        float width = detection[2];
-        float height = detection[3];
+        float centerX = output[i];                    // First row: center_x
+        float centerY = output[numBoxes + i];         // Second row: center_y
+        float width = output[2 * numBoxes + i];       // Third row: width
+        float height = output[3 * numBoxes + i];      // Fourth row: height
 
         // Find class with highest confidence
         float maxConf = 0.0f;
         int maxClassId = -1;
         for (int c = 0; c < numClasses; c++) {
-            float conf = detection[4 + c];
+            float conf = output[(4 + c) * numBoxes + i]; // Class confidence
             if (conf > maxConf) {
                 maxConf = conf;
                 maxClassId = c;
@@ -620,11 +632,24 @@ std::vector<YOLOv8Detector::Detection> YOLOv8Detector::postprocessRKNNResults(co
         }
 
         if (maxConf > confThreshold) {
+            // Convert normalized coordinates to pixel coordinates
+            // YOLOv8 outputs normalized coordinates [0, 1]
+            centerX *= m_inputWidth;
+            centerY *= m_inputHeight;
+            width *= m_inputWidth;
+            height *= m_inputHeight;
+
             // Convert to top-left corner format and scale to original image
             int x = static_cast<int>((centerX - width / 2) * scaleX);
             int y = static_cast<int>((centerY - height / 2) * scaleY);
             int w = static_cast<int>(width * scaleX);
             int h = static_cast<int>(height * scaleY);
+
+            // Clamp to image boundaries
+            x = std::max(0, std::min(x, originalSize.width - 1));
+            y = std::max(0, std::min(y, originalSize.height - 1));
+            w = std::max(1, std::min(w, originalSize.width - x));
+            h = std::max(1, std::min(h, originalSize.height - y));
 
             boxes.push_back(cv::Rect(x, y, w, h));
             confidences.push_back(maxConf);
@@ -649,6 +674,9 @@ std::vector<YOLOv8Detector::Detection> YOLOv8Detector::postprocessRKNNResults(co
         }
         detections.push_back(detection);
     }
+
+    std::cout << "[YOLOv8Detector] RKNN post-processing: " << boxes.size()
+              << " raw detections -> " << detections.size() << " final detections" << std::endl;
 
     return detections;
 }

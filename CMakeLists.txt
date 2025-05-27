@@ -93,13 +93,32 @@ find_library(RKNN_API_LIBRARY rknn_api
     /usr/lib/arm-linux-gnueabihf
     /opt/rknn/lib
     /opt/rknn/lib64
+    ${CMAKE_SOURCE_DIR}/build/models/rknn_model_zoo/3rdparty/rknpu2/Linux/aarch64
+    ${CMAKE_SOURCE_DIR}/build/models/rknn_model_zoo/3rdparty/rknpu1/Linux/aarch64
 )
+
+# Also try to find librknnrt.so (RKNPU2 runtime library)
+if(NOT RKNN_API_LIBRARY)
+    find_library(RKNN_API_LIBRARY rknnrt
+        PATHS
+        /usr/lib
+        /usr/local/lib
+        /usr/lib/aarch64-linux-gnu
+        /usr/lib/arm-linux-gnueabihf
+        /opt/rknn/lib
+        /opt/rknn/lib64
+        ${CMAKE_SOURCE_DIR}/build/models/rknn_model_zoo/3rdparty/rknpu2/Linux/aarch64
+        ${CMAKE_SOURCE_DIR}/build/models/rknn_model_zoo/3rdparty/rknpu1/Linux/aarch64
+    )
+endif()
 
 find_path(RKNN_API_INCLUDE_DIR rknn_api.h
     PATHS
     /usr/include
     /usr/local/include
     /opt/rknn/include
+    ${CMAKE_SOURCE_DIR}/build/models/rknn_model_zoo/3rdparty/rknpu2/include
+    ${CMAKE_SOURCE_DIR}/build/models/rknn_model_zoo/3rdparty/rknpu1/include
 )
 
 if(RKNN_API_LIBRARY AND RKNN_API_INCLUDE_DIR)
@@ -376,20 +395,31 @@ add_executable(test_rtsp_streams
     ${SOURCES}
 )
 
+# Create test executable for RKNN integration
+add_executable(test_rknn_integration
+    test_rknn_integration.cpp
+    ${SOURCES}
+)
+
 target_link_libraries(test_rknn_yolov8 ${LINK_LIBRARIES})
 target_compile_features(test_rknn_yolov8 PRIVATE cxx_std_17)
 
 target_link_libraries(test_rtsp_streams ${LINK_LIBRARIES})
 target_compile_features(test_rtsp_streams PRIVATE cxx_std_17)
 
+target_link_libraries(test_rknn_integration ${LINK_LIBRARIES})
+target_compile_features(test_rknn_integration PRIVATE cxx_std_17)
+
 # Add compile definitions for test executables
 if(RKNN_FOUND)
     target_compile_definitions(test_rknn_yolov8 PRIVATE HAVE_RKNN)
     target_compile_definitions(test_rtsp_streams PRIVATE HAVE_RKNN)
+    target_compile_definitions(test_rknn_integration PRIVATE HAVE_RKNN)
 endif()
 if(LIBAV_FOUND)
     target_compile_definitions(test_rknn_yolov8 PRIVATE HAVE_FFMPEG)
     target_compile_definitions(test_rtsp_streams PRIVATE HAVE_FFMPEG)
+    target_compile_definitions(test_rknn_integration PRIVATE HAVE_FFMPEG)
 endif()
 if(NVML_FOUND)
     target_compile_definitions(test_rknn_yolov8 PRIVATE HAVE_NVML)

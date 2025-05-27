@@ -51,7 +51,7 @@ public:
     ~YOLOv8Detector();
 
     // Initialization
-    bool initialize(const std::string& modelPath = "models/yolov8n.onnx",
+    bool initialize(const std::string& modelPath = "models/yolov8n.rknn",
                    InferenceBackend backend = InferenceBackend::AUTO);
     void cleanup();
     bool isInitialized() const;
