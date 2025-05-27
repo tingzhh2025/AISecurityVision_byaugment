@@ -1,8 +1,8 @@
 # Tests CMakeLists.txt
-# TODO: Add unit tests for core components
+# Unit tests for core components
 
-# For now, create a placeholder test
-add_executable(test_basic test_basic.cpp)
+# Create basic test executable
+add_executable(test_basic cpp/test_basic.cpp)
 target_link_libraries(test_basic ${OpenCV_LIBS})
 
 # Add test

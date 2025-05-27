@@ -385,19 +385,19 @@ target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_17)
 
 # Create test executable for RKNN YOLOv8
 add_executable(test_rknn_yolov8
-    test_rknn_yolov8.cpp
+    tests/cpp/test_rknn_yolov8.cpp
     ${SOURCES}
 )
 
 # Create test executable for RTSP streams
 add_executable(test_rtsp_streams
-    test_rtsp_streams.cpp
+    tests/cpp/test_rtsp_streams.cpp
     ${SOURCES}
 )
 
 # Create test executable for RKNN integration
 add_executable(test_rknn_integration
-    test_rknn_integration.cpp
+    tests/cpp/test_rknn_integration.cpp
     ${SOURCES}
 )
 
