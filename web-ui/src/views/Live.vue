@@ -35,7 +35,7 @@
       :class="`layout-${currentLayout}`"
     >
       <div
-        v-for="(camera, index) in displayCameras"
+        v-for="(camera, index) in gridCells"
         :key="camera?.id || `empty-${index}`"
         class="video-cell"
         :class="{
@@ -323,7 +323,9 @@ const layouts = [
 ]
 
 // 计算属性
-const displayCameras = computed(() => {
+const cameras = computed(() => systemStore.cameras)
+
+const gridCells = computed(() => {
   const layoutSizes = {
     '1x1': 1,
     '2x2': 4,
@@ -332,14 +334,14 @@ const displayCameras = computed(() => {
   }
 
   const maxCameras = layoutSizes[currentLayout.value]
-  const cameras = [...systemStore.cameras]
+  const cameraList = [...systemStore.cameras]
 
   // 填充空白单元格
-  while (cameras.length < maxCameras) {
-    cameras.push(null)
+  while (cameraList.length < maxCameras) {
+    cameraList.push(null)
   }
 
-  return cameras.slice(0, maxCameras)
+  return cameraList.slice(0, maxCameras)
 })
 
 // 方法
@@ -528,7 +530,7 @@ const addCamera = async () => {
 let detectionSocket = null
 
 const connectDetectionSocket = () => {
-  const wsUrl = `ws://${window.location.host}/ws/detections`
+  const wsUrl = `ws://localhost:8080/ws/detections`
   detectionSocket = new WebSocket(wsUrl)
 
   detectionSocket.onmessage = (event) => {
@@ -552,8 +554,8 @@ onMounted(() => {
     selectedCamera.value = route.query.camera
   }
 
-  // 连接WebSocket接收检测结果
-  connectDetectionSocket()
+  // 连接WebSocket接收检测结果 (暂时禁用)
+  // connectDetectionSocket()
 
   // 初始加载流
   refreshStreams()
@@ -564,6 +566,8 @@ onUnmounted(() => {
     detectionSocket.close()
   }
 })
+
+// 在 <script setup> 中，所有顶层变量和函数都会自动暴露给模板
 </script>
 
 <style scoped>

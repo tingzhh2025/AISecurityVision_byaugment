@@ -4,18 +4,101 @@
 #include <chrono>
 #include <iomanip>
 #include <cstdlib>
+#include <fstream>
 #include "core/TaskManager.h"
 #include "core/VideoPipeline.h"
 #include "api/APIService.h"
+#include "nlohmann/json.hpp"
 
 #include "core/Logger.h"
 using namespace AISecurityVision;
+using json = nlohmann::json;
 // Global flag for graceful shutdown
 std::atomic<bool> g_running{true};
 
 void signalHandler(int signal) {
     LOG_INFO() << "\n[Main] Received signal " << signal << ", shutting down...";
     g_running.store(false);
+}
+
+struct CameraConfig {
+    std::string id;
+    std::string name;
+    std::string rtsp_url;
+    int mjpeg_port;
+    bool enabled;
+    bool detection_enabled;
+    bool recording_enabled;
+    struct {
+        float confidence_threshold;
+        float nms_threshold;
+        std::string backend;
+        std::string model_path;
+    } detection_config;
+    struct {
+        int fps;
+        int quality;
+        int max_width;
+        int max_height;
+    } stream_config;
+};
+
+std::vector<CameraConfig> loadCameraConfig(const std::string& configPath) {
+    std::vector<CameraConfig> cameras;
+
+    try {
+        std::ifstream file(configPath);
+        if (!file.is_open()) {
+            LOG_ERROR() << "[Config] Failed to open config file: " << configPath;
+            return cameras;
+        }
+
+        json config;
+        file >> config;
+
+        if (!config.contains("cameras")) {
+            LOG_ERROR() << "[Config] No 'cameras' section found in config file";
+            return cameras;
+        }
+
+        for (const auto& cam : config["cameras"]) {
+            CameraConfig camera;
+            camera.id = cam.value("id", "");
+            camera.name = cam.value("name", "");
+            camera.rtsp_url = cam.value("rtsp_url", "");
+            camera.mjpeg_port = cam.value("mjpeg_port", 8000);
+            camera.enabled = cam.value("enabled", true);
+            camera.detection_enabled = cam.value("detection_enabled", true);
+            camera.recording_enabled = cam.value("recording_enabled", false);
+
+            if (cam.contains("detection_config")) {
+                const auto& det = cam["detection_config"];
+                camera.detection_config.confidence_threshold = det.value("confidence_threshold", 0.5f);
+                camera.detection_config.nms_threshold = det.value("nms_threshold", 0.4f);
+                camera.detection_config.backend = det.value("backend", "RKNN");
+                camera.detection_config.model_path = det.value("model_path", "models/yolov8n.rknn");
+            }
+
+            if (cam.contains("stream_config")) {
+                const auto& stream = cam["stream_config"];
+                camera.stream_config.fps = stream.value("fps", 25);
+                camera.stream_config.quality = stream.value("quality", 80);
+                camera.stream_config.max_width = stream.value("max_width", 1280);
+                camera.stream_config.max_height = stream.value("max_height", 720);
+            }
+
+            cameras.push_back(camera);
+            LOG_INFO() << "[Config] Loaded camera: " << camera.id
+                      << " (port: " << camera.mjpeg_port << ")";
+        }
+
+        LOG_INFO() << "[Config] Successfully loaded " << cameras.size() << " cameras from " << configPath;
+
+    } catch (const std::exception& e) {
+        LOG_ERROR() << "[Config] Error parsing config file: " << e.what();
+    }
+
+    return cameras;
 }
 
 void printUsage(const char* programName) {
@@ -110,19 +193,51 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
-        // Test mode: Add video sources
-        if (testMode || useRealCameras) {
-            if (useRealCameras) {
-                LOG_INFO() << "[Main] Running with real RTSP cameras...";
+        // Load cameras from config file or use defaults
+        if (testMode || useRealCameras || !configFile.empty()) {
+            std::vector<VideoSource> cameras;
+
+            if (!configFile.empty()) {
+                LOG_INFO() << "[Main] Loading cameras from config file: " << configFile;
+                auto cameraConfigs = loadCameraConfig(configFile);
+
+                if (cameraConfigs.empty()) {
+                    LOG_ERROR() << "[Main] No cameras loaded from config file";
+                    return 1;
+                }
+
+                // Convert CameraConfig to VideoSource
+                for (const auto& camConfig : cameraConfigs) {
+                    if (!camConfig.enabled) {
+                        LOG_INFO() << "[Main] Skipping disabled camera: " << camConfig.id;
+                        continue;
+                    }
+
+                    VideoSource camera;
+                    camera.id = camConfig.id;
+                    camera.name = camConfig.name;
+                    camera.url = camConfig.rtsp_url;
+                    camera.protocol = "rtsp";
+                    camera.width = camConfig.stream_config.max_width;
+                    camera.height = camConfig.stream_config.max_height;
+                    camera.fps = camConfig.stream_config.fps;
+                    camera.mjpeg_port = camConfig.mjpeg_port; // Set MJPEG port from config
+                    camera.enabled = camConfig.enabled;
+
+                    cameras.push_back(camera);
+
+                    LOG_INFO() << "[Main] Configured camera: " << camera.id
+                              << " -> MJPEG port: " << camConfig.mjpeg_port;
+                }
+
+            } else if (useRealCameras) {
+                LOG_INFO() << "[Main] Running with real RTSP cameras (hardcoded)...";
                 if (optimizedMode) {
                     LOG_INFO() << "[Main] Using optimized multi-threaded RKNN detection with "
                               << detectionThreads << " threads";
                 }
 
-                // Add real RTSP cameras
-                std::vector<VideoSource> cameras;
-
-                // Camera 1
+                // Fallback to hardcoded cameras if no config file
                 VideoSource camera1;
                 camera1.id = "camera_01";
                 camera1.name = "Security Camera 1";
@@ -131,10 +246,10 @@ int main(int argc, char* argv[]) {
                 camera1.width = 1920;
                 camera1.height = 1080;
                 camera1.fps = 25;
+                camera1.mjpeg_port = 8161; // Default MJPEG port for camera 1
                 camera1.enabled = true;
                 cameras.push_back(camera1);
 
-                // Camera 2
                 VideoSource camera2;
                 camera2.id = "camera_02";
                 camera2.name = "Security Camera 2";
@@ -143,32 +258,10 @@ int main(int argc, char* argv[]) {
                 camera2.width = 1920;
                 camera2.height = 1080;
                 camera2.fps = 25;
+                camera2.mjpeg_port = 8162; // Default MJPEG port for camera 2
                 camera2.enabled = true;
                 cameras.push_back(camera2);
-
-                // Add cameras to TaskManager
-                for (const auto& camera : cameras) {
-                    LOG_INFO() << "[Main] Adding camera: " << camera.id << " (" << camera.url << ")";
-
-                    if (taskManager.addVideoSource(camera)) {
-                        LOG_INFO() << "[Main] Camera added successfully: " << camera.id;
-
-                        // Configure optimized detection if enabled
-                        if (optimizedMode) {
-                            auto pipeline = taskManager.getPipeline(camera.id);
-                            if (pipeline) {
-                                pipeline->setOptimizedDetectionEnabled(true);
-                                pipeline->setDetectionThreads(detectionThreads);
-                                LOG_INFO() << "[Main] Optimized detection enabled for " << camera.id
-                                          << " with " << detectionThreads << " threads";
-                            }
-                        }
-                    } else {
-                        LOG_ERROR() << "[Main] Failed to add camera: " << camera.id;
-                    }
-                }
-
-            } else {
+            } else if (testMode) {
                 LOG_INFO() << "[Main] Running in test mode...";
 
                 VideoSource testSource;
@@ -180,10 +273,28 @@ int main(int argc, char* argv[]) {
                 testSource.fps = 25;
                 testSource.enabled = true;
 
-                if (taskManager.addVideoSource(testSource)) {
-                    LOG_INFO() << "[Main] Test video source added successfully";
+                cameras.push_back(testSource);
+            }
+
+            // Add cameras to TaskManager
+            for (const auto& camera : cameras) {
+                LOG_INFO() << "[Main] Adding camera: " << camera.id << " (" << camera.url << ")";
+
+                if (taskManager.addVideoSource(camera)) {
+                    LOG_INFO() << "[Main] Camera added successfully: " << camera.id;
+
+                    // Configure optimized detection if enabled
+                    if (optimizedMode) {
+                        auto pipeline = taskManager.getPipeline(camera.id);
+                        if (pipeline) {
+                            pipeline->setOptimizedDetectionEnabled(true);
+                            pipeline->setDetectionThreads(detectionThreads);
+                            LOG_INFO() << "[Main] Optimized detection enabled for " << camera.id
+                                      << " with " << detectionThreads << " threads";
+                        }
+                    }
                 } else {
-                    LOG_ERROR() << "[Main] Failed to add test video source";
+                    LOG_ERROR() << "[Main] Failed to add camera: " << camera.id;
                 }
             }
         }

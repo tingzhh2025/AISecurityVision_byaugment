@@ -44,7 +44,12 @@ YOLOv8Detector::~YOLOv8Detector() {
 
 bool YOLOv8Detector::initialize(const std::string& modelPath, InferenceBackend backend) {
     LOG_INFO() << "[YOLOv8Detector] Initializing YOLOv8 detector...";
-    LOG_INFO() << "[YOLOv8Detector] Model path: " << modelPath;
+    // Fix model path - remove relative path prefix
+    std::string fixedModelPath = modelPath;
+    if (fixedModelPath.substr(0, 3) == "../") {
+        fixedModelPath = fixedModelPath.substr(3);
+    }
+    LOG_INFO() << "[YOLOv8Detector] Model path: " << fixedModelPath;
 
     m_requestedBackend = backend;
 
@@ -63,13 +68,13 @@ bool YOLOv8Detector::initialize(const std::string& modelPath, InferenceBackend b
         // Try to initialize with the selected backend
         switch (m_backend) {
             case InferenceBackend::RKNN:
-                success = initializeRKNN(modelPath);
+                success = initializeRKNN(fixedModelPath);
                 break;
             case InferenceBackend::OPENCV:
-                success = initializeOpenCV(modelPath);
+                success = initializeOpenCV(fixedModelPath);
                 break;
             case InferenceBackend::TENSORRT:
-                success = initializeTensorRT(modelPath);
+                success = initializeTensorRT(fixedModelPath);
                 break;
             default:
                 LOG_ERROR() << "[YOLOv8Detector] Unknown backend";
@@ -82,10 +87,10 @@ bool YOLOv8Detector::initialize(const std::string& modelPath, InferenceBackend b
 
             // Try RKNN first if not already tried and RKNN model exists
             if (m_backend != InferenceBackend::RKNN) {
-                std::string rknnModelPath = modelPath;
+                std::string rknnModelPath = fixedModelPath;
                 // If original path is ONNX, try to find corresponding RKNN model
-                if (modelPath.find(".onnx") != std::string::npos) {
-                    rknnModelPath = modelPath.substr(0, modelPath.find_last_of(".")) + ".rknn";
+                if (fixedModelPath.find(".onnx") != std::string::npos) {
+                    rknnModelPath = fixedModelPath.substr(0, fixedModelPath.find_last_of(".")) + ".rknn";
                 }
 
                 std::ifstream rknnFile(rknnModelPath);
@@ -101,9 +106,9 @@ bool YOLOv8Detector::initialize(const std::string& modelPath, InferenceBackend b
                 LOG_INFO() << "[YOLOv8Detector] Trying OpenCV backend...";
                 m_backend = InferenceBackend::OPENCV;
                 // For OpenCV, try ONNX model if available
-                std::string onnxModelPath = modelPath;
-                if (modelPath.find(".rknn") != std::string::npos) {
-                    onnxModelPath = modelPath.substr(0, modelPath.find_last_of(".")) + ".onnx";
+                std::string onnxModelPath = fixedModelPath;
+                if (fixedModelPath.find(".rknn") != std::string::npos) {
+                    onnxModelPath = fixedModelPath.substr(0, fixedModelPath.find_last_of(".")) + ".onnx";
                 }
                 success = initializeOpenCV(onnxModelPath);
             }

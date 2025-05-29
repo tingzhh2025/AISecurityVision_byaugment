@@ -1,6 +1,7 @@
 #include "APIService.h"
 #include "../core/TaskManager.h"
 #include "../core/VideoPipeline.h"
+#include "../video/FFmpegDecoder.h"
 #include "../ai/BehaviorAnalyzer.h"
 #include "../utils/PolygonValidator.h"
 #include "../onvif/ONVIFDiscovery.h"
@@ -352,6 +353,26 @@ void APIService::setupRoutes() {
         res.set_content(response, "application/json");
     });
 
+    m_httpServer->Post("/api/cameras", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handlePostVideoSource(req.body, response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Post("/api/cameras/test-connection", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handleTestCameraConnection(req.body, response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
     m_httpServer->Get("/api/recordings", [this](const httplib::Request& req, httplib::Response& res) {
         std::string response;
         handleGetRecordings("", response);
@@ -519,6 +540,12 @@ void APIService::setupRoutes() {
             std::string mimeType = getMimeType(imagePath);
             res.set_content(content, mimeType.c_str());
         }
+    });
+
+    // Video stream proxy endpoint
+    m_httpServer->Get(R"(/stream/camera/(.*))", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string cameraId = req.matches[1].str();
+        handleStreamProxy(cameraId, req, res);
     });
 
     LOG_INFO() << "[APIService] HTTP routes configured successfully";
@@ -4109,7 +4136,7 @@ void APIService::handleGetCameras(const std::string& request, std::string& respo
             const auto& pipelineId = activePipelines[i];
             auto pipeline = taskManager.getPipeline(pipelineId);
 
-            std::string status = "active";
+            std::string status = "online";  // Changed from "active" to "online" for frontend compatibility
             std::string name = pipelineId;
             std::string url = "unknown";
 
@@ -4117,6 +4144,11 @@ void APIService::handleGetCameras(const std::string& request, std::string& respo
                 auto source = pipeline->getSource();
                 name = source.name;
                 url = source.url;
+
+                // Check if pipeline is running and processing frames to determine status
+                if (!pipeline->isRunning() || pipeline->getFrameRate() < 0.1) {
+                    status = "offline";
+                }
             }
 
             json << "{"
@@ -4188,6 +4220,183 @@ void APIService::handleGetDetectionConfig(const std::string& request, std::strin
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to get detection config: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handleTestCameraConnection(const std::string& request, std::string& response) {
+    try {
+        // Parse connection test parameters
+        std::string url = parseJsonField(request, "url");
+        std::string username = parseJsonField(request, "username");
+        std::string password = parseJsonField(request, "password");
+        std::string protocol = parseJsonField(request, "protocol");
+
+        // Validate required fields
+        if (url.empty()) {
+            response = createErrorResponse("url is required", 400);
+            return;
+        }
+
+        if (protocol.empty()) {
+            protocol = "rtsp"; // Default to RTSP
+        }
+
+        LOG_INFO() << "[APIService] Testing camera connection: " << url;
+
+        // Create a temporary VideoSource for testing
+        VideoSource testSource;
+        testSource.id = "test_connection";
+        testSource.name = "Connection Test";
+        testSource.url = url;
+        testSource.protocol = protocol;
+        testSource.username = username;
+        testSource.password = password;
+        testSource.width = 640;
+        testSource.height = 480;
+        testSource.fps = 25;
+        testSource.enabled = true;
+
+        // Try to create a temporary decoder to test the connection
+        bool connectionSuccess = false;
+        std::string errorMessage = "";
+
+        try {
+            // Create a temporary FFmpeg decoder
+            auto decoder = std::make_unique<FFmpegDecoder>();
+            if (decoder->initialize(testSource)) {
+                // Try to get one frame to verify the connection
+                cv::Mat testFrame;
+                int64_t timestamp;
+                if (decoder->getNextFrame(testFrame, timestamp)) {
+                    connectionSuccess = true;
+                    LOG_INFO() << "[APIService] Camera connection test successful: " << url;
+                } else {
+                    errorMessage = "Failed to receive video frames";
+                }
+                decoder->cleanup();
+            } else {
+                errorMessage = "Failed to initialize video decoder";
+            }
+        } catch (const std::exception& e) {
+            errorMessage = "Connection error: " + std::string(e.what());
+        }
+
+        // Return test result
+        std::ostringstream json;
+        json << "{"
+             << "\"success\":" << (connectionSuccess ? "true" : "false") << ","
+             << "\"url\":\"" << url << "\","
+             << "\"protocol\":\"" << protocol << "\"";
+
+        if (!connectionSuccess) {
+            json << ",\"message\":\"" << errorMessage << "\"";
+        }
+
+        json << ",\"tested_at\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+
+        if (connectionSuccess) {
+            LOG_INFO() << "[APIService] Camera connection test passed: " << url;
+        } else {
+            LOG_WARN() << "[APIService] Camera connection test failed: " << url << " - " << errorMessage;
+        }
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to test camera connection: " + std::string(e.what()), 500);
+    }
+}
+
+// Video stream proxy handler
+void APIService::handleStreamProxy(const std::string& cameraId, const httplib::Request& req, httplib::Response& res) {
+    try {
+        if (cameraId.empty()) {
+            res.status = 400;
+            res.set_content("{\"error\":\"Camera ID is required\"}", "application/json");
+            return;
+        }
+
+        // Get the pipeline for this camera
+        TaskManager& taskManager = TaskManager::getInstance();
+        auto pipeline = taskManager.getPipeline(cameraId);
+
+        if (!pipeline) {
+            res.status = 404;
+            res.set_content("{\"error\":\"Camera not found: " + cameraId + "\"}", "application/json");
+            return;
+        }
+
+        // Get the stream URL from the pipeline
+        std::string streamUrl = pipeline->getStreamUrl();
+
+        if (streamUrl.empty()) {
+            res.status = 503;
+            res.set_content("{\"error\":\"Stream not available for camera: " + cameraId + "\"}", "application/json");
+            return;
+        }
+
+        // Check if streaming is enabled
+        if (!pipeline->isStreamingEnabled()) {
+            // Try to start streaming
+            if (!pipeline->startStreaming()) {
+                res.status = 503;
+                res.set_content("{\"error\":\"Failed to start streaming for camera: " + cameraId + "\"}", "application/json");
+                return;
+            }
+            streamUrl = pipeline->getStreamUrl();
+        }
+
+        // Parse the stream URL to extract host and port
+        std::regex urlRegex(R"(http://([^:]+):(\d+)(/.*)?)");
+        std::smatch urlMatch;
+
+        if (!std::regex_match(streamUrl, urlMatch, urlRegex)) {
+            res.status = 500;
+            res.set_content("{\"error\":\"Invalid stream URL format: " + streamUrl + "\"}", "application/json");
+            return;
+        }
+
+        std::string host = urlMatch[1].str();
+        int port = std::stoi(urlMatch[2].str());
+        std::string path = urlMatch.size() > 3 ? urlMatch[3].str() : "/";
+
+        // Create HTTP client to proxy the stream
+        httplib::Client client(host, port);
+        client.set_connection_timeout(5, 0); // 5 seconds timeout
+        client.set_read_timeout(30, 0);      // 30 seconds read timeout
+
+        // Forward the request to the actual stream server
+        auto streamRes = client.Get(path.c_str());
+
+        if (!streamRes) {
+            res.status = 503;
+            res.set_content("{\"error\":\"Failed to connect to stream server\"}", "application/json");
+            return;
+        }
+
+        if (streamRes->status != 200) {
+            res.status = streamRes->status;
+            res.set_content("{\"error\":\"Stream server returned status: " + std::to_string(streamRes->status) + "\"}", "application/json");
+            return;
+        }
+
+        // Forward the response
+        res.status = streamRes->status;
+        res.body = streamRes->body;
+
+        // Copy headers
+        for (const auto& header : streamRes->headers) {
+            res.set_header(header.first.c_str(), header.second.c_str());
+        }
+
+        LOG_INFO() << "[APIService] Proxied stream request for camera: " << cameraId
+                  << " to " << streamUrl;
+
+    } catch (const std::exception& e) {
+        res.status = 500;
+        res.set_content("{\"error\":\"Stream proxy error: " + std::string(e.what()) + "\"}", "application/json");
+        LOG_ERROR() << "[APIService] Stream proxy error for camera " << cameraId << ": " << e.what();
     }
 }
 

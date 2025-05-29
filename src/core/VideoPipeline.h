@@ -42,6 +42,7 @@ struct VideoSource {
     int width = 1920;
     int height = 1080;
     int fps = 25;
+    int mjpeg_port = 8000; // MJPEG streaming port
     bool enabled = true;
 
     // Validation

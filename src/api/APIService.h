@@ -136,6 +136,10 @@ private:
     void handleGetCameras(const std::string& request, std::string& response);
     void handleGetRecordings(const std::string& request, std::string& response);
     void handleGetDetectionConfig(const std::string& request, std::string& response);
+    void handleTestCameraConnection(const std::string& request, std::string& response);
+
+    // Video stream proxy handler
+    void handleStreamProxy(const std::string& cameraId, const httplib::Request& req, httplib::Response& res);
 
     // Task 75: Cross-camera tracking handlers
     void handleGetCrossCameraTracks(const std::string& request, std::string& response);

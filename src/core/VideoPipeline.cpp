@@ -125,9 +125,12 @@ bool VideoPipeline::initialize() {
         streamConfig.height = 480;
         streamConfig.fps = 15;
         streamConfig.quality = 80;
-        streamConfig.port = 8000 + std::hash<std::string>{}(m_source.id) % 1000; // Unique port per source
+        streamConfig.port = m_source.mjpeg_port; // Use configured MJPEG port
         streamConfig.enableOverlays = true;
         m_streamer->setConfig(streamConfig);
+
+        LOG_INFO() << "[VideoPipeline] Configured MJPEG stream for " << m_source.id
+                  << " on port " << streamConfig.port;
 
         if (!m_recorder->initialize(m_source.id) ||
             !m_streamer->initialize(m_source.id) ||

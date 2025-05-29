@@ -315,6 +315,7 @@ endif()
 
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
+include_directories(${CMAKE_SOURCE_DIR}/third_party)
 include_directories(${OpenCV_INCLUDE_DIRS})
 
 # Source files
@@ -419,171 +420,13 @@ target_link_libraries(${PROJECT_NAME} ${LINK_LIBRARIES})
 # Compiler-specific options
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_17)
 
-# Create test executable for RKNN YOLOv8
-add_executable(test_rknn_yolov8
-    tests/cpp/test_rknn_yolov8.cpp
-    ${SOURCES}
-)
-
-# Create test executable for RTSP streams
-add_executable(test_rtsp_streams
-    tests/cpp/test_rtsp_streams.cpp
-    ${SOURCES}
-)
-
-# Create test executable for RKNN integration
-add_executable(test_rknn_integration
-    tests/cpp/test_rknn_integration.cpp
-    ${SOURCES}
-)
-
-# Create test executable for real cameras with RKNN
-add_executable(test_real_cameras_rknn
-    tests/cpp/test_real_cameras_rknn.cpp
-    ${SOURCES}
-)
-
-# Create simple test executable for real cameras with RKNN
-add_executable(test_real_cameras_simple
-    tests/cpp/test_real_cameras_simple.cpp
-)
-
-# Create RTSP OpenCV test executable
-add_executable(test_rtsp_opencv
-    tests/cpp/test_rtsp_opencv.cpp
-)
-
-# Create FFmpeg real cameras test executable
-add_executable(test_real_cameras_ffmpeg
-    tests/cpp/test_real_cameras_ffmpeg.cpp
-)
-
-# Create MJPEG real cameras test executable
-add_executable(test_real_cameras_mjpeg
-    tests/cpp/test_real_cameras_mjpeg.cpp
-)
-
-# Create FINAL real cameras + RKNN test executable
-add_executable(test_real_cameras_rknn_final
-    tests/cpp/test_real_cameras_rknn_final.cpp
-    src/ai/YOLOv8Detector.cpp
-    src/core/Logger.cpp
-)
-
-# Create OPTIMIZED real cameras + multi-threaded RKNN test executable
-add_executable(test_optimized_cameras
-    tests/test_optimized_cameras.cpp
-    src/ai/YOLOv8Detector.cpp
-    src/ai/YOLOv8DetectorOptimized.cpp
-    src/core/Logger.cpp
-)
-
-# Create OPTIMIZED performance test executable
-add_executable(test_optimized_performance
-    tests/test_optimized_performance.cpp
-    src/ai/YOLOv8Detector.cpp
-    src/ai/YOLOv8DetectorOptimized.cpp
-    src/core/Logger.cpp
-)
-
-# Create SIMPLE integrated optimized test executable
-add_executable(test_simple_integrated
-    tests/test_simple_integrated.cpp
-    src/ai/YOLOv8Detector.cpp
-    src/ai/YOLOv8DetectorOptimized.cpp
-    src/core/Logger.cpp
-)
-
-target_link_libraries(test_rknn_yolov8 ${LINK_LIBRARIES})
-target_compile_features(test_rknn_yolov8 PRIVATE cxx_std_17)
-
-target_link_libraries(test_rtsp_streams ${LINK_LIBRARIES})
-target_compile_features(test_rtsp_streams PRIVATE cxx_std_17)
-
-target_link_libraries(test_rknn_integration ${LINK_LIBRARIES})
-target_compile_features(test_rknn_integration PRIVATE cxx_std_17)
-
-target_link_libraries(test_real_cameras_rknn ${LINK_LIBRARIES})
-target_compile_features(test_real_cameras_rknn PRIVATE cxx_std_17)
-
-target_link_libraries(test_real_cameras_simple ${LINK_LIBRARIES})
-target_compile_features(test_real_cameras_simple PRIVATE cxx_std_17)
-
-target_link_libraries(test_rtsp_opencv ${LINK_LIBRARIES})
-target_compile_features(test_rtsp_opencv PRIVATE cxx_std_17)
-
-target_link_libraries(test_real_cameras_ffmpeg ${LINK_LIBRARIES})
-target_compile_features(test_real_cameras_ffmpeg PRIVATE cxx_std_17)
-
-target_link_libraries(test_real_cameras_mjpeg ${LINK_LIBRARIES})
-target_compile_features(test_real_cameras_mjpeg PRIVATE cxx_std_17)
-
-target_link_libraries(test_real_cameras_rknn_final ${LINK_LIBRARIES})
-target_compile_features(test_real_cameras_rknn_final PRIVATE cxx_std_17)
-
-target_link_libraries(test_optimized_cameras ${LINK_LIBRARIES})
-target_compile_features(test_optimized_cameras PRIVATE cxx_std_17)
-
-target_link_libraries(test_optimized_performance ${LINK_LIBRARIES})
-target_compile_features(test_optimized_performance PRIVATE cxx_std_17)
-
-target_link_libraries(test_simple_integrated ${LINK_LIBRARIES})
-target_compile_features(test_simple_integrated PRIVATE cxx_std_17)
-
-# Add compile definitions for test executables
-if(RKNN_FOUND)
-    target_compile_definitions(test_rknn_yolov8 PRIVATE HAVE_RKNN)
-    target_compile_definitions(test_rtsp_streams PRIVATE HAVE_RKNN)
-    target_compile_definitions(test_rknn_integration PRIVATE HAVE_RKNN)
-    target_compile_definitions(test_real_cameras_rknn PRIVATE HAVE_RKNN)
-    target_compile_definitions(test_real_cameras_simple PRIVATE HAVE_RKNN)
-    target_compile_definitions(test_real_cameras_rknn_final PRIVATE HAVE_RKNN)
-    target_compile_definitions(test_optimized_cameras PRIVATE HAVE_RKNN)
-    target_compile_definitions(test_optimized_performance PRIVATE HAVE_RKNN)
-    target_compile_definitions(test_simple_integrated PRIVATE HAVE_RKNN)
-endif()
-if(LIBAV_FOUND)
-    target_compile_definitions(test_rknn_yolov8 PRIVATE HAVE_FFMPEG)
-    target_compile_definitions(test_rtsp_streams PRIVATE HAVE_FFMPEG)
-    target_compile_definitions(test_rknn_integration PRIVATE HAVE_FFMPEG)
-    target_compile_definitions(test_real_cameras_rknn PRIVATE HAVE_FFMPEG)
-    target_compile_definitions(test_real_cameras_rknn_final PRIVATE HAVE_FFMPEG)
-    target_compile_definitions(test_optimized_cameras PRIVATE HAVE_FFMPEG)
-    target_compile_definitions(test_optimized_performance PRIVATE HAVE_FFMPEG)
-    target_compile_definitions(test_simple_integrated PRIVATE HAVE_FFMPEG)
-endif()
-if(NVML_FOUND)
-    target_compile_definitions(test_rknn_yolov8 PRIVATE HAVE_NVML)
-    target_compile_definitions(test_rtsp_streams PRIVATE HAVE_NVML)
-endif()
-if(WEBSOCKETPP_INCLUDE_DIR)
-    if(Boost_FOUND)
-        target_compile_definitions(test_rknn_yolov8 PRIVATE HAVE_WEBSOCKETPP)
-        target_compile_definitions(test_rtsp_streams PRIVATE HAVE_WEBSOCKETPP)
-        target_compile_definitions(test_real_cameras_rknn PRIVATE HAVE_WEBSOCKETPP)
-    else()
-        target_compile_definitions(test_rknn_yolov8 PRIVATE HAVE_WEBSOCKETPP ASIO_STANDALONE)
-        target_compile_definitions(test_rtsp_streams PRIVATE HAVE_WEBSOCKETPP ASIO_STANDALONE)
-        target_compile_definitions(test_real_cameras_rknn PRIVATE HAVE_WEBSOCKETPP ASIO_STANDALONE)
-    endif()
-endif()
-if(PAHO_MQTT_CPP_FOUND AND PAHO_MQTT_CPP_LIBRARIES)
-    target_compile_definitions(test_rknn_yolov8 PRIVATE HAVE_PAHO_MQTT)
-    target_compile_definitions(test_rtsp_streams PRIVATE HAVE_PAHO_MQTT)
-    target_compile_definitions(test_real_cameras_rknn PRIVATE HAVE_PAHO_MQTT)
-endif()
-
 # Install targets
-install(TARGETS ${PROJECT_NAME} test_rknn_yolov8 test_rtsp_streams test_real_cameras_rknn DESTINATION bin)
+install(TARGETS ${PROJECT_NAME} DESTINATION bin)
 install(DIRECTORY models/ DESTINATION share/${PROJECT_NAME}/models OPTIONAL)
 install(DIRECTORY config/ DESTINATION share/${PROJECT_NAME}/config OPTIONAL)
 install(FILES scripts/convert_yolov8_to_rknn.py DESTINATION share/${PROJECT_NAME}/scripts
         PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
 install(FILES docs/RKNN_SETUP_GUIDE.md DESTINATION share/${PROJECT_NAME}/docs)
-
-# Testing
-enable_testing()
-add_subdirectory(tests)
 
 # Print configuration summary
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")

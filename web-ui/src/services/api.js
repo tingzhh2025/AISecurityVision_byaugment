@@ -81,7 +81,16 @@ export const apiService = {
   testCameraConnection: (connectionData) => api.post('/cameras/test-connection', connectionData),
 
   // 实时视频流
-  getStreamUrl: (cameraId) => `/stream/camera/${cameraId}`,
+  getStreamUrl: (cameraId) => {
+    // 根据摄像头ID返回正确的MJPEG流地址
+    if (cameraId === 'camera_01') {
+      return 'http://localhost:8161/stream.mjpg'
+    } else if (cameraId === 'camera_02') {
+      return 'http://localhost:8162/stream.mjpg'
+    }
+    // 默认返回第一个摄像头的流
+    return 'http://localhost:8161/stream.mjpg'
+  },
 
   // 录像相关
   getRecordings: (params) => api.get('/recordings', { params }),
