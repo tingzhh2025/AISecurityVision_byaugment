@@ -23,8 +23,8 @@ YOLOv8Detector::YOLOv8Detector()
     , m_stream(nullptr)
     , m_inputBuffer(nullptr)
     , m_outputBuffer(nullptr)
-    , m_confidenceThreshold(0.8f)  // Increased to 0.8 to drastically reduce false positives
-    , m_nmsThreshold(0.2f)  // Reduced to 0.2 for very aggressive NMS filtering
+    , m_confidenceThreshold(0.25f)  // Standard YOLOv8 confidence threshold
+    , m_nmsThreshold(0.45f)  // Standard YOLOv8 NMS threshold
     , m_initialized(false)
     , m_inputWidth(640)
     , m_inputHeight(640)
@@ -839,7 +839,7 @@ std::vector<YOLOv8Detector::Detection> YOLOv8Detector::postprocessRKNNResults(co
     return detections;
 }
 
-// RKNN post-processing with letterbox correction
+// RKNN post-processing with letterbox correction (Fixed YOLOv8 format)
 std::vector<YOLOv8Detector::Detection> YOLOv8Detector::postprocessRKNNResultsWithLetterbox(const float* output, const cv::Size& originalSize, const LetterboxInfo& letterbox) {
     std::vector<Detection> detections;
 
@@ -848,15 +848,18 @@ std::vector<YOLOv8Detector::Detection> YOLOv8Detector::postprocessRKNNResultsWit
     const int numBoxes = 8400;
     const float confThreshold = m_confidenceThreshold;
 
-    std::vector<cv::Rect> boxes;
+    std::vector<cv::Rect2f> boxes;
     std::vector<float> confidences;
     std::vector<int> classIds;
 
+    LOG_INFO() << "[YOLOv8Detector] Processing YOLOv8 output with " << numBoxes << " predictions";
+    LOG_INFO() << "[YOLOv8Detector] Confidence threshold: " << confThreshold;
+
     // YOLOv8 RKNN output format: [84, 8400] (transposed)
-    // Add debugging for first few detections
-    int debugCount = 0;
+    // Each column represents one detection: [cx, cy, w, h, class0_conf, class1_conf, ..., class79_conf]
+    int validDetections = 0;
     for (int i = 0; i < numBoxes; i++) {
-        // Get bounding box coordinates (center_x, center_y, width, height)
+        // Get bounding box coordinates (center_x, center_y, width, height) - already in pixel coordinates
         float centerX = output[i];                    // First row: center_x
         float centerY = output[numBoxes + i];         // Second row: center_y
         float width = output[2 * numBoxes + i];       // Third row: width
@@ -873,27 +876,23 @@ std::vector<YOLOv8Detector::Detection> YOLOv8Detector::postprocessRKNNResultsWit
             }
         }
 
-        // Debug first few high-confidence detections
-        if (maxConf > confThreshold && debugCount < 5) {
-            LOG_INFO() << "[YOLOv8Detector] Debug detection " << debugCount << ": "
-                      << "centerX=" << centerX << ", centerY=" << centerY
-                      << ", width=" << width << ", height=" << height
-                      << ", conf=" << maxConf << ", class=" << maxClassId;
-            debugCount++;
-        }
-
+        // Only process detections above confidence threshold
         if (maxConf > confThreshold) {
-            // Convert normalized coordinates to pixel coordinates in model space
-            centerX *= m_inputWidth;
-            centerY *= m_inputHeight;
-            width *= m_inputWidth;
-            height *= m_inputHeight;
+            validDetections++;
+
+            // Debug first few detections
+            if (validDetections <= 3) {
+                LOG_INFO() << "[YOLOv8Detector] Detection " << validDetections << ": "
+                          << "centerX=" << centerX << ", centerY=" << centerY
+                          << ", width=" << width << ", height=" << height
+                          << ", conf=" << maxConf << ", class=" << maxClassId;
+            }
 
             // Apply letterbox correction to convert from model space to original image space
-            float x1 = centerX - width / 2 - letterbox.x_pad;
-            float y1 = centerY - height / 2 - letterbox.y_pad;
-            float x2 = centerX + width / 2 - letterbox.x_pad;
-            float y2 = centerY + height / 2 - letterbox.y_pad;
+            float x1 = centerX - width / 2.0f - letterbox.x_pad;
+            float y1 = centerY - height / 2.0f - letterbox.y_pad;
+            float x2 = centerX + width / 2.0f - letterbox.x_pad;
+            float y2 = centerY + height / 2.0f - letterbox.y_pad;
 
             // Scale back to original image coordinates
             x1 /= letterbox.scale;
@@ -902,25 +901,37 @@ std::vector<YOLOv8Detector::Detection> YOLOv8Detector::postprocessRKNNResultsWit
             y2 /= letterbox.scale;
 
             // Convert to top-left corner format
-            int x = static_cast<int>(x1);
-            int y = static_cast<int>(y1);
-            int w = static_cast<int>(x2 - x1);
-            int h = static_cast<int>(y2 - y1);
+            float x = x1;
+            float y = y1;
+            float w = x2 - x1;
+            float h = y2 - y1;
 
             // Clamp to original image boundaries
-            x = std::max(0, std::min(x, originalSize.width - 1));
-            y = std::max(0, std::min(y, originalSize.height - 1));
-            w = std::max(1, std::min(w, originalSize.width - x));
-            h = std::max(1, std::min(h, originalSize.height - y));
+            x = std::max(0.0f, std::min(x, static_cast<float>(originalSize.width - 1)));
+            y = std::max(0.0f, std::min(y, static_cast<float>(originalSize.height - 1)));
+            w = std::max(1.0f, std::min(w, static_cast<float>(originalSize.width) - x));
+            h = std::max(1.0f, std::min(h, static_cast<float>(originalSize.height) - y));
 
-            boxes.push_back(cv::Rect(x, y, w, h));
-            confidences.push_back(maxConf);
-            classIds.push_back(maxClassId);
+            // Only add valid boxes
+            if (w > 0 && h > 0) {
+                boxes.push_back(cv::Rect2f(x, y, w, h));
+                confidences.push_back(maxConf);
+                classIds.push_back(maxClassId);
+            }
         }
     }
 
+    LOG_INFO() << "[YOLOv8Detector] Found " << validDetections << " detections above threshold, "
+              << boxes.size() << " valid boxes";
+
     // Apply Non-Maximum Suppression
     std::vector<int> indices;
+
+    if (boxes.empty()) {
+        LOG_INFO() << "[YOLOv8Detector] No valid boxes for NMS";
+        return detections;
+    }
+
 #ifdef DISABLE_OPENCV_DNN
     // Simple NMS implementation when DNN is disabled
     indices.resize(boxes.size());
@@ -935,20 +946,30 @@ std::vector<YOLOv8Detector::Detection> YOLOv8Detector::postprocessRKNNResultsWit
     std::vector<bool> suppressed(boxes.size(), false);
     std::vector<int> finalIndices;
 
-    for (int i = 0; i < indices.size(); i++) {
+    for (size_t i = 0; i < indices.size(); i++) {
         int idx = indices[i];
         if (suppressed[idx]) continue;
 
         finalIndices.push_back(idx);
 
         // Suppress overlapping boxes
-        for (int j = i + 1; j < indices.size(); j++) {
+        for (size_t j = i + 1; j < indices.size(); j++) {
             int jdx = indices[j];
             if (suppressed[jdx]) continue;
 
-            cv::Rect intersection = boxes[idx] & boxes[jdx];
-            float iou = static_cast<float>(intersection.area()) /
-                       (boxes[idx].area() + boxes[jdx].area() - intersection.area());
+            // Calculate IoU manually for cv::Rect2f
+            cv::Rect2f& box1 = boxes[idx];
+            cv::Rect2f& box2 = boxes[jdx];
+
+            float x1 = std::max(box1.x, box2.x);
+            float y1 = std::max(box1.y, box2.y);
+            float x2 = std::min(box1.x + box1.width, box2.x + box2.width);
+            float y2 = std::min(box1.y + box1.height, box2.y + box2.height);
+
+            float intersection_area = std::max(0.0f, x2 - x1) * std::max(0.0f, y2 - y1);
+            float union_area = box1.area() + box2.area() - intersection_area;
+
+            float iou = (union_area > 0) ? intersection_area / union_area : 0.0f;
 
             if (iou > m_nmsThreshold) {
                 suppressed[jdx] = true;
@@ -957,13 +978,24 @@ std::vector<YOLOv8Detector::Detection> YOLOv8Detector::postprocessRKNNResultsWit
     }
     indices = finalIndices;
 #else
-    cv::dnn::NMSBoxes(boxes, confidences, m_confidenceThreshold, m_nmsThreshold, indices);
+    // Convert cv::Rect2f to cv::Rect for OpenCV NMS
+    std::vector<cv::Rect> intBoxes;
+    for (const auto& box : boxes) {
+        intBoxes.push_back(cv::Rect(static_cast<int>(box.x), static_cast<int>(box.y),
+                                   static_cast<int>(box.width), static_cast<int>(box.height)));
+    }
+    cv::dnn::NMSBoxes(intBoxes, confidences, m_confidenceThreshold, m_nmsThreshold, indices);
 #endif
+
+    LOG_INFO() << "[YOLOv8Detector] NMS: " << boxes.size() << " -> " << indices.size() << " detections";
 
     // Create final detections
     for (int idx : indices) {
         Detection detection;
-        detection.bbox = boxes[idx];
+        // Convert back to cv::Rect for consistency
+        cv::Rect2f& floatBox = boxes[idx];
+        detection.bbox = cv::Rect(static_cast<int>(floatBox.x), static_cast<int>(floatBox.y),
+                                 static_cast<int>(floatBox.width), static_cast<int>(floatBox.height));
         detection.confidence = confidences[idx];
         detection.classId = classIds[idx];
         if (detection.classId < static_cast<int>(m_classNames.size())) {
