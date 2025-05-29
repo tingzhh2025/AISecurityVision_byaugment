@@ -11,6 +11,8 @@
 #include <cmath>
 #include <random>
 
+#include "../core/Logger.h"
+using namespace AISecurityVision;
 MultiCameraTestSequence::MultiCameraTestSequence() {
     m_config.sequenceName = "default_test_sequence";
     m_config.cameraIds = {"camera_1", "camera_2", "camera_3"};
@@ -29,7 +31,7 @@ MultiCameraTestSequence::~MultiCameraTestSequence() {
 bool MultiCameraTestSequence::loadSequenceConfig(const std::string& configPath) {
     std::ifstream file(configPath);
     if (!file.is_open()) {
-        std::cerr << "[MultiCameraTestSequence] Failed to open config file: " << configPath << std::endl;
+        LOG_ERROR() << "[MultiCameraTestSequence] Failed to open config file: " << configPath;
         return false;
     }
 
@@ -66,7 +68,7 @@ void MultiCameraTestSequence::setConfig(const TestSequenceConfig& config) {
 bool MultiCameraTestSequence::loadGroundTruth(const std::string& groundTruthPath) {
     std::ifstream file(groundTruthPath);
     if (!file.is_open()) {
-        std::cerr << "[MultiCameraTestSequence] Failed to open ground truth file: " << groundTruthPath << std::endl;
+        LOG_ERROR() << "[MultiCameraTestSequence] Failed to open ground truth file: " << groundTruthPath;
         return false;
     }
 
@@ -149,7 +151,7 @@ bool MultiCameraTestSequence::generateTestSequence() {
 
 bool MultiCameraTestSequence::startTestMode() {
     if (m_running) {
-        std::cerr << "[MultiCameraTestSequence] Test mode already running" << std::endl;
+        LOG_ERROR() << "[MultiCameraTestSequence] Test mode already running";
         return false;
     }
 
@@ -322,8 +324,8 @@ void MultiCameraTestSequence::logEvent(const std::string& message) {
     auto now = std::chrono::system_clock::now();
     auto time_t = std::chrono::system_clock::to_time_t(now);
 
-    std::cout << "[" << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S")
-              << "] [MultiCameraTest] " << message << std::endl;
+    LOG_INFO() << "[" << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S")
+              << "] [MultiCameraTest] " << message;
 }
 
 void MultiCameraTestSequence::logTransition(const TransitionEvent& transition, bool success) {

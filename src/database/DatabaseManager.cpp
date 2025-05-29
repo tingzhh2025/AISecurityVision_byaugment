@@ -3,6 +3,8 @@
 #include <sstream>
 #include <cstring>
 
+#include "../core/Logger.h"
+using namespace AISecurityVision;
 DatabaseManager::DatabaseManager()
     : m_db(nullptr), m_insertEventStmt(nullptr), m_insertFaceStmt(nullptr),
       m_insertPlateStmt(nullptr), m_insertROIStmt(nullptr), m_selectEventsStmt(nullptr),
@@ -22,7 +24,7 @@ bool DatabaseManager::initialize(const std::string& dbPath) {
     int rc = sqlite3_open(dbPath.c_str(), &m_db);
     if (rc != SQLITE_OK) {
         m_lastError = "Cannot open database: " + std::string(sqlite3_errmsg(m_db));
-        std::cerr << "[DatabaseManager] " << m_lastError << std::endl;
+        LOG_ERROR() << "[DatabaseManager] " << m_lastError;
         return false;
     }
 
@@ -31,17 +33,17 @@ bool DatabaseManager::initialize(const std::string& dbPath) {
 
     // Create tables
     if (!createTables()) {
-        std::cerr << "[DatabaseManager] Failed to create tables" << std::endl;
+        LOG_ERROR() << "[DatabaseManager] Failed to create tables";
         return false;
     }
 
     // Prepare statements
     if (!prepareStatements()) {
-        std::cerr << "[DatabaseManager] Failed to prepare statements" << std::endl;
+        LOG_ERROR() << "[DatabaseManager] Failed to prepare statements";
         return false;
     }
 
-    std::cout << "[DatabaseManager] Initialized with database: " << dbPath << std::endl;
+    LOG_INFO() << "[DatabaseManager] Initialized with database: " << dbPath;
     return true;
 }
 

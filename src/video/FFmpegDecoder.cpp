@@ -4,25 +4,27 @@
 #include <chrono>
 #include <thread>
 
+#include "../core/Logger.h"
+using namespace AISecurityVision;
 #ifdef HAVE_FFMPEG
 std::atomic<int> FFmpegRAII::s_refCount{0};
 
 FFmpegRAII::FFmpegRAII() {
     if (s_refCount.fetch_add(1) == 0) {
-        std::cout << "[FFmpeg] Initializing FFmpeg libraries" << std::endl;
+        LOG_INFO() << "[FFmpeg] Initializing FFmpeg libraries";
         avformat_network_init();
     }
 }
 
 FFmpegRAII::~FFmpegRAII() {
     if (s_refCount.fetch_sub(1) == 1) {
-        std::cout << "[FFmpeg] Cleaning up FFmpeg libraries" << std::endl;
+        LOG_INFO() << "[FFmpeg] Cleaning up FFmpeg libraries";
         avformat_network_deinit();
     }
 }
 #else
 FFmpegRAII::FFmpegRAII() {
-    std::cout << "[FFmpeg] FFmpeg not available - using stub implementation" << std::endl;
+    LOG_INFO() << "[FFmpeg] FFmpeg not available - using stub implementation";
 }
 
 FFmpegRAII::~FFmpegRAII() {}
@@ -50,11 +52,11 @@ FFmpegDecoder::~FFmpegDecoder() {
 
 bool FFmpegDecoder::initialize(const VideoSource& source) {
     m_source = source;
-    std::cout << "[FFmpegDecoder] Initializing decoder for: " << source.url << std::endl;
+    LOG_INFO() << "[FFmpegDecoder] Initializing decoder for: " << source.url;
 
 #ifdef HAVE_FFMPEG
     // Real FFmpeg implementation
-    std::cout << "[FFmpegDecoder] Using real FFmpeg implementation" << std::endl;
+    LOG_INFO() << "[FFmpegDecoder] Using real FFmpeg implementation";
 
     // Initialize FFmpeg contexts
     m_formatContext = nullptr;
@@ -67,30 +69,30 @@ bool FFmpegDecoder::initialize(const VideoSource& source) {
 
     // Open input stream
     if (!openStream()) {
-        std::cerr << "[FFmpegDecoder] Failed to open stream: " << source.url << std::endl;
+        LOG_ERROR() << "[FFmpegDecoder] Failed to open stream: " << source.url;
         return false;
     }
 
     // Setup decoder
     if (!setupDecoder()) {
-        std::cerr << "[FFmpegDecoder] Failed to setup decoder" << std::endl;
+        LOG_ERROR() << "[FFmpegDecoder] Failed to setup decoder";
         cleanup();
         return false;
     }
 
     // Setup scaler
     if (!setupScaler()) {
-        std::cerr << "[FFmpegDecoder] Failed to setup scaler" << std::endl;
+        LOG_ERROR() << "[FFmpegDecoder] Failed to setup scaler";
         cleanup();
         return false;
     }
 
     m_initialized.store(true);
     m_connected.store(true);
-    std::cout << "[FFmpegDecoder] Successfully initialized for " << source.url << std::endl;
+    LOG_INFO() << "[FFmpegDecoder] Successfully initialized for " << source.url;
     return true;
 #else
-    std::cout << "[FFmpegDecoder] Using stub implementation (FFmpeg not available)" << std::endl;
+    LOG_INFO() << "[FFmpegDecoder] Using stub implementation (FFmpeg not available)";
     m_initialized.store(true);
     m_connected.store(true);
     return true;
@@ -114,11 +116,11 @@ bool FFmpegDecoder::getNextFrame(cv::Mat& frame, int64_t& timestamp) {
     int ret = av_read_frame(m_formatContext, m_packet);
     if (ret < 0) {
         if (ret == AVERROR_EOF) {
-            std::cout << "[FFmpegDecoder] End of stream reached" << std::endl;
+            LOG_INFO() << "[FFmpegDecoder] End of stream reached";
         } else {
             char errbuf[AV_ERROR_MAX_STRING_SIZE];
             av_strerror(ret, errbuf, AV_ERROR_MAX_STRING_SIZE);
-            std::cerr << "[FFmpegDecoder] Error reading frame: " << errbuf << std::endl;
+            LOG_ERROR() << "[FFmpegDecoder] Error reading frame: " << errbuf;
         }
         return false;
     }
@@ -134,7 +136,7 @@ bool FFmpegDecoder::getNextFrame(cv::Mat& frame, int64_t& timestamp) {
     if (ret < 0) {
         char errbuf[AV_ERROR_MAX_STRING_SIZE];
         av_strerror(ret, errbuf, AV_ERROR_MAX_STRING_SIZE);
-        std::cerr << "[FFmpegDecoder] Error sending packet: " << errbuf << std::endl;
+        LOG_ERROR() << "[FFmpegDecoder] Error sending packet: " << errbuf;
         av_packet_unref(m_packet);
         return false;
     }
@@ -148,7 +150,7 @@ bool FFmpegDecoder::getNextFrame(cv::Mat& frame, int64_t& timestamp) {
         } else {
             char errbuf[AV_ERROR_MAX_STRING_SIZE];
             av_strerror(ret, errbuf, AV_ERROR_MAX_STRING_SIZE);
-            std::cerr << "[FFmpegDecoder] Error receiving frame: " << errbuf << std::endl;
+            LOG_ERROR() << "[FFmpegDecoder] Error receiving frame: " << errbuf;
             av_packet_unref(m_packet);
             return false;
         }
@@ -211,7 +213,7 @@ bool FFmpegDecoder::openStream() {
     if (ret < 0) {
         char errbuf[AV_ERROR_MAX_STRING_SIZE];
         av_strerror(ret, errbuf, AV_ERROR_MAX_STRING_SIZE);
-        std::cerr << "[FFmpegDecoder] Failed to open input: " << errbuf << std::endl;
+        LOG_ERROR() << "[FFmpegDecoder] Failed to open input: " << errbuf;
         return false;
     }
 
@@ -220,7 +222,7 @@ bool FFmpegDecoder::openStream() {
     if (ret < 0) {
         char errbuf[AV_ERROR_MAX_STRING_SIZE];
         av_strerror(ret, errbuf, AV_ERROR_MAX_STRING_SIZE);
-        std::cerr << "[FFmpegDecoder] Failed to find stream info: " << errbuf << std::endl;
+        LOG_ERROR() << "[FFmpegDecoder] Failed to find stream info: " << errbuf;
         return false;
     }
 
@@ -234,13 +236,13 @@ bool FFmpegDecoder::openStream() {
     }
 
     if (m_videoStreamIndex == -1) {
-        std::cerr << "[FFmpegDecoder] No video stream found" << std::endl;
+        LOG_ERROR() << "[FFmpegDecoder] No video stream found";
         return false;
     }
 
     m_videoStream = m_formatContext->streams[m_videoStreamIndex];
-    std::cout << "[FFmpegDecoder] Found video stream: " << m_videoStreamIndex
-              << " (" << m_videoStream->codecpar->width << "x" << m_videoStream->codecpar->height << ")" << std::endl;
+    LOG_INFO() << "[FFmpegDecoder] Found video stream: " << m_videoStreamIndex
+              << " (" << m_videoStream->codecpar->width << "x" << m_videoStream->codecpar->height << ")";
 
     return true;
 #else
@@ -253,14 +255,14 @@ bool FFmpegDecoder::setupDecoder() {
     // Find decoder
     m_codec = avcodec_find_decoder(m_videoStream->codecpar->codec_id);
     if (!m_codec) {
-        std::cerr << "[FFmpegDecoder] Codec not found" << std::endl;
+        LOG_ERROR() << "[FFmpegDecoder] Codec not found";
         return false;
     }
 
     // Allocate codec context
     m_codecContext = avcodec_alloc_context3(m_codec);
     if (!m_codecContext) {
-        std::cerr << "[FFmpegDecoder] Failed to allocate codec context" << std::endl;
+        LOG_ERROR() << "[FFmpegDecoder] Failed to allocate codec context";
         return false;
     }
 
@@ -269,7 +271,7 @@ bool FFmpegDecoder::setupDecoder() {
     if (ret < 0) {
         char errbuf[AV_ERROR_MAX_STRING_SIZE];
         av_strerror(ret, errbuf, AV_ERROR_MAX_STRING_SIZE);
-        std::cerr << "[FFmpegDecoder] Failed to copy codec parameters: " << errbuf << std::endl;
+        LOG_ERROR() << "[FFmpegDecoder] Failed to copy codec parameters: " << errbuf;
         return false;
     }
 
@@ -278,7 +280,7 @@ bool FFmpegDecoder::setupDecoder() {
     if (ret < 0) {
         char errbuf[AV_ERROR_MAX_STRING_SIZE];
         av_strerror(ret, errbuf, AV_ERROR_MAX_STRING_SIZE);
-        std::cerr << "[FFmpegDecoder] Failed to open codec: " << errbuf << std::endl;
+        LOG_ERROR() << "[FFmpegDecoder] Failed to open codec: " << errbuf;
         return false;
     }
 
@@ -286,19 +288,19 @@ bool FFmpegDecoder::setupDecoder() {
     m_frame = av_frame_alloc();
     m_frameRGB = av_frame_alloc();
     if (!m_frame || !m_frameRGB) {
-        std::cerr << "[FFmpegDecoder] Failed to allocate frames" << std::endl;
+        LOG_ERROR() << "[FFmpegDecoder] Failed to allocate frames";
         return false;
     }
 
     // Allocate packet
     m_packet = av_packet_alloc();
     if (!m_packet) {
-        std::cerr << "[FFmpegDecoder] Failed to allocate packet" << std::endl;
+        LOG_ERROR() << "[FFmpegDecoder] Failed to allocate packet";
         return false;
     }
 
-    std::cout << "[FFmpegDecoder] Decoder setup complete: " << m_codec->name
-              << " (" << m_codecContext->width << "x" << m_codecContext->height << ")" << std::endl;
+    LOG_INFO() << "[FFmpegDecoder] Decoder setup complete: " << m_codec->name
+              << " (" << m_codecContext->width << "x" << m_codecContext->height << ")";
 
     return true;
 #else
@@ -312,7 +314,7 @@ bool FFmpegDecoder::setupScaler() {
     int numBytes = av_image_get_buffer_size(AV_PIX_FMT_BGR24, m_codecContext->width, m_codecContext->height, 1);
     m_buffer = (uint8_t*)av_malloc(numBytes * sizeof(uint8_t));
     if (!m_buffer) {
-        std::cerr << "[FFmpegDecoder] Failed to allocate buffer" << std::endl;
+        LOG_ERROR() << "[FFmpegDecoder] Failed to allocate buffer";
         return false;
     }
 
@@ -328,11 +330,11 @@ bool FFmpegDecoder::setupScaler() {
     );
 
     if (!m_swsContext) {
-        std::cerr << "[FFmpegDecoder] Failed to initialize scaler context" << std::endl;
+        LOG_ERROR() << "[FFmpegDecoder] Failed to initialize scaler context";
         return false;
     }
 
-    std::cout << "[FFmpegDecoder] Scaler setup complete" << std::endl;
+    LOG_INFO() << "[FFmpegDecoder] Scaler setup complete";
     return true;
 #else
     return true;
@@ -377,23 +379,23 @@ void FFmpegDecoder::cleanup() {
         m_formatContext = nullptr;
     }
 
-    std::cout << "[FFmpegDecoder] Cleanup completed" << std::endl;
+    LOG_INFO() << "[FFmpegDecoder] Cleanup completed";
 #endif
     m_connected.store(false);
     m_initialized.store(false);
 }
 
 bool FFmpegDecoder::reconnect() {
-    std::cout << "[FFmpegDecoder] Attempting to reconnect..." << std::endl;
+    LOG_INFO() << "[FFmpegDecoder] Attempting to reconnect...";
     cleanup();
     return initialize(m_source);
 }
 
 void FFmpegDecoder::logError(const std::string& message, int errorCode) {
     if (errorCode != 0) {
-        std::cerr << "[FFmpegDecoder] " << message << " (error code: " << errorCode << ")" << std::endl;
+        LOG_ERROR() << "[FFmpegDecoder] " << message << " (error code: " << errorCode << ")";
     } else {
-        std::cerr << "[FFmpegDecoder] " << message << std::endl;
+        LOG_ERROR() << "[FFmpegDecoder] " << message;
     }
 }
 

@@ -10,6 +10,8 @@
 #include <regex>
 #include <cstdio>
 
+#include "../core/Logger.h"
+using namespace AISecurityVision;
 BehaviorAnalyzer::BehaviorAnalyzer()
     : m_minObjectSize(DEFAULT_MIN_WIDTH, DEFAULT_MIN_HEIGHT),
       m_trackingTimeout(DEFAULT_TRACKING_TIMEOUT) {
@@ -42,8 +44,8 @@ bool BehaviorAnalyzer::initialize() {
     m_intrusionRules[defaultRule.id] = defaultRule;
     m_rois[defaultROI.id] = defaultROI;
 
-    std::cout << "[BehaviorAnalyzer] Initialized with default intrusion rule and ReID matching (threshold: "
-              << m_reidSimilarityThreshold.load() << ")" << std::endl;
+    LOG_INFO() << "[BehaviorAnalyzer] Initialized with default intrusion rule and ReID matching (threshold: "
+              << m_reidSimilarityThreshold.load() << ")";
     return true;
 }
 
@@ -195,9 +197,9 @@ void BehaviorAnalyzer::updateObjectStatesWithReID(const std::vector<cv::Rect>& d
                 state.reidMatches = matches;
 
                 if (!matches.empty()) {
-                    std::cout << "[BehaviorAnalyzer] Found " << matches.size()
+                    LOG_INFO() << "[BehaviorAnalyzer] Found " << matches.size()
                               << " ReID matches for track " << trackId
-                              << " (threshold: " << m_reidSimilarityThreshold.load() << ")" << std::endl;
+                              << " (threshold: " << m_reidSimilarityThreshold.load() << ")";
                 }
             }
 
@@ -236,8 +238,8 @@ void BehaviorAnalyzer::updateObjectStatesWithReID(const std::vector<cv::Rect>& d
                 newState.reidMatches = matches;
 
                 if (!matches.empty()) {
-                    std::cout << "[BehaviorAnalyzer] New track " << trackId
-                              << " has " << matches.size() << " ReID matches" << std::endl;
+                    LOG_INFO() << "[BehaviorAnalyzer] New track " << trackId
+                              << " has " << matches.size() << " ReID matches";
                 }
             }
 
@@ -344,7 +346,7 @@ bool BehaviorAnalyzer::addIntrusionRule(const IntrusionRule& rule) {
     m_intrusionRules[rule.id] = rule;
     m_rois[rule.roi.id] = rule.roi;
 
-    std::cout << "[BehaviorAnalyzer] Added intrusion rule: " << rule.id << std::endl;
+    LOG_INFO() << "[BehaviorAnalyzer] Added intrusion rule: " << rule.id;
     return true;
 }
 
@@ -354,7 +356,7 @@ bool BehaviorAnalyzer::removeIntrusionRule(const std::string& ruleId) {
     auto it = m_intrusionRules.find(ruleId);
     if (it != m_intrusionRules.end()) {
         m_intrusionRules.erase(it);
-        std::cout << "[BehaviorAnalyzer] Removed intrusion rule: " << ruleId << std::endl;
+        LOG_INFO() << "[BehaviorAnalyzer] Removed intrusion rule: " << ruleId;
         return true;
     }
 
@@ -389,7 +391,7 @@ bool BehaviorAnalyzer::addROI(const ROI& roi) {
     std::lock_guard<std::mutex> lock(m_mutex);
 
     m_rois[roi.id] = roi;
-    std::cout << "[BehaviorAnalyzer] Added ROI: " << roi.id << std::endl;
+    LOG_INFO() << "[BehaviorAnalyzer] Added ROI: " << roi.id;
     return true;
 }
 
@@ -399,7 +401,7 @@ bool BehaviorAnalyzer::removeROI(const std::string& roiId) {
     auto it = m_rois.find(roiId);
     if (it != m_rois.end()) {
         m_rois.erase(it);
-        std::cout << "[BehaviorAnalyzer] Removed ROI: " << roiId << std::endl;
+        LOG_INFO() << "[BehaviorAnalyzer] Removed ROI: " << roiId;
         return true;
     }
 
@@ -516,7 +518,7 @@ void BehaviorAnalyzer::drawObjectStates(cv::Mat& frame) const {
 bool BehaviorAnalyzer::loadRulesFromJson(const std::string& jsonPath) {
     // TODO: Implement JSON loading for rules
     // For now, just return true as a placeholder
-    std::cout << "[BehaviorAnalyzer] JSON rule loading not yet implemented: " << jsonPath << std::endl;
+    LOG_INFO() << "[BehaviorAnalyzer] JSON rule loading not yet implemented: " << jsonPath;
     return true;
 }
 
@@ -590,12 +592,12 @@ std::vector<BehaviorEvent> BehaviorAnalyzer::checkIntrusionRulesWithPriority() {
                 processedObjects.insert(state.trackId);
                 const_cast<ObjectState&>(state).roiEntryTimes.erase(activeRule->roi.id);
 
-                std::cout << "[BehaviorAnalyzer] Enhanced conflict-resolved intrusion event: "
+                LOG_INFO() << "[BehaviorAnalyzer] Enhanced conflict-resolved intrusion event: "
                           << "Object " << state.trackId
                           << " in ROI " << activeRule->roi.name
                           << " (Priority " << activeRule->roi.priority << ")"
                           << " for " << duration << "s"
-                          << " - " << conflictResult.resolutionReason << std::endl;
+                          << " - " << conflictResult.resolutionReason;
             }
         }
     }
@@ -996,9 +998,9 @@ void BehaviorAnalyzer::setReIDConfig(const ReIDConfig& config) {
 
     // Validate threshold
     if (!config.isValidThreshold(config.similarityThreshold)) {
-        std::cout << "[BehaviorAnalyzer] Invalid ReID similarity threshold: "
+        LOG_INFO() << "[BehaviorAnalyzer] Invalid ReID similarity threshold: "
                   << config.similarityThreshold << " (valid range: "
-                  << MIN_REID_SIMILARITY_THRESHOLD << "-" << MAX_REID_SIMILARITY_THRESHOLD << ")" << std::endl;
+                  << MIN_REID_SIMILARITY_THRESHOLD << "-" << MAX_REID_SIMILARITY_THRESHOLD << ")";
         return;
     }
 
@@ -1006,10 +1008,10 @@ void BehaviorAnalyzer::setReIDConfig(const ReIDConfig& config) {
     m_reidEnabled.store(config.enabled);
     m_reidSimilarityThreshold.store(config.similarityThreshold);
 
-    std::cout << "[BehaviorAnalyzer] ReID config updated: enabled=" << config.enabled
+    LOG_INFO() << "[BehaviorAnalyzer] ReID config updated: enabled=" << config.enabled
               << ", threshold=" << config.similarityThreshold
               << ", maxMatches=" << config.maxMatches
-              << ", timeout=" << config.matchTimeout << "s" << std::endl;
+              << ", timeout=" << config.matchTimeout << "s";
 }
 
 ReIDConfig BehaviorAnalyzer::getReIDConfig() const {
@@ -1019,9 +1021,9 @@ ReIDConfig BehaviorAnalyzer::getReIDConfig() const {
 
 void BehaviorAnalyzer::setReIDSimilarityThreshold(float threshold) {
     if (threshold < MIN_REID_SIMILARITY_THRESHOLD || threshold > MAX_REID_SIMILARITY_THRESHOLD) {
-        std::cout << "[BehaviorAnalyzer] Invalid ReID similarity threshold: " << threshold
+        LOG_INFO() << "[BehaviorAnalyzer] Invalid ReID similarity threshold: " << threshold
                   << " (valid range: " << MIN_REID_SIMILARITY_THRESHOLD
-                  << "-" << MAX_REID_SIMILARITY_THRESHOLD << ")" << std::endl;
+                  << "-" << MAX_REID_SIMILARITY_THRESHOLD << ")";
         return;
     }
 
@@ -1029,7 +1031,7 @@ void BehaviorAnalyzer::setReIDSimilarityThreshold(float threshold) {
     m_reidConfig.similarityThreshold = threshold;
     m_reidSimilarityThreshold.store(threshold);
 
-    std::cout << "[BehaviorAnalyzer] ReID similarity threshold set to " << threshold << std::endl;
+    LOG_INFO() << "[BehaviorAnalyzer] ReID similarity threshold set to " << threshold;
 }
 
 float BehaviorAnalyzer::getReIDSimilarityThreshold() const {
@@ -1041,7 +1043,7 @@ void BehaviorAnalyzer::setReIDEnabled(bool enabled) {
     m_reidConfig.enabled = enabled;
     m_reidEnabled.store(enabled);
 
-    std::cout << "[BehaviorAnalyzer] ReID matching " << (enabled ? "enabled" : "disabled") << std::endl;
+    LOG_INFO() << "[BehaviorAnalyzer] ReID matching " << (enabled ? "enabled" : "disabled");
 }
 
 bool BehaviorAnalyzer::isReIDEnabled() const {

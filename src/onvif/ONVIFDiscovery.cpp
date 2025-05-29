@@ -15,6 +15,8 @@
 #include <ifaddrs.h>
 #include <net/if.h>
 
+#include "../core/Logger.h"
+using namespace AISecurityVision;
 // ONVIFDevice implementation
 bool ONVIFDevice::isValid() const {
     return !uuid.empty() && !ipAddress.empty() && !serviceUrl.empty();
@@ -375,11 +377,11 @@ std::string ONVIFDiscovery::getLastError() const {
 }
 
 void ONVIFDiscovery::logDebug(const std::string& message) {
-    std::cout << "[ONVIFDiscovery] " << message << std::endl;
+    LOG_INFO() << "[ONVIFDiscovery] " << message;
 }
 
 void ONVIFDiscovery::logError(const std::string& message) {
-    std::cerr << "[ONVIFDiscovery] ERROR: " << message << std::endl;
+    LOG_ERROR() << "[ONVIFDiscovery] ERROR: " << message;
 }
 
 bool ONVIFDiscovery::sendSOAPRequest(const std::string& url, const std::string& soapAction,
@@ -1035,9 +1037,9 @@ bool ONVIFManager::addDiscoveredDevice(const ONVIFDevice& device) {
     if (m_autoAddDevices) {
         ONVIFDevice deviceCopy = device; // Make a copy for configuration
         if (configureDevice(deviceCopy)) {
-            std::cout << "[ONVIFManager] Successfully auto-configured device: " << deviceCopy.name << std::endl;
+            LOG_INFO() << "[ONVIFManager] Successfully auto-configured device: " << deviceCopy.name;
         } else {
-            std::cerr << "[ONVIFManager] Failed to auto-configure device: " << deviceCopy.name << std::endl;
+            LOG_ERROR() << "[ONVIFManager] Failed to auto-configure device: " << deviceCopy.name;
         }
     }
 
@@ -1151,8 +1153,8 @@ bool ONVIFManager::configureDevice(ONVIFDevice& device) {
             return false;
         }
 
-        std::cout << "[ONVIFManager] Auto-configured ONVIF device: " << device.name
-                  << " (" << device.ipAddress << ") -> " << videoSource.id << std::endl;
+        LOG_INFO() << "[ONVIFManager] Auto-configured ONVIF device: " << device.name
+                  << " (" << device.ipAddress << ") -> " << videoSource.id;
 
         return true;
 

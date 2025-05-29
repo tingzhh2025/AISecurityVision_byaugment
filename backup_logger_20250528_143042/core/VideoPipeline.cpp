@@ -1,0 +1,825 @@
+#include "VideoPipeline.h"
+#include "TaskManager.h"
+#include "../video/FFmpegDecoder.h"
+#include "../ai/YOLOv8Detector.h"
+#include "../ai/YOLOv8DetectorOptimized.h"
+#include "../ai/ByteTracker.h"
+#include "../ai/ReIDExtractor.h"
+#include "../recognition/FaceRecognizer.h"
+#include "../recognition/LicensePlateRecognizer.h"
+#include "../ai/BehaviorAnalyzer.h"
+#include "../output/Recorder.h"
+#include "../output/Streamer.h"
+#include "../output/AlarmTrigger.h"
+#include <iostream>
+#include <chrono>
+#include <sstream>
+#include <functional>
+
+VideoPipeline::VideoPipeline(const VideoSource& source)
+    : m_source(source) {
+    std::cout << "[VideoPipeline] Creating pipeline for: " << source.id << std::endl;
+
+    // Initialize health monitoring timestamps
+    auto now = std::chrono::steady_clock::now();
+    m_lastFrameTime = now;
+    m_lastHealthCheck = now;
+    m_startTime = now;
+}
+
+VideoPipeline::~VideoPipeline() {
+    stop();
+}
+
+bool VideoPipeline::initialize() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    try {
+        std::cout << "[VideoPipeline] Initializing pipeline: " << m_source.id << std::endl;
+
+        // Initialize decoder
+        m_decoder = std::make_unique<FFmpegDecoder>();
+        if (!m_decoder->initialize(m_source)) {
+            handleError("Failed to initialize decoder");
+            return false;
+        }
+
+        // Initialize AI modules - choose between optimized and standard detector
+        if (m_optimizedDetectionEnabled.load()) {
+            std::cout << "[VideoPipeline] Initializing optimized RKNN YOLOv8 detector with "
+                      << m_detectionThreads.load() << " threads..." << std::endl;
+
+            m_optimizedDetector = std::make_unique<YOLOv8DetectorOptimized>(m_detectionThreads.load());
+            if (!m_optimizedDetector->initialize("models/yolov8n.rknn", InferenceBackend::RKNN)) {
+                std::cout << "[VideoPipeline] Failed to initialize optimized detector, falling back to standard detector" << std::endl;
+                m_optimizedDetectionEnabled.store(false);
+
+                // Fallback to standard detector
+                m_detector = std::make_unique<YOLOv8Detector>();
+                if (!m_detector->initialize()) {
+                    handleError("Failed to initialize YOLOv8 detector");
+                    return false;
+                }
+            } else {
+                std::cout << "[VideoPipeline] Optimized RKNN YOLOv8 detector initialized successfully!" << std::endl;
+                // Set optimized queue size for better performance
+                m_optimizedDetector->setMaxQueueSize(6);
+            }
+        } else {
+            m_detector = std::make_unique<YOLOv8Detector>();
+            if (!m_detector->initialize()) {
+                handleError("Failed to initialize YOLOv8 detector");
+                return false;
+            }
+        }
+
+        m_tracker = std::make_unique<ByteTracker>();
+        if (!m_tracker->initialize()) {
+            handleError("Failed to initialize ByteTracker");
+            return false;
+        }
+
+        // Initialize ReID extractor
+        m_reidExtractor = std::make_unique<ReIDExtractor>();
+        if (!m_reidExtractor->initialize()) {
+            handleError("Failed to initialize ReID extractor");
+            return false;
+        }
+
+        // Enable ReID tracking in ByteTracker
+        m_tracker->enableReIDTracking(true);
+        m_tracker->setReIDSimilarityThreshold(0.7f);
+        m_tracker->setReIDWeight(0.3f);
+
+        // Initialize recognition modules
+        m_faceRecognizer = std::make_unique<FaceRecognizer>();
+        if (!m_faceRecognizer->initialize()) {
+            std::cout << "[VideoPipeline] Warning: Face recognizer initialization failed" << std::endl;
+        }
+
+        m_plateRecognizer = std::make_unique<LicensePlateRecognizer>();
+        if (!m_plateRecognizer->initialize()) {
+            std::cout << "[VideoPipeline] Warning: License plate recognizer initialization failed" << std::endl;
+        }
+
+        // Initialize behavior analyzer
+        m_behaviorAnalyzer = std::make_unique<BehaviorAnalyzer>();
+        if (!m_behaviorAnalyzer->initialize()) {
+            handleError("Failed to initialize behavior analyzer");
+            return false;
+        }
+
+        // Task 77: Set camera ID for cross-camera tracking
+        m_behaviorAnalyzer->setCameraId(m_source.id);
+
+        // Initialize output modules
+        m_recorder = std::make_unique<Recorder>();
+        m_streamer = std::make_unique<Streamer>();
+        m_alarmTrigger = std::make_unique<AlarmTrigger>();
+
+        // Configure streamer with appropriate settings
+        StreamConfig streamConfig;
+        streamConfig.width = 640;
+        streamConfig.height = 480;
+        streamConfig.fps = 15;
+        streamConfig.quality = 80;
+        streamConfig.port = 8000 + std::hash<std::string>{}(m_source.id) % 1000; // Unique port per source
+        streamConfig.enableOverlays = true;
+        m_streamer->setConfig(streamConfig);
+
+        if (!m_recorder->initialize(m_source.id) ||
+            !m_streamer->initialize(m_source.id) ||
+            !m_alarmTrigger->initialize()) {
+            handleError("Failed to initialize output modules");
+            return false;
+        }
+
+        // Enable streaming by default
+        m_streamingEnabled.store(true);
+
+        std::cout << "[VideoPipeline] MJPEG stream available at: " << m_streamer->getStreamUrl() << std::endl;
+
+        std::cout << "[VideoPipeline] Pipeline initialized successfully: " << m_source.id << std::endl;
+        return true;
+
+    } catch (const std::exception& e) {
+        handleError("Exception during initialization: " + std::string(e.what()));
+        return false;
+    }
+}
+
+void VideoPipeline::start() {
+    if (m_running.load()) {
+        std::cout << "[VideoPipeline] Pipeline already running: " << m_source.id << std::endl;
+        return;
+    }
+
+    m_running.store(true);
+    m_healthy.store(true);
+    m_startTime = std::chrono::steady_clock::now();
+
+    m_processingThread = std::thread(&VideoPipeline::processingThread, this);
+
+    std::cout << "[VideoPipeline] Pipeline started: " << m_source.id << std::endl;
+}
+
+void VideoPipeline::stop() {
+    if (!m_running.load()) {
+        return;
+    }
+
+    std::cout << "[VideoPipeline] Stopping pipeline: " << m_source.id << std::endl;
+
+    m_running.store(false);
+
+    if (m_processingThread.joinable()) {
+        m_processingThread.join();
+    }
+
+    std::cout << "[VideoPipeline] Pipeline stopped: " << m_source.id << std::endl;
+}
+
+bool VideoPipeline::isRunning() const {
+    return m_running.load();
+}
+
+bool VideoPipeline::isHealthy() const {
+    return m_healthy.load();
+}
+
+void VideoPipeline::processingThread() {
+    std::cout << "[VideoPipeline] Processing thread started: " << m_source.id << std::endl;
+
+    cv::Mat frame;
+    int64_t timestamp;
+    int reconnectAttempts = 0;
+
+    while (m_running.load()) {
+        try {
+            // Check stream health periodically
+            checkStreamHealth();
+
+            // Decode frame
+            if (!m_decoder->getNextFrame(frame, timestamp)) {
+                m_consecutiveErrors.fetch_add(1);
+
+                if (shouldReconnect() && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                    std::cout << "[VideoPipeline] Attempting reconnection: " << m_source.id
+                              << " (attempt " << (reconnectAttempts + 1) << ")" << std::endl;
+
+                    attemptReconnection();
+                    reconnectAttempts++;
+                    m_totalReconnects.fetch_add(1);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(RECONNECT_DELAY_MS));
+                    continue;
+                } else {
+                    handleError("Failed to decode frame, max reconnect attempts reached");
+                    break;
+                }
+            }
+
+            // Reset reconnect counter and error count on successful frame
+            reconnectAttempts = 0;
+            m_consecutiveErrors.store(0);
+
+            // Update health metrics
+            updateHealthMetrics();
+
+            // Process frame through pipeline
+            processFrame(frame, timestamp);
+
+            // Update statistics
+            m_processedFrames.fetch_add(1);
+
+            // Calculate frame rate
+            auto now = std::chrono::steady_clock::now();
+            if (m_lastFrameTime.time_since_epoch().count() > 0) {
+                auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_lastFrameTime);
+                if (duration.count() > 0) {
+                    m_frameRate.store(1000.0 / duration.count());
+                }
+            }
+            m_lastFrameTime = now;
+
+        } catch (const std::exception& e) {
+            handleError("Exception in processing thread: " + std::string(e.what()));
+            m_droppedFrames.fetch_add(1);
+        }
+    }
+
+    std::cout << "[VideoPipeline] Processing thread stopped: " << m_source.id << std::endl;
+}
+
+void VideoPipeline::processFrame(const cv::Mat& frame, int64_t timestamp) {
+    if (frame.empty()) {
+        return;
+    }
+
+    FrameResult result;
+    result.frame = frame.clone();
+    result.timestamp = timestamp;
+
+    // Object detection - use optimized detector if available
+    if (m_detectionEnabled.load()) {
+        std::vector<YOLOv8Detector::Detection> detectionResults;
+
+        if (m_optimizedDetectionEnabled.load() && m_optimizedDetector) {
+            // Use optimized detector with async processing
+            auto future = m_optimizedDetector->detectAsync(frame);
+            detectionResults = future.get();
+        } else if (m_detector) {
+            // Use standard detector
+            detectionResults = m_detector->detectObjects(frame);
+        }
+
+        // Extract bounding boxes and class information
+        for (const auto& detection : detectionResults) {
+            result.detections.push_back(detection.bbox);
+            result.labels.push_back(detection.className);
+        }
+
+        // Extract confidences and class IDs for tracking
+        std::vector<float> confidences;
+        std::vector<int> classIds;
+        for (const auto& detection : detectionResults) {
+            confidences.push_back(detection.confidence);
+            classIds.push_back(detection.classId);
+        }
+
+        // ReID feature extraction
+        if (m_reidExtractor && !result.detections.empty()) {
+            auto reidEmbeddings = m_reidExtractor->extractFeatures(
+                frame, result.detections, {}, classIds, confidences);
+
+            // Extract feature vectors for tracking
+            std::vector<std::vector<float>> reidFeatures;
+            for (const auto& embedding : reidEmbeddings) {
+                reidFeatures.push_back(embedding.features);
+                result.reidEmbeddings.push_back(embedding.features);
+            }
+
+            // Object tracking with ReID features
+            if (m_tracker) {
+                result.trackIds = m_tracker->updateWithReIDFeatures(
+                    result.detections, confidences, classIds, reidFeatures);
+
+                // Task 75: Report track updates to TaskManager for cross-camera tracking
+                TaskManager& taskManager = TaskManager::getInstance();
+                result.globalTrackIds.resize(result.trackIds.size(), -1);
+
+                for (size_t i = 0; i < result.trackIds.size() && i < reidFeatures.size(); ++i) {
+                    if (result.trackIds[i] >= 0 && !reidFeatures[i].empty()) {
+                        // Report track update to TaskManager
+                        taskManager.reportTrackUpdate(
+                            m_source.id, result.trackIds[i], reidFeatures[i],
+                            result.detections[i], classIds[i], confidences[i]);
+
+                        // Get global track ID
+                        result.globalTrackIds[i] = taskManager.getGlobalTrackId(m_source.id, result.trackIds[i]);
+                    }
+                }
+
+                std::cout << "[VideoPipeline] Processed " << result.detections.size()
+                          << " detections with " << reidEmbeddings.size()
+                          << " ReID embeddings (dim="
+                          << (reidEmbeddings.empty() ? 0 : reidEmbeddings[0].getDimension())
+                          << "), global tracks: " << result.globalTrackIds.size() << std::endl;
+            }
+        } else {
+            // Fallback to regular tracking without ReID
+            if (m_tracker) {
+                result.trackIds = m_tracker->updateWithClasses(result.detections, confidences, classIds);
+
+                // Initialize global track IDs as empty for non-ReID tracking
+                result.globalTrackIds.resize(result.trackIds.size(), -1);
+            }
+        }
+    }
+
+    // Face recognition
+    if (m_faceRecognizer) {
+        result.faceIds = m_faceRecognizer->recognize(frame, result.detections);
+    }
+
+    // License plate recognition
+    if (m_plateRecognizer) {
+        result.plateNumbers = m_plateRecognizer->recognize(frame, result.detections);
+    }
+
+    // Behavior analysis
+    if (m_behaviorAnalyzer) {
+        result.events = m_behaviorAnalyzer->analyze(frame, result.detections, result.trackIds);
+        result.hasAlarm = !result.events.empty();
+
+        // Task 73: Include active ROIs for visualization
+        result.activeROIs = m_behaviorAnalyzer->getActiveROIs();
+    }
+
+    // Output processing
+    if (m_recordingEnabled.load() && m_recorder) {
+        m_recorder->processFrame(result);
+    }
+
+    if (m_streamingEnabled.load() && m_streamer) {
+        m_streamer->processFrame(result);
+    }
+
+    if (result.hasAlarm && m_alarmTrigger) {
+        m_alarmTrigger->triggerAlarm(result);
+    }
+}
+
+void VideoPipeline::handleError(const std::string& error) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_lastError = error;
+    m_healthy.store(false);
+    std::cerr << "[VideoPipeline] Error in " << m_source.id << ": " << error << std::endl;
+}
+
+bool VideoPipeline::shouldReconnect() const {
+    // Implement reconnection logic based on error type
+    return true;
+}
+
+void VideoPipeline::attemptReconnection() {
+    if (m_decoder) {
+        m_decoder->reconnect();
+    }
+}
+
+// Getters
+double VideoPipeline::getFrameRate() const {
+    return m_frameRate.load();
+}
+
+size_t VideoPipeline::getProcessedFrames() const {
+    return m_processedFrames.load();
+}
+
+size_t VideoPipeline::getDroppedFrames() const {
+    return m_droppedFrames.load();
+}
+
+std::string VideoPipeline::getLastError() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_lastError;
+}
+
+// Configuration setters
+void VideoPipeline::setDetectionEnabled(bool enabled) {
+    m_detectionEnabled.store(enabled);
+}
+
+void VideoPipeline::setRecordingEnabled(bool enabled) {
+    m_recordingEnabled.store(enabled);
+}
+
+void VideoPipeline::setStreamingEnabled(bool enabled) {
+    m_streamingEnabled.store(enabled);
+}
+
+// AI Detection configuration methods
+void VideoPipeline::setOptimizedDetectionEnabled(bool enabled) {
+    m_optimizedDetectionEnabled.store(enabled);
+    std::cout << "[VideoPipeline] Optimized detection "
+              << (enabled ? "enabled" : "disabled")
+              << " for pipeline: " << m_source.id << std::endl;
+}
+
+bool VideoPipeline::isOptimizedDetectionEnabled() const {
+    return m_optimizedDetectionEnabled.load();
+}
+
+void VideoPipeline::setDetectionThreads(int threads) {
+    if (threads > 0 && threads <= 8) {  // Reasonable limits
+        m_detectionThreads.store(threads);
+        std::cout << "[VideoPipeline] Detection threads set to " << threads
+                  << " for pipeline: " << m_source.id << std::endl;
+    }
+}
+
+int VideoPipeline::getDetectionThreads() const {
+    return m_detectionThreads.load();
+}
+
+// Behavior analysis rule management implementation
+bool VideoPipeline::addIntrusionRule(const IntrusionRule& rule) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_behaviorAnalyzer) {
+        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+        return false;
+    }
+
+    bool success = m_behaviorAnalyzer->addIntrusionRule(rule);
+    if (success) {
+        std::cout << "[VideoPipeline] Added intrusion rule: " << rule.id
+                  << " to pipeline: " << m_source.id << std::endl;
+    }
+
+    return success;
+}
+
+bool VideoPipeline::removeIntrusionRule(const std::string& ruleId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_behaviorAnalyzer) {
+        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+        return false;
+    }
+
+    bool success = m_behaviorAnalyzer->removeIntrusionRule(ruleId);
+    if (success) {
+        std::cout << "[VideoPipeline] Removed intrusion rule: " << ruleId
+                  << " from pipeline: " << m_source.id << std::endl;
+    }
+
+    return success;
+}
+
+bool VideoPipeline::updateIntrusionRule(const IntrusionRule& rule) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_behaviorAnalyzer) {
+        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+        return false;
+    }
+
+    bool success = m_behaviorAnalyzer->updateIntrusionRule(rule);
+    if (success) {
+        std::cout << "[VideoPipeline] Updated intrusion rule: " << rule.id
+                  << " in pipeline: " << m_source.id << std::endl;
+    }
+
+    return success;
+}
+
+std::vector<IntrusionRule> VideoPipeline::getIntrusionRules() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_behaviorAnalyzer) {
+        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+        return {};
+    }
+
+    return m_behaviorAnalyzer->getIntrusionRules();
+}
+
+bool VideoPipeline::addROI(const ROI& roi) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_behaviorAnalyzer) {
+        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+        return false;
+    }
+
+    bool success = m_behaviorAnalyzer->addROI(roi);
+    if (success) {
+        std::cout << "[VideoPipeline] Added ROI: " << roi.id
+                  << " to pipeline: " << m_source.id << std::endl;
+    }
+
+    return success;
+}
+
+bool VideoPipeline::removeROI(const std::string& roiId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_behaviorAnalyzer) {
+        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+        return false;
+    }
+
+    bool success = m_behaviorAnalyzer->removeROI(roiId);
+    if (success) {
+        std::cout << "[VideoPipeline] Removed ROI: " << roiId
+                  << " from pipeline: " << m_source.id << std::endl;
+    }
+
+    return success;
+}
+
+std::vector<ROI> VideoPipeline::getROIs() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_behaviorAnalyzer) {
+        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+        return {};
+    }
+
+    return m_behaviorAnalyzer->getROIs();
+}
+
+// Access methods
+const VideoSource& VideoPipeline::getSource() const {
+    return m_source;
+}
+
+std::chrono::steady_clock::time_point VideoPipeline::getStartTime() const {
+    return m_startTime;
+}
+
+// Task 76: BehaviorAnalyzer access for ReID configuration
+BehaviorAnalyzer* VideoPipeline::getBehaviorAnalyzer() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_behaviorAnalyzer.get();
+}
+
+// VideoSource implementation
+bool VideoSource::isValid() const {
+    if (id.empty() || url.empty()) {
+        return false;
+    }
+
+    if (protocol != "rtsp" && protocol != "onvif" && protocol != "gb28181" &&
+        protocol != "rtmp" && protocol != "http" && protocol != "file") {
+        return false;
+    }
+
+    if (width <= 0 || height <= 0 || fps <= 0) {
+        return false;
+    }
+
+    return true;
+}
+
+std::string VideoSource::toString() const {
+    std::ostringstream oss;
+    oss << "VideoSource{id=" << id
+        << ", protocol=" << protocol
+        << ", url=" << url
+        << ", resolution=" << width << "x" << height
+        << ", fps=" << fps
+        << ", enabled=" << (enabled ? "true" : "false") << "}";
+    return oss.str();
+}
+
+// Streaming configuration methods
+bool VideoPipeline::configureStreaming(const StreamConfig& config) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_streamer) {
+        std::cerr << "[VideoPipeline] Streamer not initialized" << std::endl;
+        return false;
+    }
+
+    try {
+        // Update streamer configuration
+        m_streamer->setConfig(config);
+
+        // Restart streaming if it was running
+        if (m_streamingEnabled.load()) {
+            m_streamer->stopServer();
+            m_streamer->stopRtmpStream();
+
+            if (config.protocol == StreamProtocol::MJPEG) {
+                if (!m_streamer->startServer()) {
+                    std::cerr << "[VideoPipeline] Failed to restart MJPEG server" << std::endl;
+                    return false;
+                }
+            } else if (config.protocol == StreamProtocol::RTMP) {
+                if (!m_streamer->startRtmpStream()) {
+                    std::cerr << "[VideoPipeline] Failed to restart RTMP stream" << std::endl;
+                    return false;
+                }
+            }
+        }
+
+        std::cout << "[VideoPipeline] Streaming configured for " << m_source.id
+                  << " - " << (config.protocol == StreamProtocol::MJPEG ? "MJPEG" : "RTMP")
+                  << " " << config.width << "x" << config.height << "@" << config.fps << "fps" << std::endl;
+
+        return true;
+
+    } catch (const std::exception& e) {
+        std::cerr << "[VideoPipeline] Failed to configure streaming: " << e.what() << std::endl;
+        return false;
+    }
+}
+
+StreamConfig VideoPipeline::getStreamConfig() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_streamer) {
+        return StreamConfig{}; // Return default config
+    }
+
+    return m_streamer->getConfig();
+}
+
+bool VideoPipeline::startStreaming() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_streamer) {
+        std::cerr << "[VideoPipeline] Streamer not initialized" << std::endl;
+        return false;
+    }
+
+    if (m_streamingEnabled.load()) {
+        std::cout << "[VideoPipeline] Streaming already enabled for " << m_source.id << std::endl;
+        return true;
+    }
+
+    try {
+        StreamConfig config = m_streamer->getConfig();
+
+        bool success = false;
+        if (config.protocol == StreamProtocol::MJPEG) {
+            success = m_streamer->startServer();
+        } else if (config.protocol == StreamProtocol::RTMP) {
+            success = m_streamer->startRtmpStream();
+        }
+
+        if (success) {
+            m_streamingEnabled.store(true);
+            std::cout << "[VideoPipeline] Streaming started for " << m_source.id
+                      << " at " << m_streamer->getStreamUrl() << std::endl;
+        }
+
+        return success;
+
+    } catch (const std::exception& e) {
+        std::cerr << "[VideoPipeline] Failed to start streaming: " << e.what() << std::endl;
+        return false;
+    }
+}
+
+bool VideoPipeline::stopStreaming() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_streamer) {
+        std::cerr << "[VideoPipeline] Streamer not initialized" << std::endl;
+        return false;
+    }
+
+    if (!m_streamingEnabled.load()) {
+        std::cout << "[VideoPipeline] Streaming already disabled for " << m_source.id << std::endl;
+        return true;
+    }
+
+    try {
+        m_streamer->stopServer();
+        m_streamer->stopRtmpStream();
+        m_streamingEnabled.store(false);
+
+        std::cout << "[VideoPipeline] Streaming stopped for " << m_source.id << std::endl;
+        return true;
+
+    } catch (const std::exception& e) {
+        std::cerr << "[VideoPipeline] Failed to stop streaming: " << e.what() << std::endl;
+        return false;
+    }
+}
+
+bool VideoPipeline::isStreamingEnabled() const {
+    return m_streamingEnabled.load();
+}
+
+std::string VideoPipeline::getStreamUrl() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_streamer) {
+        return "";
+    }
+
+    return m_streamer->getStreamUrl();
+}
+
+size_t VideoPipeline::getConnectedClients() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_streamer) {
+        return 0;
+    }
+
+    return m_streamer->getConnectedClients();
+}
+
+double VideoPipeline::getStreamFps() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_streamer) {
+        return 0.0;
+    }
+
+    return m_streamer->getStreamFps();
+}
+
+void VideoPipeline::updateHealthMetrics() {
+    auto now = std::chrono::steady_clock::now();
+
+    // Calculate frame interval
+    if (m_lastFrameTime.time_since_epoch().count() > 0) {
+        auto interval = std::chrono::duration<double>(now - m_lastFrameTime).count();
+
+        // Update average frame interval using exponential moving average
+        double currentAvg = m_avgFrameInterval.load();
+        double alpha = 0.1; // Smoothing factor
+        double newAvg = (currentAvg == 0.0) ? interval : (alpha * interval + (1.0 - alpha) * currentAvg);
+        m_avgFrameInterval.store(newAvg);
+
+        // Update frame rate
+        if (newAvg > 0.0) {
+            m_frameRate.store(1.0 / newAvg);
+        }
+    }
+
+    m_lastFrameTime = now;
+}
+
+void VideoPipeline::checkStreamHealth() {
+    auto now = std::chrono::steady_clock::now();
+
+    // Only check health at specified intervals
+    auto timeSinceLastCheck = std::chrono::duration<double>(now - m_lastHealthCheck).count();
+    if (timeSinceLastCheck < HEALTH_CHECK_INTERVAL_S) {
+        return;
+    }
+
+    m_lastHealthCheck = now;
+
+    // Check for frame timeout
+    auto timeSinceLastFrame = std::chrono::duration<double>(now - m_lastFrameTime).count();
+    bool frameTimeout = timeSinceLastFrame > FRAME_TIMEOUT_S;
+
+    // Check consecutive errors
+    bool tooManyErrors = m_consecutiveErrors.load() > MAX_CONSECUTIVE_ERRORS;
+
+    // Check frame rate stability
+    double currentFrameRate = m_frameRate.load();
+    double expectedFrameRate = 25.0; // Default expected frame rate
+    bool frameRateStable = (currentFrameRate >= expectedFrameRate * STABLE_FRAME_RATE_THRESHOLD);
+
+    // Update stream stability
+    bool wasStable = m_streamStable.load();
+    bool isStable = !frameTimeout && !tooManyErrors && frameRateStable;
+    m_streamStable.store(isStable);
+
+    // Log health status changes
+    if (wasStable != isStable) {
+        if (isStable) {
+            std::cout << "[VideoPipeline] Stream " << m_source.id << " is now STABLE" << std::endl;
+            m_healthy.store(true);
+        } else {
+            std::cout << "[VideoPipeline] Stream " << m_source.id << " is now UNSTABLE" << std::endl;
+            std::cout << "  - Frame timeout: " << (frameTimeout ? "YES" : "NO")
+                      << " (last frame: " << timeSinceLastFrame << "s ago)" << std::endl;
+            std::cout << "  - Too many errors: " << (tooManyErrors ? "YES" : "NO")
+                      << " (consecutive: " << m_consecutiveErrors.load() << ")" << std::endl;
+            std::cout << "  - Frame rate stable: " << (frameRateStable ? "YES" : "NO")
+                      << " (current: " << currentFrameRate << " fps)" << std::endl;
+            m_healthy.store(false);
+        }
+    }
+
+    // Trigger reconnection if stream is unhealthy for too long
+    if (!isStable && tooManyErrors) {
+        std::cout << "[VideoPipeline] Stream " << m_source.id
+                  << " requires reconnection due to health issues" << std::endl;
+        // The main processing loop will handle reconnection
+    }
+}
+
+bool VideoPipeline::isStreamStable() const {
+    return m_streamStable.load();
+}

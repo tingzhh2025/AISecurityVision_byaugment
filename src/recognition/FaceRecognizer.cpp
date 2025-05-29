@@ -5,11 +5,13 @@
 #include <algorithm>
 #include <random>
 
+#include "../core/Logger.h"
+using namespace AISecurityVision;
 FaceRecognizer::FaceRecognizer() {}
 FaceRecognizer::~FaceRecognizer() {}
 
 bool FaceRecognizer::initialize() {
-    std::cout << "[FaceRecognizer] Initialized with face verification support" << std::endl;
+    LOG_INFO() << "[FaceRecognizer] Initialized with face verification support";
     return true;
 }
 
@@ -20,7 +22,7 @@ std::vector<std::string> FaceRecognizer::recognize(const cv::Mat& frame, const s
 // Task 62: Face verification implementation
 std::vector<float> FaceRecognizer::extractFaceEmbedding(const cv::Mat& faceImage) {
     if (faceImage.empty()) {
-        std::cerr << "[FaceRecognizer] Empty face image provided" << std::endl;
+        LOG_ERROR() << "[FaceRecognizer] Empty face image provided";
         return std::vector<float>();
     }
 
@@ -38,24 +40,24 @@ std::vector<FaceVerificationResult> FaceRecognizer::verifyFace(const cv::Mat& fa
     std::vector<FaceVerificationResult> results;
 
     if (faceImage.empty()) {
-        std::cerr << "[FaceRecognizer] Empty face image for verification" << std::endl;
+        LOG_ERROR() << "[FaceRecognizer] Empty face image for verification";
         return results;
     }
 
     // Extract embedding from input image
     std::vector<float> inputEmbedding = extractFaceEmbedding(faceImage);
     if (inputEmbedding.empty()) {
-        std::cerr << "[FaceRecognizer] Failed to extract embedding from input image" << std::endl;
+        LOG_ERROR() << "[FaceRecognizer] Failed to extract embedding from input image";
         return results;
     }
 
-    std::cout << "[FaceRecognizer] Verifying face against " << registeredFaces.size()
-              << " registered faces with threshold " << threshold << std::endl;
+    LOG_INFO() << "[FaceRecognizer] Verifying face against " << registeredFaces.size()
+              << " registered faces with threshold " << threshold;
 
     // Compare against all registered faces
     for (const auto& face : registeredFaces) {
         if (face.embedding.empty()) {
-            std::cout << "[FaceRecognizer] Skipping face " << face.name << " (no embedding)" << std::endl;
+            LOG_INFO() << "[FaceRecognizer] Skipping face " << face.name << " (no embedding)";
             continue;
         }
 
@@ -65,8 +67,8 @@ std::vector<FaceVerificationResult> FaceRecognizer::verifyFace(const cv::Mat& fa
         // Convert similarity to confidence (0-1 range)
         float confidence = std::max(0.0f, similarity);
 
-        std::cout << "[FaceRecognizer] Face " << face.name << " similarity: "
-                  << similarity << ", confidence: " << confidence << std::endl;
+        LOG_INFO() << "[FaceRecognizer] Face " << face.name << " similarity: "
+                  << similarity << ", confidence: " << confidence;
 
         // Add to results if above threshold
         if (confidence >= threshold) {
@@ -80,7 +82,7 @@ std::vector<FaceVerificationResult> FaceRecognizer::verifyFace(const cv::Mat& fa
                   return a.confidence > b.confidence;
               });
 
-    std::cout << "[FaceRecognizer] Found " << results.size() << " matches above threshold" << std::endl;
+    LOG_INFO() << "[FaceRecognizer] Found " << results.size() << " matches above threshold";
 
     return results;
 }
@@ -88,7 +90,7 @@ std::vector<FaceVerificationResult> FaceRecognizer::verifyFace(const cv::Mat& fa
 float FaceRecognizer::calculateCosineSimilarity(const std::vector<float>& embedding1,
                                                const std::vector<float>& embedding2) {
     if (embedding1.size() != embedding2.size() || embedding1.empty()) {
-        std::cerr << "[FaceRecognizer] Embedding size mismatch or empty embeddings" << std::endl;
+        LOG_ERROR() << "[FaceRecognizer] Embedding size mismatch or empty embeddings";
         return 0.0f;
     }
 

@@ -1,0 +1,1466 @@
+=== C++标准输出函数使用情况报告 ===
+扫描目录: src/
+生成时间: Wed 28 May 2025 02:03:28 PM CST
+
+=== 查找 std::cout ===
+
+src/main.cpp:15:    std::cout << "\n[Main] Received signal " << signal << ", shutting down..." << std::endl;
+src/main.cpp:20:    std::cout << "Usage: " << programName << " [options]\n"
+src/main.cpp:34:    std::cout << "=== AI Security Vision System ===" << std::endl;
+src/main.cpp:35:    std::cout << "Version: 1.0.0" << std::endl;
+src/main.cpp:36:    std::cout << "Build: " << __DATE__ << " " << __TIME__ << std::endl;
+src/main.cpp:37:    std::cout << "===================================" << std::endl;
+src/main.cpp:100:        std::cout << "[Main] Initializing TaskManager..." << std::endl;
+src/main.cpp:105:        std::cout << "[Main] Starting API service on port " << apiPort << "..." << std::endl;
+src/main.cpp:115:                std::cout << "[Main] Running with real RTSP cameras..." << std::endl;
+src/main.cpp:117:                    std::cout << "[Main] Using optimized multi-threaded RKNN detection with "
+src/main.cpp:150:                    std::cout << "[Main] Adding camera: " << camera.id << " (" << camera.url << ")" << std::endl;
+src/main.cpp:153:                        std::cout << "[Main] Camera added successfully: " << camera.id << std::endl;
+src/main.cpp:161:                                std::cout << "[Main] Optimized detection enabled for " << camera.id
+src/main.cpp:166:                        std::cout << "[Main] Failed to add camera: " << camera.id << std::endl;
+src/main.cpp:171:                std::cout << "[Main] Running in test mode..." << std::endl;
+src/main.cpp:183:                    std::cout << "[Main] Test video source added successfully" << std::endl;
+src/main.cpp:185:                    std::cout << "[Main] Failed to add test video source" << std::endl;
+src/main.cpp:190:        std::cout << "[Main] System started successfully!" << std::endl;
+src/main.cpp:191:        std::cout << "[Main] API endpoints available at http://localhost:" << apiPort << std::endl;
+src/main.cpp:195:            std::cout << "\n[Main] === MJPEG Video Streams ===" << std::endl;
+src/main.cpp:200:                    std::cout << "[Main] 📺 " << pipelineId << ": " << pipeline->getStreamUrl() << std::endl;
+src/main.cpp:203:            std::cout << "[Main] ================================" << std::endl;
+src/main.cpp:206:        std::cout << "[Main] Press Ctrl+C to stop..." << std::endl;
+src/main.cpp:220:                std::cout << "\n[Main] === System Status ===" << std::endl;
+src/main.cpp:221:                std::cout << "🖥️  Active Pipelines: " << activePipelines.size() << std::endl;
+src/main.cpp:222:                std::cout << "🖥️  CPU Usage: " << taskManager.getCpuUsage() << "%" << std::endl;
+src/main.cpp:223:                std::cout << "🎮 GPU Memory: " << taskManager.getGpuMemoryUsage() << std::endl;
+src/main.cpp:229:                            std::cout << "🎥 Pipeline " << pipelineId << ":" << std::endl;
+src/main.cpp:230:                            std::cout << "  📈 FPS: " << std::fixed << std::setprecision(1)
+src/main.cpp:232:                            std::cout << "  🎯 Processed: " << pipeline->getProcessedFrames() << " frames" << std::endl;
+src/main.cpp:233:                            std::cout << "  ❌ Dropped: " << pipeline->getDroppedFrames() << " frames" << std::endl;
+src/main.cpp:234:                            std::cout << "  🧠 Optimized: " << (pipeline->isOptimizedDetectionEnabled() ? "Yes" : "No") << std::endl;
+src/main.cpp:236:                                std::cout << "  🔄 Threads: " << pipeline->getDetectionThreads() << std::endl;
+src/main.cpp:238:                            std::cout << "  🌐 Stream: " << pipeline->getStreamUrl() << std::endl;
+src/main.cpp:239:                            std::cout << "  👥 Clients: " << pipeline->getConnectedClients() << std::endl;
+src/main.cpp:240:                            std::cout << "  ❤️  Healthy: " << (pipeline->isHealthy() ? "Yes" : "No") << std::endl;
+src/main.cpp:243:                                std::cout << "  ⚠️  Last Error: " << pipeline->getLastError() << std::endl;
+src/main.cpp:245:                            std::cout << std::endl;
+src/main.cpp:249:                std::cout << "================================" << std::endl;
+src/main.cpp:254:        std::cout << "[Main] Shutting down..." << std::endl;
+src/main.cpp:259:        std::cout << "[Main] Shutdown complete" << std::endl;
+src/output/Streamer.cpp:35:    std::cout << "[Streamer] Creating multi-protocol streamer" << std::endl;
+src/output/Streamer.cpp:41:        std::cout << "[Streamer] FFmpeg initialized" << std::endl;
+src/output/Streamer.cpp:65:        std::cout << "[Streamer] Initialized MJPEG streamer for " << sourceId
+src/output/Streamer.cpp:73:        std::cout << "[Streamer] Initialized RTMP streamer for " << sourceId
+src/output/Streamer.cpp:81:    std::cout << "[Streamer] Cleaning up streamer for " << m_sourceId << std::endl;
+src/output/Streamer.cpp:120:    std::cout << "[Streamer] Cleanup complete for " << m_sourceId << std::endl;
+src/output/Streamer.cpp:126:    std::cout << "[Streamer] Updated config: " << config.width << "x" << config.height
+src/output/Streamer.cpp:190:    std::cout << "[Streamer] HTTP server started on port " << m_config.port << std::endl;
+src/output/Streamer.cpp:199:    std::cout << "[Streamer] Stopping HTTP server..." << std::endl;
+src/output/Streamer.cpp:276:    std::cout << "[Streamer] Server thread started" << std::endl;
+src/output/Streamer.cpp:294:                std::cout << "[Streamer] Maximum clients reached, rejecting connection" << std::endl;
+src/output/Streamer.cpp:302:        std::cout << "[Streamer] New client connected: " << clientAddrStr << std::endl;
+src/output/Streamer.cpp:308:    std::cout << "[Streamer] Server thread stopped" << std::endl;
+src/output/Streamer.cpp:312:    std::cout << "[Streamer] Client handler started for " << clientAddr << std::endl;
+src/output/Streamer.cpp:325:            std::cout << "[Streamer] Failed to read request from " << clientAddr << std::endl;
+src/output/Streamer.cpp:350:    std::cout << "[Streamer] Client handler stopped for " << clientAddr << std::endl;
+src/output/Streamer.cpp:359:    std::cout << "[Streamer] HTTP Request: " << method << " " << path << std::endl;
+src/output/Streamer.cpp:430:    std::cout << "[Streamer] Frame processing thread started" << std::endl;
+src/output/Streamer.cpp:450:    std::cout << "[Streamer] Frame processing thread stopped" << std::endl;
+src/output/Streamer.cpp:685:    std::cout << "[Streamer] RTMP stream started to " << m_config.rtmpUrl << std::endl;
+src/output/Streamer.cpp:694:    std::cout << "[Streamer] Stopping RTMP stream..." << std::endl;
+src/output/Streamer.cpp:826:    std::cout << "[Streamer] RTMP encoder setup complete" << std::endl;
+src/output/Streamer.cpp:861:    std::cout << "[Streamer] RTMP encoder cleanup complete" << std::endl;
+src/output/Streamer.cpp:933:    std::cout << "[Streamer] RTMP streaming thread started" << std::endl;
+src/output/Streamer.cpp:941:    std::cout << "[Streamer] RTMP streaming thread stopped" << std::endl;
+src/output/AlarmTrigger.cpp:70:        std::cout << "[AlarmTrigger] Already initialized" << std::endl;
+src/output/AlarmTrigger.cpp:77:    std::cout << "[AlarmTrigger] Initialized with HTTP POST delivery support" << std::endl;
+src/output/AlarmTrigger.cpp:100:        std::cout << "[AlarmTrigger] Shutdown complete" << std::endl;
+src/output/AlarmTrigger.cpp:128:        std::cout << "[AlarmTrigger] Queued alarm: " << event.eventType
+src/output/AlarmTrigger.cpp:163:    std::cout << "[AlarmTrigger] Queued test alarm: " << eventType
+src/output/AlarmTrigger.cpp:182:    std::cout << "[AlarmTrigger] Added alarm config: " << config.id
+src/output/AlarmTrigger.cpp:197:        std::cout << "[AlarmTrigger] Removed alarm config: " << configId << std::endl;
+src/output/AlarmTrigger.cpp:211:            std::cout << "[AlarmTrigger] Updated alarm config: " << config.id << std::endl;
+src/output/AlarmTrigger.cpp:241:    std::cout << "[AlarmTrigger] Alarm processing thread started" << std::endl;
+src/output/AlarmTrigger.cpp:279:    std::cout << "[AlarmTrigger] Alarm processing thread stopped" << std::endl;
+src/output/AlarmTrigger.cpp:306:    std::cout << "[AlarmTrigger] Delivering alarm " << payload.alarm_id
+src/output/AlarmTrigger.cpp:358:    std::cout << "[AlarmTrigger] Alarm " << payload.alarm_id << " routing complete: "
+src/output/AlarmTrigger.cpp:421:            std::cout << "[AlarmTrigger] HTTP POST successful (code: " << responseCode << ")" << std::endl;
+src/output/AlarmTrigger.cpp:496:        std::cout << "[AlarmTrigger] WebSocket server already running" << std::endl;
+src/output/AlarmTrigger.cpp:506:        std::cout << "[AlarmTrigger] WebSocket server started on port " << port << std::endl;
+src/output/AlarmTrigger.cpp:524:        std::cout << "[AlarmTrigger] WebSocket server stopped" << std::endl;
+src/output/AlarmTrigger.cpp:556:            std::cout << "[AlarmTrigger] Connected to MQTT broker: " << config.broker
+src/output/AlarmTrigger.cpp:586:        std::cout << "[AlarmTrigger] Disconnected from MQTT broker" << std::endl;
+src/output/AlarmTrigger.cpp:654:        std::cout << "[AlarmTrigger] HTTP alarm delivered to: " << config.httpConfig.url
+src/output/AlarmTrigger.cpp:687:    std::cout << "[AlarmTrigger] WebSocket alarm broadcasted to "
+src/output/AlarmTrigger.cpp:737:    std::cout << "[AlarmTrigger] MQTT alarm published to " << config.mqttConfig.broker
+src/output/AlarmTrigger.cpp:807:    std::cout << "[AlarmTrigger] Routing history cleared" << std::endl;
+src/output/Recorder.cpp:38:    std::cout << "[Recorder] Initialized for " << sourceId
+src/output/Recorder.cpp:68:    std::cout << "[Recorder] Circular buffer initialized with size: " << m_maxBufferSize << std::endl;
+src/output/Recorder.cpp:137:        std::cout << "[Recorder] Already recording, cannot start manual recording" << std::endl;
+src/output/Recorder.cpp:168:        std::cout << "[Recorder] Already recording, ignoring event trigger" << std::endl;
+src/output/Recorder.cpp:197:    std::cout << "[Recorder] Started recording: " << reason
+src/output/Recorder.cpp:235:    std::cout << "[Recorder] Recording stopped: " << m_currentOutputPath << std::endl;
+src/output/Recorder.cpp:339:        std::cout << "[Recorder] No database manager available" << std::endl;
+src/output/Recorder.cpp:347:        std::cout << "[Recorder] Event saved to database: " << eventType
+src/output/WebSocketServer.cpp:26:    std::cout << "[WebSocketServer] WebSocket server initialized" << std::endl;
+src/output/WebSocketServer.cpp:35:        std::cout << "[WebSocketServer] Server already running" << std::endl;
+src/output/WebSocketServer.cpp:49:        std::cout << "[WebSocketServer] WebSocket server started on port " << port << std::endl;
+src/output/WebSocketServer.cpp:64:    std::cout << "[WebSocketServer] Stopping WebSocket server..." << std::endl;
+src/output/WebSocketServer.cpp:90:        std::cout << "[WebSocketServer] WebSocket server stopped" << std::endl;
+src/output/WebSocketServer.cpp:121:        std::cout << "[WebSocketServer] Broadcasted alarm to " << sentCount << " clients" << std::endl;
+src/output/WebSocketServer.cpp:163:        std::cout << "[WebSocketServer] Connection limit reached, rejecting new connection" << std::endl;
+src/output/WebSocketServer.cpp:176:    std::cout << "[WebSocketServer] Client connected: " << clientInfo
+src/output/WebSocketServer.cpp:196:    std::cout << "[WebSocketServer] Client disconnected: " << clientInfo
+src/output/WebSocketServer.cpp:203:    std::cout << "[WebSocketServer] Received message: " << payload << std::endl;
+src/output/WebSocketServer.cpp:222:        std::cout << "[WebSocketServer] Server thread started" << std::endl;
+src/output/WebSocketServer.cpp:224:        std::cout << "[WebSocketServer] Server thread finished" << std::endl;
+src/recognition/LicensePlateRecognizer.cpp:8:    std::cout << "[LicensePlateRecognizer] Initialized (stub)" << std::endl;
+src/recognition/FaceRecognizer.cpp:12:    std::cout << "[FaceRecognizer] Initialized with face verification support" << std::endl;
+src/recognition/FaceRecognizer.cpp:52:    std::cout << "[FaceRecognizer] Verifying face against " << registeredFaces.size()
+src/recognition/FaceRecognizer.cpp:58:            std::cout << "[FaceRecognizer] Skipping face " << face.name << " (no embedding)" << std::endl;
+src/recognition/FaceRecognizer.cpp:68:        std::cout << "[FaceRecognizer] Face " << face.name << " similarity: "
+src/recognition/FaceRecognizer.cpp:83:    std::cout << "[FaceRecognizer] Found " << results.size() << " matches above threshold" << std::endl;
+src/test/MultiCameraTestSequence.cpp:325:    std::cout << "[" << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S")
+src/onvif/ONVIFDiscovery.cpp:378:    std::cout << "[ONVIFDiscovery] " << message << std::endl;
+src/onvif/ONVIFDiscovery.cpp:1038:            std::cout << "[ONVIFManager] Successfully auto-configured device: " << deviceCopy.name << std::endl;
+src/onvif/ONVIFDiscovery.cpp:1154:        std::cout << "[ONVIFManager] Auto-configured ONVIF device: " << device.name
+src/ai/BehaviorAnalyzer.cpp:45:    std::cout << "[BehaviorAnalyzer] Initialized with default intrusion rule and ReID matching (threshold: "
+src/ai/BehaviorAnalyzer.cpp:198:                    std::cout << "[BehaviorAnalyzer] Found " << matches.size()
+src/ai/BehaviorAnalyzer.cpp:239:                    std::cout << "[BehaviorAnalyzer] New track " << trackId
+src/ai/BehaviorAnalyzer.cpp:347:    std::cout << "[BehaviorAnalyzer] Added intrusion rule: " << rule.id << std::endl;
+src/ai/BehaviorAnalyzer.cpp:357:        std::cout << "[BehaviorAnalyzer] Removed intrusion rule: " << ruleId << std::endl;
+src/ai/BehaviorAnalyzer.cpp:392:    std::cout << "[BehaviorAnalyzer] Added ROI: " << roi.id << std::endl;
+src/ai/BehaviorAnalyzer.cpp:402:        std::cout << "[BehaviorAnalyzer] Removed ROI: " << roiId << std::endl;
+src/ai/BehaviorAnalyzer.cpp:519:    std::cout << "[BehaviorAnalyzer] JSON rule loading not yet implemented: " << jsonPath << std::endl;
+src/ai/BehaviorAnalyzer.cpp:593:                std::cout << "[BehaviorAnalyzer] Enhanced conflict-resolved intrusion event: "
+src/ai/BehaviorAnalyzer.cpp:999:        std::cout << "[BehaviorAnalyzer] Invalid ReID similarity threshold: "
+src/ai/BehaviorAnalyzer.cpp:1009:    std::cout << "[BehaviorAnalyzer] ReID config updated: enabled=" << config.enabled
+src/ai/BehaviorAnalyzer.cpp:1022:        std::cout << "[BehaviorAnalyzer] Invalid ReID similarity threshold: " << threshold
+src/ai/BehaviorAnalyzer.cpp:1032:    std::cout << "[BehaviorAnalyzer] ReID similarity threshold set to " << threshold << std::endl;
+src/ai/BehaviorAnalyzer.cpp:1044:    std::cout << "[BehaviorAnalyzer] ReID matching " << (enabled ? "enabled" : "disabled") << std::endl;
+src/ai/ReIDExtractor.cpp:29:    std::cout << "[ReIDExtractor] Constructor called" << std::endl;
+src/ai/ReIDExtractor.cpp:37:    std::cout << "[ReIDExtractor] Initializing ReID feature extractor..." << std::endl;
+src/ai/ReIDExtractor.cpp:38:    std::cout << "[ReIDExtractor] Model path: " << modelPath << std::endl;
+src/ai/ReIDExtractor.cpp:46:            std::cout << "[ReIDExtractor] Model file not found, using built-in feature extraction" << std::endl;
+src/ai/ReIDExtractor.cpp:53:        std::cout << "[ReIDExtractor] OpenCV DNN is disabled, using built-in feature extraction" << std::endl;
+src/ai/ReIDExtractor.cpp:59:                std::cout << "[ReIDExtractor] Failed to load ONNX model, using built-in extraction" << std::endl;
+src/ai/ReIDExtractor.cpp:68:            std::cout << "[ReIDExtractor] Successfully loaded ONNX model with OpenCV DNN" << std::endl;
+src/ai/ReIDExtractor.cpp:70:            std::cout << "[ReIDExtractor] OpenCV DNN loading failed: " << e.what() << std::endl;
+src/ai/ReIDExtractor.cpp:71:            std::cout << "[ReIDExtractor] Falling back to built-in feature extraction" << std::endl;
+src/ai/ReIDExtractor.cpp:80:        std::cout << "[ReIDExtractor] Initialization completed successfully" << std::endl;
+src/ai/ReIDExtractor.cpp:81:        std::cout << "[ReIDExtractor] Input size: " << m_inputWidth << "x" << m_inputHeight << std::endl;
+src/ai/ReIDExtractor.cpp:82:        std::cout << "[ReIDExtractor] Feature dimension: " << m_featureDimension << std::endl;
+src/ai/ReIDExtractor.cpp:95:    std::cout << "[ReIDExtractor] Cleanup completed" << std::endl;
+src/ai/ReIDExtractor.cpp:162:    std::cout << "[ReIDExtractor] Extracted " << embeddings.size()
+src/ai/ReIDExtractor.cpp:411:    std::cout << "[ReIDExtractor] Input size set to: " << m_inputWidth << "x" << m_inputHeight << std::endl;
+src/ai/ReIDExtractor.cpp:417:    std::cout << "[ReIDExtractor] Feature dimension set to: " << m_featureDimension << std::endl;
+src/ai/ReIDExtractor.cpp:422:    std::cout << "[ReIDExtractor] Normalization " << (enabled ? "enabled" : "disabled") << std::endl;
+src/ai/ReIDExtractor.cpp:428:    std::cout << "[ReIDExtractor] Min object size set to: " << m_minObjectWidth << "x" << m_minObjectHeight << std::endl;
+src/ai/YOLOv8Detector.cpp:44:    std::cout << "[YOLOv8Detector] Initializing YOLOv8 detector..." << std::endl;
+src/ai/YOLOv8Detector.cpp:45:    std::cout << "[YOLOv8Detector] Model path: " << modelPath << std::endl;
+src/ai/YOLOv8Detector.cpp:52:        std::cout << "[YOLOv8Detector] Auto-detected backend: " << getBackendName() << std::endl;
+src/ai/YOLOv8Detector.cpp:55:        std::cout << "[YOLOv8Detector] Using requested backend: " << getBackendName() << std::endl;
+src/ai/YOLOv8Detector.cpp:79:            std::cout << "[YOLOv8Detector] Primary backend failed, trying fallbacks..." << std::endl;
+src/ai/YOLOv8Detector.cpp:91:                    std::cout << "[YOLOv8Detector] Trying RKNN backend with model: " << rknnModelPath << std::endl;
+src/ai/YOLOv8Detector.cpp:99:                std::cout << "[YOLOv8Detector] Trying OpenCV backend..." << std::endl;
+src/ai/YOLOv8Detector.cpp:112:            std::cout << "[YOLOv8Detector] YOLOv8 detector initialized successfully with " << getBackendName() << " backend" << std::endl;
+src/ai/YOLOv8Detector.cpp:113:            std::cout << "[YOLOv8Detector] Input size: " << m_inputWidth << "x" << m_inputHeight << std::endl;
+src/ai/YOLOv8Detector.cpp:114:            std::cout << "[YOLOv8Detector] Classes: " << m_numClasses << std::endl;
+src/ai/YOLOv8Detector.cpp:115:            std::cout << "[YOLOv8Detector] Confidence threshold: " << m_confidenceThreshold << std::endl;
+src/ai/YOLOv8Detector.cpp:116:            std::cout << "[YOLOv8Detector] NMS threshold: " << m_nmsThreshold << std::endl;
+src/ai/YOLOv8Detector.cpp:135:    std::cout << "[YOLOv8Detector] Cleanup completed" << std::endl;
+src/ai/YOLOv8Detector.cpp:222:    std::cout << "[YOLOv8Detector] Confidence threshold set to: " << m_confidenceThreshold << std::endl;
+src/ai/YOLOv8Detector.cpp:227:    std::cout << "[YOLOv8Detector] NMS threshold set to: " << m_nmsThreshold << std::endl;
+src/ai/YOLOv8Detector.cpp:234:    std::cout << "[YOLOv8Detector] Input size set to: " << width << "x" << height << std::endl;
+src/ai/YOLOv8Detector.cpp:332:    std::cout << "[YOLOv8Detector] RKNN support available, preferring RKNN backend" << std::endl;
+src/ai/YOLOv8Detector.cpp:335:    std::cout << "[YOLOv8Detector] RKNN not available, using OpenCV backend" << std::endl;
+src/ai/YOLOv8Detector.cpp:343:    std::cout << "[YOLOv8Detector] Initializing RKNN backend..." << std::endl;
+src/ai/YOLOv8Detector.cpp:377:        std::cout << "[YOLOv8Detector] Warning: Failed to set multi-core NPU, using default core: " << ret << std::endl;
+src/ai/YOLOv8Detector.cpp:379:        std::cout << "[YOLOv8Detector] Successfully enabled 3-core NPU acceleration" << std::endl;
+src/ai/YOLOv8Detector.cpp:391:    std::cout << "[YOLOv8Detector] RKNN model inputs: " << io_num.n_input << ", outputs: " << io_num.n_output << std::endl;
+src/ai/YOLOv8Detector.cpp:416:            std::cout << "[YOLOv8Detector] RKNN model input size: " << m_inputWidth << "x" << m_inputHeight << "x" << channels << std::endl;
+src/ai/YOLOv8Detector.cpp:417:            std::cout << "[YOLOv8Detector] Input format: " << (input_attrs[0].fmt == RKNN_TENSOR_NHWC ? "NHWC" : "NCHW") << std::endl;
+src/ai/YOLOv8Detector.cpp:418:            std::cout << "[YOLOv8Detector] Input type: " << get_type_string(input_attrs[0].type) << std::endl;
+src/ai/YOLOv8Detector.cpp:422:    std::cout << "[YOLOv8Detector] RKNN backend initialized successfully" << std::endl;
+src/ai/YOLOv8Detector.cpp:431:    std::cout << "[YOLOv8Detector] Initializing OpenCV backend..." << std::endl;
+src/ai/YOLOv8Detector.cpp:434:    std::cout << "[YOLOv8Detector] OpenCV DNN is disabled, falling back to simulation" << std::endl;
+src/ai/YOLOv8Detector.cpp:440:        std::cout << "[YOLOv8Detector] Model file not found: " << modelPath << std::endl;
+src/ai/YOLOv8Detector.cpp:441:        std::cout << "[YOLOv8Detector] Using built-in detection simulation" << std::endl;
+src/ai/YOLOv8Detector.cpp:442:        std::cout << "[YOLOv8Detector] To use real models, place ONNX files in models/ directory" << std::endl;
+src/ai/YOLOv8Detector.cpp:448:        std::cout << "[YOLOv8Detector] Loading ONNX model: " << modelPath << std::endl;
+src/ai/YOLOv8Detector.cpp:452:            std::cout << "[YOLOv8Detector] Falling back to built-in detection simulation" << std::endl;
+src/ai/YOLOv8Detector.cpp:464:        std::cout << "[YOLOv8Detector] Model loaded successfully:" << std::endl;
+src/ai/YOLOv8Detector.cpp:465:        std::cout << "[YOLOv8Detector] - Total layers: " << layerNames.size() << std::endl;
+src/ai/YOLOv8Detector.cpp:466:        std::cout << "[YOLOv8Detector] - Output layers: " << outLayers.size() << std::endl;
+src/ai/YOLOv8Detector.cpp:467:        std::cout << "[YOLOv8Detector] OpenCV backend initialized successfully with real model" << std::endl;
+src/ai/YOLOv8Detector.cpp:471:        std::cout << "[YOLOv8Detector] OpenCV DNN loading failed: " << e.what() << std::endl;
+src/ai/YOLOv8Detector.cpp:472:        std::cout << "[YOLOv8Detector] Falling back to built-in detection simulation" << std::endl;
+src/ai/YOLOv8Detector.cpp:479:    std::cout << "[YOLOv8Detector] TensorRT backend not implemented yet" << std::endl;
+src/ai/YOLOv8Detector.cpp:504:    std::cout << "[YOLOv8Detector] Input tensor size: " << inputs[0].size
+src/ai/YOLOv8Detector.cpp:645:    std::cout << "[YOLOv8Detector] Input attrs type: " << get_type_string(m_rknnInputAttrs.type) << std::endl;
+src/ai/YOLOv8Detector.cpp:650:        std::cout << "[YOLOv8Detector] Preprocessed to FLOAT32 with normalization, size: "
+src/ai/YOLOv8Detector.cpp:655:        std::cout << "[YOLOv8Detector] Preprocessed to FLOAT32 for FP16 model with normalization, size: "
+src/ai/YOLOv8Detector.cpp:660:        std::cout << "[YOLOv8Detector] Preprocessed to UINT8 without normalization, size: "
+src/ai/YOLOv8Detector.cpp:786:    std::cout << "[YOLOv8Detector] RKNN post-processing: " << boxes.size()
+src/ai/YOLOv8Detector.cpp:858:    std::cout << "[YOLOv8Detector] Simulated " << detections.size()
+src/ai/YOLOv8Detector.cpp:871:        std::cout << "[YOLOv8Detector] Processing single-output YOLOv8 model" << std::endl;
+src/ai/YOLOv8Detector.cpp:874:        std::cout << "[YOLOv8Detector] Output dims: ";
+src/ai/YOLOv8Detector.cpp:876:            std::cout << output_attrs[0].dims[i];
+src/ai/YOLOv8Detector.cpp:877:            if (i < output_attrs[0].n_dims - 1) std::cout << "x";
+src/ai/YOLOv8Detector.cpp:879:        std::cout << std::endl;
+src/ai/YOLOv8Detector.cpp:884:            std::cout << "[YOLOv8Detector] Converting quantized output to float" << std::endl;
+src/ai/YOLOv8Detector.cpp:906:            std::cout << "[YOLOv8Detector] Output type: " << get_type_string(output_attrs[0].type) << std::endl;
+src/ai/YOLOv8Detector.cpp:907:            std::cout << "[YOLOv8Detector] Output buffer size: " << outputs[0].size << " bytes" << std::endl;
+src/ai/YOLOv8Detector.cpp:930:            std::cout << "[YOLOv8Detector] Expected output size: " << expected_size << " bytes" << std::endl;
+src/ai/YOLOv8Detector.cpp:977:                std::cout << "[YOLOv8Detector] Converted FP16 to FP32 using proper IEEE 754 conversion" << std::endl;
+src/ai/YOLOv8Detector.cpp:1017:    std::cout << "[YOLOv8Detector] RKNN post-processing: " << validCount << " raw detections -> ";
+src/ai/YOLOv8Detector.cpp:1068:    std::cout << detections.size() << " final detections" << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.cpp:24:    std::cout << "[YOLOv8DetectorZeroCopy] Creating zero-copy optimized detector" << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.cpp:31:    std::cout << "[YOLOv8DetectorZeroCopy] Zero-copy detector destroyed" << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.cpp:36:    std::cout << "[YOLOv8DetectorZeroCopy] Initializing zero-copy detector..." << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.cpp:51:        std::cout << "[YOLOv8DetectorZeroCopy] Zero-copy mode enabled successfully" << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.cpp:53:        std::cout << "[YOLOv8DetectorZeroCopy] RKNN not available, using standard mode" << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.cpp:74:    std::cout << "[YOLOv8DetectorZeroCopy] Model has " << m_ioNum.n_input 
+src/ai/YOLOv8DetectorZeroCopy.cpp:115:    std::cout << "[YOLOv8DetectorZeroCopy] Created DMA buffers - Input: " 
+src/ai/YOLOv8DetectorZeroCopy.cpp:245:    std::cout << "[ZeroCopy] Frame processed in " << total_time << "ms "
+src/ai/ByteTracker.cpp:152:    std::cout << "[ByteTracker] Initializing ByteTracker..." << std::endl;
+src/ai/ByteTracker.cpp:153:    std::cout << "[ByteTracker] Track threshold: " << m_trackThreshold << std::endl;
+src/ai/ByteTracker.cpp:154:    std::cout << "[ByteTracker] High threshold: " << m_highThreshold << std::endl;
+src/ai/ByteTracker.cpp:155:    std::cout << "[ByteTracker] Match threshold: " << m_matchThreshold << std::endl;
+src/ai/ByteTracker.cpp:156:    std::cout << "[ByteTracker] Max lost frames: " << m_maxLostFrames << std::endl;
+src/ai/ByteTracker.cpp:157:    std::cout << "[ByteTracker] ByteTracker initialized successfully" << std::endl;
+src/ai/ByteTracker.cpp:163:    std::cout << "[ByteTracker] Cleanup completed" << std::endl;
+src/ai/ByteTracker.cpp:261:    std::cout << "[ByteTracker] ReID similarity threshold set to: " << m_reidSimilarityThreshold << std::endl;
+src/ai/ByteTracker.cpp:266:    std::cout << "[ByteTracker] ReID weight set to: " << m_reidWeight << std::endl;
+src/ai/ByteTracker.cpp:271:    std::cout << "[ByteTracker] ReID tracking " << (enabled ? "enabled" : "disabled") << std::endl;
+src/ai/YOLOv8DetectorOptimized.cpp:18:    std::cout << "[YOLOv8DetectorOptimized] Creating optimized detector with " << numThreads << " threads" << std::endl;
+src/ai/YOLOv8DetectorOptimized.cpp:36:    std::cout << "[YOLOv8DetectorOptimized] Optimized detector destroyed" << std::endl;
+src/ai/YOLOv8DetectorOptimized.cpp:40:    std::cout << "[YOLOv8DetectorOptimized] Initializing optimized detector..." << std::endl;
+src/ai/YOLOv8DetectorOptimized.cpp:50:        std::cout << "[YOLOv8DetectorOptimized] Multi-threading optimization only available for RKNN backend" << std::endl;
+src/ai/YOLOv8DetectorOptimized.cpp:66:    std::cout << "[YOLOv8DetectorOptimized] Optimized detector initialized successfully with "
+src/ai/YOLOv8DetectorOptimized.cpp:73:    std::cout << "[YOLOv8DetectorOptimized] Initializing " << m_numThreads << " RKNN contexts..." << std::endl;
+src/ai/YOLOv8DetectorOptimized.cpp:105:            std::cout << "[YOLOv8DetectorOptimized] Warning: Failed to set multi-core NPU for context " << i << std::endl;
+src/ai/YOLOv8DetectorOptimized.cpp:107:            std::cout << "[YOLOv8DetectorOptimized] Enabled multi-core NPU (0_1_2) for context " << i << std::endl;
+src/ai/YOLOv8DetectorOptimized.cpp:130:        std::cout << "[YOLOv8DetectorOptimized] RKNN context " << i << " initialized successfully" << std::endl;
+src/ai/YOLOv8DetectorOptimized.cpp:186:    std::cout << "[YOLOv8DetectorOptimized] Worker thread " << threadId << " started" << std::endl;
+src/ai/YOLOv8DetectorOptimized.cpp:211:    std::cout << "[YOLOv8DetectorOptimized] Worker thread " << threadId << " stopped" << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.h:79:        std::cout << "=== Zero-Copy Performance Stats ===" << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.h:80:        std::cout << "Frames processed: " << frameCount << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.h:81:        std::cout << "Avg preprocess: " << avgPreprocessTime << " ms" << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.h:82:        std::cout << "Avg inference: " << avgInferenceTime << " ms" << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.h:83:        std::cout << "Avg postprocess: " << avgPostprocessTime << " ms" << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.h:84:        std::cout << "Avg total: " << avgTotalTime << " ms" << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.h:85:        std::cout << "Avg FPS: " << (avgTotalTime > 0 ? 1000.0 / avgTotalTime : 0) << std::endl;
+src/core/TaskManager.cpp:29:    std::cout << "[TaskManager] Initializing TaskManager singleton" << std::endl;
+src/core/TaskManager.cpp:36:        std::cout << "[TaskManager] GPU monitoring not available" << std::endl;
+src/core/TaskManager.cpp:48:        std::cout << "[TaskManager] Already running" << std::endl;
+src/core/TaskManager.cpp:55:    std::cout << "[TaskManager] Started successfully" << std::endl;
+src/core/TaskManager.cpp:59:    std::cout << "[TaskManager] Stopping..." << std::endl;
+src/core/TaskManager.cpp:76:    std::cout << "[TaskManager] Stopped successfully" << std::endl;
+src/core/TaskManager.cpp:107:            std::cout << "[TaskManager] Added video source: " << source.id
+src/core/TaskManager.cpp:135:    std::cout << "[TaskManager] Removed video source: " << sourceId << std::endl;
+src/core/TaskManager.cpp:181:    std::cout << "[TaskManager] Enhanced monitoring thread started with 1s precision" << std::endl;
+src/core/TaskManager.cpp:195:            std::cout << "[TaskManager] Warning: Could not set thread priority" << std::endl;
+src/core/TaskManager.cpp:232:                std::cout << "[TaskManager] Cleaning up failed pipeline: " << id << std::endl;
+src/core/TaskManager.cpp:290:    std::cout << "[TaskManager] Enhanced monitoring thread stopped after "
+src/core/TaskManager.cpp:360:        std::cout << "[TaskManager] Failed to initialize NVML: " << nvmlErrorString(result) << std::endl;
+src/core/TaskManager.cpp:366:        std::cout << "[TaskManager] Failed to get GPU device count: " << nvmlErrorString(result) << std::endl;
+src/core/TaskManager.cpp:372:        std::cout << "[TaskManager] No NVIDIA GPUs found" << std::endl;
+src/core/TaskManager.cpp:381:        std::cout << "[TaskManager] Failed to get GPU device handle: " << nvmlErrorString(result) << std::endl;
+src/core/TaskManager.cpp:394:        std::cout << "[TaskManager] GPU monitoring initialized for: " << name << std::endl;
+src/core/TaskManager.cpp:396:        std::cout << "[TaskManager] GPU monitoring initialized (unknown device)" << std::endl;
+src/core/TaskManager.cpp:401:    std::cout << "[TaskManager] NVML not available - GPU monitoring disabled" << std::endl;
+src/core/TaskManager.cpp:412:        std::cout << "[TaskManager] GPU monitoring cleanup complete" << std::endl;
+src/core/TaskManager.cpp:606:    std::cout << "[TaskManager] Monitoring statistics reset" << std::endl;
+src/core/TaskManager.cpp:643:            std::cout << "[TaskManager] Cross-camera match: camera " << cameraId
+src/core/TaskManager.cpp:721:    std::cout << "[TaskManager] Cross-camera tracking " << (enabled ? "enabled" : "disabled") << std::endl;
+src/core/TaskManager.cpp:727:        std::cout << "[TaskManager] ReID similarity threshold set to " << threshold << std::endl;
+src/core/TaskManager.cpp:734:        std::cout << "[TaskManager] Max track age set to " << ageSeconds << " seconds" << std::endl;
+src/core/TaskManager.cpp:740:    std::cout << "[TaskManager] Cross-camera matching " << (enabled ? "enabled" : "disabled") << std::endl;
+src/core/TaskManager.cpp:782:    std::cout << "[TaskManager] Cross-camera tracking statistics reset" << std::endl;
+src/core/TaskManager.cpp:799:    std::cout << "[CrossCameraTrack] Created global track " << globalTrackId
+src/core/TaskManager.cpp:824:    std::cout << "[CrossCameraTrack] Updated global track " << globalTrackId
+src/core/TaskManager.cpp:863:    std::cout << "[TaskManager] Created new global track " << globalId
+src/core/TaskManager.cpp:913:            std::cout << "[TaskManager] Cleaned up expired global track " << it->first << std::endl;
+src/core/VideoPipeline.cpp:21:    std::cout << "[VideoPipeline] Creating pipeline for: " << source.id << std::endl;
+src/core/VideoPipeline.cpp:38:        std::cout << "[VideoPipeline] Initializing pipeline: " << m_source.id << std::endl;
+src/core/VideoPipeline.cpp:49:            std::cout << "[VideoPipeline] Initializing optimized RKNN YOLOv8 detector with "
+src/core/VideoPipeline.cpp:54:                std::cout << "[VideoPipeline] Failed to initialize optimized detector, falling back to standard detector" << std::endl;
+src/core/VideoPipeline.cpp:64:                std::cout << "[VideoPipeline] Optimized RKNN YOLOv8 detector initialized successfully!" << std::endl;
+src/core/VideoPipeline.cpp:97:            std::cout << "[VideoPipeline] Warning: Face recognizer initialization failed" << std::endl;
+src/core/VideoPipeline.cpp:102:            std::cout << "[VideoPipeline] Warning: License plate recognizer initialization failed" << std::endl;
+src/core/VideoPipeline.cpp:140:        std::cout << "[VideoPipeline] MJPEG stream available at: " << m_streamer->getStreamUrl() << std::endl;
+src/core/VideoPipeline.cpp:142:        std::cout << "[VideoPipeline] Pipeline initialized successfully: " << m_source.id << std::endl;
+src/core/VideoPipeline.cpp:153:        std::cout << "[VideoPipeline] Pipeline already running: " << m_source.id << std::endl;
+src/core/VideoPipeline.cpp:163:    std::cout << "[VideoPipeline] Pipeline started: " << m_source.id << std::endl;
+src/core/VideoPipeline.cpp:171:    std::cout << "[VideoPipeline] Stopping pipeline: " << m_source.id << std::endl;
+src/core/VideoPipeline.cpp:179:    std::cout << "[VideoPipeline] Pipeline stopped: " << m_source.id << std::endl;
+src/core/VideoPipeline.cpp:191:    std::cout << "[VideoPipeline] Processing thread started: " << m_source.id << std::endl;
+src/core/VideoPipeline.cpp:207:                    std::cout << "[VideoPipeline] Attempting reconnection: " << m_source.id
+src/core/VideoPipeline.cpp:250:    std::cout << "[VideoPipeline] Processing thread stopped: " << m_source.id << std::endl;
+src/core/VideoPipeline.cpp:322:                std::cout << "[VideoPipeline] Processed " << result.detections.size()
+src/core/VideoPipeline.cpp:424:    std::cout << "[VideoPipeline] Optimized detection "
+src/core/VideoPipeline.cpp:436:        std::cout << "[VideoPipeline] Detection threads set to " << threads
+src/core/VideoPipeline.cpp:456:        std::cout << "[VideoPipeline] Added intrusion rule: " << rule.id
+src/core/VideoPipeline.cpp:473:        std::cout << "[VideoPipeline] Removed intrusion rule: " << ruleId
+src/core/VideoPipeline.cpp:490:        std::cout << "[VideoPipeline] Updated intrusion rule: " << rule.id
+src/core/VideoPipeline.cpp:518:        std::cout << "[VideoPipeline] Added ROI: " << roi.id
+src/core/VideoPipeline.cpp:535:        std::cout << "[VideoPipeline] Removed ROI: " << roiId
+src/core/VideoPipeline.cpp:628:        std::cout << "[VideoPipeline] Streaming configured for " << m_source.id
+src/core/VideoPipeline.cpp:659:        std::cout << "[VideoPipeline] Streaming already enabled for " << m_source.id << std::endl;
+src/core/VideoPipeline.cpp:675:            std::cout << "[VideoPipeline] Streaming started for " << m_source.id
+src/core/VideoPipeline.cpp:696:        std::cout << "[VideoPipeline] Streaming already disabled for " << m_source.id << std::endl;
+src/core/VideoPipeline.cpp:705:        std::cout << "[VideoPipeline] Streaming stopped for " << m_source.id << std::endl;
+src/core/VideoPipeline.cpp:801:            std::cout << "[VideoPipeline] Stream " << m_source.id << " is now STABLE" << std::endl;
+src/core/VideoPipeline.cpp:804:            std::cout << "[VideoPipeline] Stream " << m_source.id << " is now UNSTABLE" << std::endl;
+src/core/VideoPipeline.cpp:805:            std::cout << "  - Frame timeout: " << (frameTimeout ? "YES" : "NO")
+src/core/VideoPipeline.cpp:807:            std::cout << "  - Too many errors: " << (tooManyErrors ? "YES" : "NO")
+src/core/VideoPipeline.cpp:809:            std::cout << "  - Frame rate stable: " << (frameRateStable ? "YES" : "NO")
+src/core/VideoPipeline.cpp:817:        std::cout << "[VideoPipeline] Stream " << m_source.id
+src/api/APIService.cpp:21:    std::cout << "[APIService] Initializing API service on port " << port << std::endl;
+src/api/APIService.cpp:28:        std::cout << "[APIService] ONVIF discovery manager initialized" << std::endl;
+src/api/APIService.cpp:41:        std::cout << "[APIService] Service already running" << std::endl;
+src/api/APIService.cpp:52:        std::cout << "[APIService] API service started on port " << m_port << std::endl;
+src/api/APIService.cpp:67:    std::cout << "[APIService] Stopping API service..." << std::endl;
+src/api/APIService.cpp:80:    std::cout << "[APIService] API service stopped" << std::endl;
+src/api/APIService.cpp:96:    std::cout << "[APIService] Server thread started on port " << m_port << std::endl;
+src/api/APIService.cpp:110:    std::cout << "[APIService] Server thread stopped" << std::endl;
+src/api/APIService.cpp:119:    std::cout << "[APIService] Setting up HTTP routes..." << std::endl;
+src/api/APIService.cpp:471:    std::cout << "[APIService] HTTP routes configured successfully" << std::endl;
+src/api/APIService.cpp:552:            std::cout << "[APIService] Added video source: " << id << " (" << protocol << ")" << std::endl;
+src/api/APIService.cpp:641:        std::cout << "[APIService] Manual recording started for camera: " << cameraId
+src/api/APIService.cpp:678:        std::cout << "[APIService] Manual recording stopped for camera: " << cameraId << std::endl;
+src/api/APIService.cpp:720:        std::cout << "[APIService] Recording configuration updated: pre=" << preEventDuration
+src/api/APIService.cpp:1122:        std::cout << "[APIService] Configured " << protocol << " streaming for camera: " << cameraId << std::endl;
+src/api/APIService.cpp:1210:        std::cout << "[APIService] Started streaming for camera: " << cameraId << std::endl;
+src/api/APIService.cpp:1249:        std::cout << "[APIService] Stopped streaming for camera: " << cameraId << std::endl;
+src/api/APIService.cpp:1400:        std::cout << "[APIService] Created intrusion rule: " << rule.id
+src/api/APIService.cpp:1557:        std::cout << "[APIService] Updated intrusion rule: " << rule.id << std::endl;
+src/api/APIService.cpp:1600:        std::cout << "[APIService] Deleted intrusion rule: " << ruleId << std::endl;
+src/api/APIService.cpp:1730:            std::cout << "[APIService] Added ROI to active pipeline: " << cameraId << std::endl;
+src/api/APIService.cpp:1756:        std::cout << "[APIService] Created ROI: " << roi.id << " (" << roi.name << ") for camera: " << cameraId << std::endl;
+src/api/APIService.cpp:1811:        std::cout << "[APIService] Retrieved " << rois.size() << " ROIs"
+src/api/APIService.cpp:1862:        std::cout << "[APIService] Retrieved ROI: " << roiId << std::endl;
+src/api/APIService.cpp:2006:            std::cout << "[APIService] Updated ROI in active pipeline: " << cameraId << std::endl;
+src/api/APIService.cpp:2032:        std::cout << "[APIService] Updated ROI: " << roiId << " (" << roi.name << ") for camera: " << cameraId << std::endl;
+src/api/APIService.cpp:2070:            std::cout << "[APIService] Removed ROI from active pipeline: " << existingROI.camera_id << std::endl;
+src/api/APIService.cpp:2083:        std::cout << "[APIService] Deleted ROI: " << roiId << " from camera: " << existingROI.camera_id << std::endl;
+src/api/APIService.cpp:2422:            std::cout << "[APIService] Bulk ROI operations completed successfully: "
+src/api/APIService.cpp:2433:            std::cout << "[APIService] Bulk ROI operation failed and rolled back: " << transactionError << std::endl;
+src/api/APIService.cpp:2703:        std::cout << "[APIService] Starting ONVIF device discovery..." << std::endl;
+src/api/APIService.cpp:2741:        std::cout << "[APIService] ONVIF discovery completed. Found " << devices.size() << " devices" << std::endl;
+src/api/APIService.cpp:2775:            std::cout << "[APIService] Testing authentication for device: " << device->ipAddress
+src/api/APIService.cpp:2791:            std::cout << "[APIService] Authentication successful for device: " << device->ipAddress << std::endl;
+src/api/APIService.cpp:2838:        std::cout << "[APIService] Added ONVIF device as video source: " << device->uuid
+src/api/APIService.cpp:2938:        std::cout << "[APIService] Saved face image: " << imagePath << std::endl;
+src/api/APIService.cpp:2949:                std::cout << "[APIService] Generated face embedding with " << embedding.size() << " dimensions" << std::endl;
+src/api/APIService.cpp:2951:                std::cout << "[APIService] Warning: Face recognizer initialization failed, using dummy embedding" << std::endl;
+src/api/APIService.cpp:2957:            std::cout << "[APIService] Using dummy embedding as fallback" << std::endl;
+src/api/APIService.cpp:2996:        std::cout << "[APIService] Face added successfully: " << name
+src/api/APIService.cpp:3040:        std::cout << "[APIService] Retrieved " << faces.size() << " faces" << std::endl;
+src/api/APIService.cpp:3081:                std::cout << "[APIService] Deleted face image: " << face.image_path << std::endl;
+src/api/APIService.cpp:3083:                std::cout << "[APIService] Warning: Could not delete face image: " << face.image_path << std::endl;
+src/api/APIService.cpp:3098:        std::cout << "[APIService] Face deleted successfully: " << face.name
+src/api/APIService.cpp:3147:        std::cout << "[APIService] Face verification request with threshold: " << threshold << std::endl;
+src/api/APIService.cpp:3163:        std::cout << "[APIService] Found " << registeredFaces.size() << " registered faces for verification" << std::endl;
+src/api/APIService.cpp:3174:        std::cout << "[APIService] Decoded input image: " << inputImage.cols << "x" << inputImage.rows << std::endl;
+src/api/APIService.cpp:3212:        std::cout << "[APIService] Face verification completed: " << verificationResults.size()
+src/api/APIService.cpp:3404:        std::cout << "[APIService] Created alarm config: " << config.id
+src/api/APIService.cpp:3624:        std::cout << "[APIService] Updated alarm config: " << configId << std::endl;
+src/api/APIService.cpp:3654:        std::cout << "[APIService] Deleted alarm config: " << configId << std::endl;
+src/api/APIService.cpp:3696:        std::cout << "[APIService] Test alarm triggered: " << eventType
+src/api/APIService.cpp:3818:        std::cout << "[APIService] ReID configuration updated: enabled=" << enabled
+src/api/APIService.cpp:3918:        std::cout << "[APIService] ReID similarity threshold updated to " << threshold
+src/database/DatabaseManager.cpp:44:    std::cout << "[DatabaseManager] Initialized with database: " << dbPath << std::endl;
+src/video/FFmpegDecoder.cpp:12:        std::cout << "[FFmpeg] Initializing FFmpeg libraries" << std::endl;
+src/video/FFmpegDecoder.cpp:19:        std::cout << "[FFmpeg] Cleaning up FFmpeg libraries" << std::endl;
+src/video/FFmpegDecoder.cpp:25:    std::cout << "[FFmpeg] FFmpeg not available - using stub implementation" << std::endl;
+src/video/FFmpegDecoder.cpp:53:    std::cout << "[FFmpegDecoder] Initializing decoder for: " << source.url << std::endl;
+src/video/FFmpegDecoder.cpp:57:    std::cout << "[FFmpegDecoder] Using real FFmpeg implementation" << std::endl;
+src/video/FFmpegDecoder.cpp:90:    std::cout << "[FFmpegDecoder] Successfully initialized for " << source.url << std::endl;
+src/video/FFmpegDecoder.cpp:93:    std::cout << "[FFmpegDecoder] Using stub implementation (FFmpeg not available)" << std::endl;
+src/video/FFmpegDecoder.cpp:117:            std::cout << "[FFmpegDecoder] End of stream reached" << std::endl;
+src/video/FFmpegDecoder.cpp:242:    std::cout << "[FFmpegDecoder] Found video stream: " << m_videoStreamIndex
+src/video/FFmpegDecoder.cpp:300:    std::cout << "[FFmpegDecoder] Decoder setup complete: " << m_codec->name
+src/video/FFmpegDecoder.cpp:335:    std::cout << "[FFmpegDecoder] Scaler setup complete" << std::endl;
+src/video/FFmpegDecoder.cpp:380:    std::cout << "[FFmpegDecoder] Cleanup completed" << std::endl;
+src/video/FFmpegDecoder.cpp:387:    std::cout << "[FFmpegDecoder] Attempting to reconnect..." << std::endl;
+
+找到 379 处使用，涉及 21 个文件
+
+----------------------------------------
+
+=== 查找 std::cerr ===
+
+src/main.cpp:58:                std::cerr << "Error: Port number required" << std::endl;
+src/main.cpp:65:                std::cerr << "Error: Config file path required" << std::endl;
+src/main.cpp:80:                    std::cerr << "Error: Detection threads must be between 1 and 8" << std::endl;
+src/main.cpp:84:                std::cerr << "Error: Number of threads required" << std::endl;
+src/main.cpp:88:            std::cerr << "Error: Unknown argument: " << arg << std::endl;
+src/main.cpp:108:            std::cerr << "[Main] Failed to start API service" << std::endl;
+src/main.cpp:263:        std::cerr << "[Main] Fatal error: " << e.what() << std::endl;
+src/main.cpp:266:        std::cerr << "[Main] Unknown fatal error occurred" << std::endl;
+src/output/Streamer.cpp:62:            std::cerr << "[Streamer] Failed to start HTTP server for " << sourceId << std::endl;
+src/output/Streamer.cpp:70:            std::cerr << "[Streamer] Failed to start RTMP stream for " << sourceId << std::endl;
+src/output/Streamer.cpp:240:        std::cerr << "[Streamer] Failed to create socket: " << strerror(errno) << std::endl;
+src/output/Streamer.cpp:247:        std::cerr << "[Streamer] Failed to set socket options: " << strerror(errno) << std::endl;
+src/output/Streamer.cpp:259:        std::cerr << "[Streamer] Failed to bind socket to port " << m_config.port
+src/output/Streamer.cpp:267:        std::cerr << "[Streamer] Failed to listen on socket: " << strerror(errno) << std::endl;
+src/output/Streamer.cpp:285:                std::cerr << "[Streamer] Failed to accept connection: " << strerror(errno) << std::endl;
+src/output/Streamer.cpp:334:        std::cerr << "[Streamer] Exception in client handler: " << e.what() << std::endl;
+src/output/Streamer.cpp:593:        std::cerr << "[Streamer] Failed to encode frame to JPEG" << std::endl;
+src/output/Streamer.cpp:673:        std::cerr << "[Streamer] RTMP URL not configured" << std::endl;
+src/output/Streamer.cpp:678:        std::cerr << "[Streamer] Failed to setup RTMP encoder" << std::endl;
+src/output/Streamer.cpp:720:        std::cerr << "[Streamer] Failed to allocate output context: " << ffmpeg_error_string(ret) << std::endl;
+src/output/Streamer.cpp:727:        std::cerr << "[Streamer] H.264 encoder not found" << std::endl;
+src/output/Streamer.cpp:734:        std::cerr << "[Streamer] Failed to create video stream" << std::endl;
+src/output/Streamer.cpp:741:        std::cerr << "[Streamer] Failed to allocate codec context" << std::endl;
+src/output/Streamer.cpp:768:        std::cerr << "[Streamer] Failed to open codec: " << ffmpeg_error_string(ret) << std::endl;
+src/output/Streamer.cpp:775:        std::cerr << "[Streamer] Failed to copy codec parameters: " << ffmpeg_error_string(ret) << std::endl;
+src/output/Streamer.cpp:784:        std::cerr << "[Streamer] Failed to allocate frame" << std::endl;
+src/output/Streamer.cpp:794:        std::cerr << "[Streamer] Failed to allocate frame buffer: " << ffmpeg_error_string(ret) << std::endl;
+src/output/Streamer.cpp:805:        std::cerr << "[Streamer] Failed to initialize SWS context" << std::endl;
+src/output/Streamer.cpp:813:            std::cerr << "[Streamer] Failed to open output URL: " << ffmpeg_error_string(ret) << std::endl;
+src/output/Streamer.cpp:821:        std::cerr << "[Streamer] Failed to write header: " << ffmpeg_error_string(ret) << std::endl;
+src/output/Streamer.cpp:882:        std::cerr << "[Streamer] Failed to convert frame: " << ffmpeg_error_string(ret) << std::endl;
+src/output/Streamer.cpp:892:        std::cerr << "[Streamer] Failed to send frame to encoder: " << ffmpeg_error_string(ret) << std::endl;
+src/output/Streamer.cpp:899:        std::cerr << "[Streamer] Failed to allocate packet" << std::endl;
+src/output/Streamer.cpp:908:            std::cerr << "[Streamer] Failed to receive packet: " << ffmpeg_error_string(ret) << std::endl;
+src/output/Streamer.cpp:920:            std::cerr << "[Streamer] Failed to write packet: " << ffmpeg_error_string(ret) << std::endl;
+src/output/AlarmTrigger.cpp:121:            std::cerr << "[AlarmTrigger] Alarm queue full, dropping lowest priority alarm" << std::endl;
+src/output/AlarmTrigger.cpp:176:            std::cerr << "[AlarmTrigger] Config with ID " << config.id << " already exists" << std::endl;
+src/output/AlarmTrigger.cpp:201:    std::cerr << "[AlarmTrigger] Config not found: " << configId << std::endl;
+src/output/AlarmTrigger.cpp:216:    std::cerr << "[AlarmTrigger] Config not found for update: " << config.id << std::endl;
+src/output/AlarmTrigger.cpp:301:        std::cerr << "[AlarmTrigger] No enabled alarm configurations found" << std::endl;
+src/output/AlarmTrigger.cpp:346:            std::cerr << "[AlarmTrigger] Exception during delivery: " << e.what() << std::endl;
+src/output/AlarmTrigger.cpp:373:        std::cerr << "[AlarmTrigger] Failed to initialize CURL" << std::endl;
+src/output/AlarmTrigger.cpp:412:            std::cerr << "[AlarmTrigger] CURL error: " << curl_easy_strerror(res) << std::endl;
+src/output/AlarmTrigger.cpp:424:            std::cerr << "[AlarmTrigger] HTTP POST failed with code: " << responseCode << std::endl;
+src/output/AlarmTrigger.cpp:429:        std::cerr << "[AlarmTrigger] Exception in HTTP POST: " << e.what() << std::endl;
+src/output/AlarmTrigger.cpp:508:        std::cerr << "[AlarmTrigger] Failed to start WebSocket server" << std::endl;
+src/output/AlarmTrigger.cpp:511:    std::cerr << "[AlarmTrigger] WebSocket support not compiled" << std::endl;
+src/output/AlarmTrigger.cpp:560:            std::cerr << "[AlarmTrigger] Failed to connect to MQTT broker: "
+src/output/AlarmTrigger.cpp:566:        std::cerr << "[AlarmTrigger] Paho MQTT C++ client not yet implemented" << std::endl;
+src/output/AlarmTrigger.cpp:571:        std::cerr << "[AlarmTrigger] MQTT connection error: " << e.what() << std::endl;
+src/output/AlarmTrigger.cpp:575:    std::cerr << "[AlarmTrigger] MQTT support not compiled" << std::endl;
+src/output/AlarmTrigger.cpp:594:        std::cerr << "[AlarmTrigger] MQTT client not connected" << std::endl;
+src/output/AlarmTrigger.cpp:601:        std::cerr << "[AlarmTrigger] MQTT publish error: " << e.what() << std::endl;
+src/output/AlarmTrigger.cpp:605:    std::cerr << "[AlarmTrigger] MQTT support not compiled" << std::endl;
+src/output/AlarmTrigger.cpp:658:        std::cerr << "[AlarmTrigger] Failed to deliver HTTP alarm to: " << config.httpConfig.url << std::endl;
+src/output/Recorder.cpp:31:        std::cerr << "[Recorder] Failed to create output directory: " << e.what() << std::endl;
+src/output/Recorder.cpp:51:        std::cerr << "[Recorder] Failed to create output directory: " << e.what() << std::endl;
+src/output/Recorder.cpp:190:        std::cerr << "[Recorder] Failed to open video writer: " << m_currentOutputPath << std::endl;
+src/output/Recorder.cpp:351:        std::cerr << "[Recorder] Failed to save event to database: "
+src/output/WebSocketServer.cpp:53:        std::cerr << "[WebSocketServer] Failed to start server: " << e.what() << std::endl;
+src/output/WebSocketServer.cpp:76:                    std::cerr << "[WebSocketServer] Error closing connection: " << e.what() << std::endl;
+src/output/WebSocketServer.cpp:93:        std::cerr << "[WebSocketServer] Error during shutdown: " << e.what() << std::endl;
+src/output/WebSocketServer.cpp:114:            std::cerr << "[WebSocketServer] Failed to send message to client: " << e.what() << std::endl;
+src/output/WebSocketServer.cpp:130:        std::cerr << "[WebSocketServer] Failed to send message to specific client: " << e.what() << std::endl;
+src/output/WebSocketServer.cpp:167:            std::cerr << "[WebSocketServer] Error rejecting connection: " << e.what() << std::endl;
+src/output/WebSocketServer.cpp:186:        std::cerr << "[WebSocketServer] Failed to send welcome message: " << e.what() << std::endl;
+src/output/WebSocketServer.cpp:210:        std::cerr << "[WebSocketServer] Failed to send echo response: " << e.what() << std::endl;
+src/output/WebSocketServer.cpp:226:        std::cerr << "[WebSocketServer] Server thread error: " << e.what() << std::endl;
+src/recognition/FaceRecognizer.cpp:23:        std::cerr << "[FaceRecognizer] Empty face image provided" << std::endl;
+src/recognition/FaceRecognizer.cpp:41:        std::cerr << "[FaceRecognizer] Empty face image for verification" << std::endl;
+src/recognition/FaceRecognizer.cpp:48:        std::cerr << "[FaceRecognizer] Failed to extract embedding from input image" << std::endl;
+src/recognition/FaceRecognizer.cpp:91:        std::cerr << "[FaceRecognizer] Embedding size mismatch or empty embeddings" << std::endl;
+src/test/MultiCameraTestSequence.cpp:32:        std::cerr << "[MultiCameraTestSequence] Failed to open config file: " << configPath << std::endl;
+src/test/MultiCameraTestSequence.cpp:69:        std::cerr << "[MultiCameraTestSequence] Failed to open ground truth file: " << groundTruthPath << std::endl;
+src/test/MultiCameraTestSequence.cpp:152:        std::cerr << "[MultiCameraTestSequence] Test mode already running" << std::endl;
+src/onvif/ONVIFDiscovery.cpp:382:    std::cerr << "[ONVIFDiscovery] ERROR: " << message << std::endl;
+src/onvif/ONVIFDiscovery.cpp:1040:            std::cerr << "[ONVIFManager] Failed to auto-configure device: " << deviceCopy.name << std::endl;
+src/ai/ReIDExtractor.cpp:87:        std::cerr << "[ReIDExtractor] Exception during initialization: " << e.what() << std::endl;
+src/ai/ReIDExtractor.cpp:203:        std::cerr << "[ReIDExtractor] Exception in extractSingleFeature: " << e.what() << std::endl;
+src/ai/ReIDExtractor.cpp:245:        std::cerr << "[ReIDExtractor] Exception in extractFeaturesFromROI: " << e.what() << std::endl;
+src/ai/ReIDExtractor.cpp:347:        std::cerr << "[ReIDExtractor] Exception in generateHandcraftedFeatures: " << e.what() << std::endl;
+src/ai/YOLOv8Detector.cpp:73:                std::cerr << "[YOLOv8Detector] Unknown backend" << std::endl;
+src/ai/YOLOv8Detector.cpp:119:            std::cerr << "[YOLOv8Detector] Failed to initialize with any backend" << std::endl;
+src/ai/YOLOv8Detector.cpp:124:        std::cerr << "[YOLOv8Detector] Exception during initialization: " << e.what() << std::endl;
+src/ai/YOLOv8Detector.cpp:182:            std::cerr << "[YOLOv8Detector] Unknown backend for detection" << std::endl;
+src/ai/YOLOv8Detector.cpp:348:        std::cerr << "[YOLOv8Detector] RKNN model file not found: " << modelPath << std::endl;
+src/ai/YOLOv8Detector.cpp:354:        std::cerr << "[YOLOv8Detector] Model file must have .rknn extension for RKNN backend" << std::endl;
+src/ai/YOLOv8Detector.cpp:370:        std::cerr << "[YOLOv8Detector] Failed to initialize RKNN context: " << ret << std::endl;
+src/ai/YOLOv8Detector.cpp:386:        std::cerr << "[YOLOv8Detector] Failed to query RKNN input/output number: " << ret << std::endl;
+src/ai/YOLOv8Detector.cpp:400:            std::cerr << "[YOLOv8Detector] Failed to query input attr " << i << ": " << ret << std::endl;
+src/ai/YOLOv8Detector.cpp:425:    std::cerr << "[YOLOv8Detector] RKNN support not compiled in" << std::endl;
+src/ai/YOLOv8Detector.cpp:451:            std::cerr << "[YOLOv8Detector] Failed to load ONNX model with OpenCV" << std::endl;
+src/ai/YOLOv8Detector.cpp:510:        std::cerr << "[YOLOv8Detector] Failed to set RKNN inputs: " << ret << std::endl;
+src/ai/YOLOv8Detector.cpp:517:        std::cerr << "[YOLOv8Detector] Failed to run RKNN inference: " << ret << std::endl;
+src/ai/YOLOv8Detector.cpp:525:        std::cerr << "[YOLOv8Detector] Failed to query RKNN input/output number: " << ret << std::endl;
+src/ai/YOLOv8Detector.cpp:535:            std::cerr << "[YOLOv8Detector] Failed to query output attr " << i << ": " << ret << std::endl;
+src/ai/YOLOv8Detector.cpp:549:        std::cerr << "[YOLOv8Detector] Failed to get RKNN outputs: " << ret << std::endl;
+src/ai/YOLOv8Detector.cpp:562:    std::cerr << "[YOLOv8Detector] RKNN support not compiled in" << std::endl;
+src/ai/YOLOv8Detector.cpp:590:            std::cerr << "[YOLOv8Detector] OpenCV detection failed: " << e.what() << std::endl;
+src/ai/YOLOv8Detector.cpp:605:    std::cerr << "[YOLOv8Detector] TensorRT detection not implemented yet" << std::endl;
+src/ai/YOLOv8Detector.cpp:911:                std::cerr << "[YOLOv8Detector] Error: Output buffer is null!" << std::endl;
+src/ai/YOLOv8Detector.cpp:933:                std::cerr << "[YOLOv8Detector] Error: Output buffer too small!" << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.cpp:40:        std::cerr << "[YOLOv8DetectorZeroCopy] Base initialization failed" << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.cpp:48:            std::cerr << "[YOLOv8DetectorZeroCopy] Zero-copy initialization failed" << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.cpp:63:        std::cerr << "[YOLOv8DetectorZeroCopy] RKNN context not initialized" << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.cpp:70:        std::cerr << "[YOLOv8DetectorZeroCopy] Failed to query I/O number: " << ret << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.cpp:86:            std::cerr << "[YOLOv8DetectorZeroCopy] Failed to query input attr " << i << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.cpp:96:            std::cerr << "[YOLOv8DetectorZeroCopy] Failed to query output attr " << i << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.cpp:104:        std::cerr << "[YOLOv8DetectorZeroCopy] Failed to create input memory" << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.cpp:111:        std::cerr << "[YOLOv8DetectorZeroCopy] Failed to create output memory" << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.cpp:167:        std::cerr << "[YOLOv8DetectorZeroCopy] Unsupported input type" << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.cpp:201:        std::cerr << "[YOLOv8DetectorZeroCopy] Failed to set inputs: " << ret << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.cpp:209:        std::cerr << "[YOLOv8DetectorZeroCopy] Failed to run inference: " << ret << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.cpp:226:        std::cerr << "[YOLOv8DetectorZeroCopy] Failed to get outputs: " << ret << std::endl;
+src/ai/YOLOv8DetectorOptimized.cpp:44:        std::cerr << "[YOLOv8DetectorOptimized] Failed to initialize base detector" << std::endl;
+src/ai/YOLOv8DetectorOptimized.cpp:56:        std::cerr << "[YOLOv8DetectorOptimized] Failed to initialize multi-RKNN contexts" << std::endl;
+src/ai/YOLOv8DetectorOptimized.cpp:78:        std::cerr << "[YOLOv8DetectorOptimized] Failed to open model file: " << modelPath << std::endl;
+src/ai/YOLOv8DetectorOptimized.cpp:98:            std::cerr << "[YOLOv8DetectorOptimized] Failed to initialize RKNN context " << i << ": " << ret << std::endl;
+src/ai/YOLOv8DetectorOptimized.cpp:117:            std::cerr << "[YOLOv8DetectorOptimized] Failed to query I/O for context " << i << std::endl;
+src/ai/YOLOv8DetectorOptimized.cpp:125:                std::cerr << "[YOLOv8DetectorOptimized] Failed to query input attr for context " << i << std::endl;
+src/ai/YOLOv8DetectorOptimized.cpp:135:    std::cerr << "[YOLOv8DetectorOptimized] RKNN support not compiled in" << std::endl;
+src/ai/YOLOv8DetectorOptimized.cpp:229:        std::cerr << "[YOLOv8DetectorOptimized] Inference failed in thread " << threadId << ": " << e.what() << std::endl;
+src/ai/YOLOv8DetectorOptimized.cpp:297:        std::cerr << "[YOLOv8DetectorOptimized] Failed to set RKNN inputs (thread " << threadId << "): " << ret << std::endl;
+src/ai/YOLOv8DetectorOptimized.cpp:304:        std::cerr << "[YOLOv8DetectorOptimized] Failed to run RKNN inference (thread " << threadId << "): " << ret << std::endl;
+src/core/TaskManager.cpp:85:        std::cerr << "[TaskManager] Invalid video source: " << source.toString() << std::endl;
+src/core/TaskManager.cpp:92:        std::cerr << "[TaskManager] Maximum pipeline limit reached: " << MAX_PIPELINES << std::endl;
+src/core/TaskManager.cpp:97:        std::cerr << "[TaskManager] Pipeline already exists for source: " << source.id << std::endl;
+src/core/TaskManager.cpp:111:            std::cerr << "[TaskManager] Failed to initialize pipeline for: " << source.id << std::endl;
+src/core/TaskManager.cpp:115:        std::cerr << "[TaskManager] Exception creating pipeline: " << e.what() << std::endl;
+src/core/TaskManager.cpp:125:        std::cerr << "[TaskManager] Pipeline not found: " << sourceId << std::endl;
+src/core/TaskManager.cpp:266:                std::cerr << "[TaskManager] Warning: Monitoring cycle took " << cycleDuration
+src/core/TaskManager.cpp:273:            std::cerr << "[TaskManager] Monitoring error: " << e.what() << std::endl;
+src/core/TaskManager.cpp:286:            std::cerr << "[TaskManager] Warning: Monitoring thread behind schedule" << std::endl;
+src/core/TaskManager.cpp:298:        std::cerr << "[TaskManager] Failed to open /proc/stat" << std::endl;
+src/core/TaskManager.cpp:304:        std::cerr << "[TaskManager] Failed to read from /proc/stat" << std::endl;
+src/core/TaskManager.cpp:315:        std::cerr << "[TaskManager] Invalid /proc/stat format" << std::endl;
+src/core/TaskManager.cpp:321:        std::cerr << "[TaskManager] Failed to parse CPU stats" << std::endl;
+src/core/VideoPipeline.cpp:376:    std::cerr << "[VideoPipeline] Error in " << m_source.id << ": " << error << std::endl;
+src/core/VideoPipeline.cpp:450:        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+src/core/VideoPipeline.cpp:467:        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+src/core/VideoPipeline.cpp:484:        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+src/core/VideoPipeline.cpp:501:        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+src/core/VideoPipeline.cpp:512:        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+src/core/VideoPipeline.cpp:529:        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+src/core/VideoPipeline.cpp:546:        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+src/core/VideoPipeline.cpp:602:        std::cerr << "[VideoPipeline] Streamer not initialized" << std::endl;
+src/core/VideoPipeline.cpp:617:                    std::cerr << "[VideoPipeline] Failed to restart MJPEG server" << std::endl;
+src/core/VideoPipeline.cpp:622:                    std::cerr << "[VideoPipeline] Failed to restart RTMP stream" << std::endl;
+src/core/VideoPipeline.cpp:635:        std::cerr << "[VideoPipeline] Failed to configure streaming: " << e.what() << std::endl;
+src/core/VideoPipeline.cpp:654:        std::cerr << "[VideoPipeline] Streamer not initialized" << std::endl;
+src/core/VideoPipeline.cpp:682:        std::cerr << "[VideoPipeline] Failed to start streaming: " << e.what() << std::endl;
+src/core/VideoPipeline.cpp:691:        std::cerr << "[VideoPipeline] Streamer not initialized" << std::endl;
+src/core/VideoPipeline.cpp:709:        std::cerr << "[VideoPipeline] Failed to stop streaming: " << e.what() << std::endl;
+src/api/APIService.cpp:25:        std::cerr << "[APIService] Warning: Failed to initialize ONVIF manager: "
+src/api/APIService.cpp:56:        std::cerr << "[APIService] Failed to start: " << e.what() << std::endl;
+src/api/APIService.cpp:101:            std::cerr << "[APIService] Failed to start HTTP server on port " << m_port << std::endl;
+src/api/APIService.cpp:106:        std::cerr << "[APIService] HTTP server error: " << e.what() << std::endl;
+src/api/APIService.cpp:115:        std::cerr << "[APIService] HTTP server not initialized" << std::endl;
+src/api/APIService.cpp:2544:        std::cerr << "[APIService] Failed to deserialize ROI: " << e.what() << std::endl;
+src/api/APIService.cpp:2573:        std::cerr << "[APIService] Failed to deserialize IntrusionRule: " << e.what() << std::endl;
+src/api/APIService.cpp:2921:            std::cerr << "[APIService] Warning: Could not create faces directory" << std::endl;
+src/database/DatabaseManager.cpp:25:        std::cerr << "[DatabaseManager] " << m_lastError << std::endl;
+src/database/DatabaseManager.cpp:34:        std::cerr << "[DatabaseManager] Failed to create tables" << std::endl;
+src/database/DatabaseManager.cpp:40:        std::cerr << "[DatabaseManager] Failed to prepare statements" << std::endl;
+src/video/FFmpegDecoder.cpp:70:        std::cerr << "[FFmpegDecoder] Failed to open stream: " << source.url << std::endl;
+src/video/FFmpegDecoder.cpp:76:        std::cerr << "[FFmpegDecoder] Failed to setup decoder" << std::endl;
+src/video/FFmpegDecoder.cpp:83:        std::cerr << "[FFmpegDecoder] Failed to setup scaler" << std::endl;
+src/video/FFmpegDecoder.cpp:121:            std::cerr << "[FFmpegDecoder] Error reading frame: " << errbuf << std::endl;
+src/video/FFmpegDecoder.cpp:137:        std::cerr << "[FFmpegDecoder] Error sending packet: " << errbuf << std::endl;
+src/video/FFmpegDecoder.cpp:151:            std::cerr << "[FFmpegDecoder] Error receiving frame: " << errbuf << std::endl;
+src/video/FFmpegDecoder.cpp:214:        std::cerr << "[FFmpegDecoder] Failed to open input: " << errbuf << std::endl;
+src/video/FFmpegDecoder.cpp:223:        std::cerr << "[FFmpegDecoder] Failed to find stream info: " << errbuf << std::endl;
+src/video/FFmpegDecoder.cpp:237:        std::cerr << "[FFmpegDecoder] No video stream found" << std::endl;
+src/video/FFmpegDecoder.cpp:256:        std::cerr << "[FFmpegDecoder] Codec not found" << std::endl;
+src/video/FFmpegDecoder.cpp:263:        std::cerr << "[FFmpegDecoder] Failed to allocate codec context" << std::endl;
+src/video/FFmpegDecoder.cpp:272:        std::cerr << "[FFmpegDecoder] Failed to copy codec parameters: " << errbuf << std::endl;
+src/video/FFmpegDecoder.cpp:281:        std::cerr << "[FFmpegDecoder] Failed to open codec: " << errbuf << std::endl;
+src/video/FFmpegDecoder.cpp:289:        std::cerr << "[FFmpegDecoder] Failed to allocate frames" << std::endl;
+src/video/FFmpegDecoder.cpp:296:        std::cerr << "[FFmpegDecoder] Failed to allocate packet" << std::endl;
+src/video/FFmpegDecoder.cpp:315:        std::cerr << "[FFmpegDecoder] Failed to allocate buffer" << std::endl;
+src/video/FFmpegDecoder.cpp:331:        std::cerr << "[FFmpegDecoder] Failed to initialize scaler context" << std::endl;
+src/video/FFmpegDecoder.cpp:394:        std::cerr << "[FFmpegDecoder] " << message << " (error code: " << errorCode << ")" << std::endl;
+src/video/FFmpegDecoder.cpp:396:        std::cerr << "[FFmpegDecoder] " << message << std::endl;
+
+找到 183 处使用，涉及 17 个文件
+
+----------------------------------------
+
+=== 查找 std::clog ===
+
+未找到使用 std::clog 的代码
+
+----------------------------------------
+
+=== 查找 std::wcout ===
+
+未找到使用 std::wcout 的代码
+
+----------------------------------------
+
+=== 查找 std::wcerr ===
+
+未找到使用 std::wcerr 的代码
+
+----------------------------------------
+
+=== 查找 std::wclog ===
+
+未找到使用 std::wclog 的代码
+
+----------------------------------------
+
+=== 查找 printf ===
+
+src/onvif/ONVIFDiscovery.cpp:172:    snprintf(probeMessage, sizeof(probeMessage), WS_DISCOVERY_PROBE_MESSAGE, messageId.c_str());
+
+找到 1 处使用，涉及 1 个文件
+
+----------------------------------------
+
+=== 查找 fprintf ===
+
+未找到使用 fprintf 的代码
+
+----------------------------------------
+
+=== 查找 sprintf ===
+
+未找到使用 sprintf 的代码
+
+----------------------------------------
+
+=== 查找 snprintf ===
+
+src/onvif/ONVIFDiscovery.cpp:172:    snprintf(probeMessage, sizeof(probeMessage), WS_DISCOVERY_PROBE_MESSAGE, messageId.c_str());
+
+找到 1 处使用，涉及 1 个文件
+
+----------------------------------------
+
+=== 查找 puts ===
+
+src/ai/YOLOv8Detector.h:158:    std::vector<Detection> postprocessRKNNResultsOfficial(rknn_output* outputs, rknn_tensor_attr* output_attrs, uint32_t n_output, const cv::Size& originalSize);
+src/ai/YOLOv8Detector.cpp:391:    std::cout << "[YOLOv8Detector] RKNN model inputs: " << io_num.n_input << ", outputs: " << io_num.n_output << std::endl;
+src/ai/YOLOv8Detector.cpp:496:    rknn_input inputs[1];
+src/ai/YOLOv8Detector.cpp:497:    memset(inputs, 0, sizeof(inputs));
+src/ai/YOLOv8Detector.cpp:498:    inputs[0].index = 0;
+src/ai/YOLOv8Detector.cpp:499:    inputs[0].type = m_rknnInputAttrs.type;  // Use model's expected type
+src/ai/YOLOv8Detector.cpp:500:    inputs[0].size = preprocessed.total() * preprocessed.elemSize();
+src/ai/YOLOv8Detector.cpp:501:    inputs[0].fmt = m_rknnInputAttrs.fmt;    // Use model's expected format
+src/ai/YOLOv8Detector.cpp:502:    inputs[0].buf = preprocessed.data;
+src/ai/YOLOv8Detector.cpp:504:    std::cout << "[YOLOv8Detector] Input tensor size: " << inputs[0].size
+src/ai/YOLOv8Detector.cpp:505:              << " bytes, type: " << get_type_string(inputs[0].type)
+src/ai/YOLOv8Detector.cpp:506:              << ", format: " << get_format_string(inputs[0].fmt) << std::endl;
+src/ai/YOLOv8Detector.cpp:508:    int ret = rknn_inputs_set(m_rknnContext, 1, inputs);
+src/ai/YOLOv8Detector.cpp:510:        std::cerr << "[YOLOv8Detector] Failed to set RKNN inputs: " << ret << std::endl;
+src/ai/YOLOv8Detector.cpp:540:    // Get outputs
+src/ai/YOLOv8Detector.cpp:541:    std::vector<rknn_output> outputs(io_num.n_output);
+src/ai/YOLOv8Detector.cpp:542:    memset(outputs.data(), 0, sizeof(rknn_output) * io_num.n_output);
+src/ai/YOLOv8Detector.cpp:544:        outputs[i].want_float = 0; // Get quantized output for better performance
+src/ai/YOLOv8Detector.cpp:547:    ret = rknn_outputs_get(m_rknnContext, io_num.n_output, outputs.data(), nullptr);
+src/ai/YOLOv8Detector.cpp:549:        std::cerr << "[YOLOv8Detector] Failed to get RKNN outputs: " << ret << std::endl;
+src/ai/YOLOv8Detector.cpp:554:    detections = postprocessRKNNResultsOfficial(outputs.data(), output_attrs.data(), io_num.n_output, frame.size());
+src/ai/YOLOv8Detector.cpp:556:    // Release outputs
+src/ai/YOLOv8Detector.cpp:557:    rknn_outputs_release(m_rknnContext, io_num.n_output, outputs.data());
+src/ai/YOLOv8Detector.cpp:707:            // YOLOv8 outputs normalized coordinates [0, 1]
+src/ai/YOLOv8Detector.cpp:865:std::vector<YOLOv8Detector::Detection> YOLOv8Detector::postprocessRKNNResultsOfficial(rknn_output* outputs, rknn_tensor_attr* output_attrs, uint32_t n_output, const cv::Size& originalSize) {
+src/ai/YOLOv8Detector.cpp:894:            int8_t* int8_output = (int8_t*)outputs[0].buf;
+src/ai/YOLOv8Detector.cpp:907:            std::cout << "[YOLOv8Detector] Output buffer size: " << outputs[0].size << " bytes" << std::endl;
+src/ai/YOLOv8Detector.cpp:910:            if (outputs[0].buf == nullptr) {
+src/ai/YOLOv8Detector.cpp:932:            if (outputs[0].size < expected_size) {
+src/ai/YOLOv8Detector.cpp:944:                uint16_t* fp16_data = (uint16_t*)outputs[0].buf;
+src/ai/YOLOv8Detector.cpp:981:                detections = postprocessRKNNResults((float*)outputs[0].buf, originalSize);
+src/ai/YOLOv8Detector.cpp:1006:        // Process quantized outputs
+src/ai/YOLOv8Detector.cpp:1009:                (int8_t*)outputs[box_idx].buf, output_attrs[box_idx].zp, output_attrs[box_idx].scale,
+src/ai/YOLOv8Detector.cpp:1010:                (int8_t*)outputs[score_idx].buf, output_attrs[score_idx].zp, output_attrs[score_idx].scale,
+src/ai/YOLOv8DetectorZeroCopy.cpp:75:              << " inputs, " << m_ioNum.n_output << " outputs" << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.cpp:191:    rknn_input inputs[1];
+src/ai/YOLOv8DetectorZeroCopy.cpp:192:    memset(inputs, 0, sizeof(inputs));
+src/ai/YOLOv8DetectorZeroCopy.cpp:193:    inputs[0].index = 0;
+src/ai/YOLOv8DetectorZeroCopy.cpp:194:    inputs[0].type = m_inputAttrs[0].type;
+src/ai/YOLOv8DetectorZeroCopy.cpp:195:    inputs[0].fmt = m_inputAttrs[0].fmt;
+src/ai/YOLOv8DetectorZeroCopy.cpp:196:    inputs[0].size = m_inputAttrs[0].size;
+src/ai/YOLOv8DetectorZeroCopy.cpp:197:    inputs[0].buf = m_inputMem->virt_addr;
+src/ai/YOLOv8DetectorZeroCopy.cpp:199:    int ret = rknn_inputs_set(m_rknnContext, 1, inputs);
+src/ai/YOLOv8DetectorZeroCopy.cpp:201:        std::cerr << "[YOLOv8DetectorZeroCopy] Failed to set inputs: " << ret << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.cpp:216:    rknn_output outputs[1];
+src/ai/YOLOv8DetectorZeroCopy.cpp:217:    memset(outputs, 0, sizeof(outputs));
+src/ai/YOLOv8DetectorZeroCopy.cpp:218:    outputs[0].index = 0;
+src/ai/YOLOv8DetectorZeroCopy.cpp:219:    outputs[0].want_float = 0;  // 获取原始输出
+src/ai/YOLOv8DetectorZeroCopy.cpp:220:    outputs[0].is_prealloc = 1; // 使用预分配的缓冲区
+src/ai/YOLOv8DetectorZeroCopy.cpp:221:    outputs[0].buf = m_outputMem->virt_addr;
+src/ai/YOLOv8DetectorZeroCopy.cpp:222:    outputs[0].size = m_outputAttrs[0].size;
+src/ai/YOLOv8DetectorZeroCopy.cpp:224:    ret = rknn_outputs_get(m_rknnContext, 1, outputs, nullptr);
+src/ai/YOLOv8DetectorZeroCopy.cpp:226:        std::cerr << "[YOLOv8DetectorZeroCopy] Failed to get outputs: " << ret << std::endl;
+src/ai/YOLOv8DetectorZeroCopy.cpp:237:    // rknn_outputs_release(m_rknnContext, 1, outputs);
+src/ai/YOLOv8DetectorZeroCopy.cpp:254:    rknn_output outputs[1];
+src/ai/YOLOv8DetectorZeroCopy.cpp:255:    outputs[0].buf = buffer;
+src/ai/YOLOv8DetectorZeroCopy.cpp:256:    outputs[0].size = m_outputAttrs[0].size;
+src/ai/YOLOv8DetectorZeroCopy.cpp:258:    return YOLOv8Detector::postprocessRKNNResultsOfficial(outputs, m_outputAttrs, 1, originalSize);
+src/ai/YOLOv8DetectorOptimized.h:121:     * @param outputs RKNN output data
+src/ai/YOLOv8DetectorOptimized.h:123:     * @param n_output Number of outputs
+src/ai/YOLOv8DetectorOptimized.h:127:    std::vector<Detection> postprocessRKNNResultsOptimized(rknn_output* outputs, rknn_tensor_attr* output_attrs, uint32_t n_output, const cv::Size& originalSize);
+src/ai/YOLOv8DetectorOptimized.cpp:287:    rknn_input inputs[1];
+src/ai/YOLOv8DetectorOptimized.cpp:288:    memset(inputs, 0, sizeof(inputs));
+src/ai/YOLOv8DetectorOptimized.cpp:289:    inputs[0].index = 0;
+src/ai/YOLOv8DetectorOptimized.cpp:290:    inputs[0].type = inputAttrs.type;
+src/ai/YOLOv8DetectorOptimized.cpp:291:    inputs[0].size = preprocessed.total() * preprocessed.elemSize();
+src/ai/YOLOv8DetectorOptimized.cpp:292:    inputs[0].fmt = inputAttrs.fmt;
+src/ai/YOLOv8DetectorOptimized.cpp:293:    inputs[0].buf = preprocessed.data;
+src/ai/YOLOv8DetectorOptimized.cpp:295:    int ret = rknn_inputs_set(ctx, 1, inputs);
+src/ai/YOLOv8DetectorOptimized.cpp:297:        std::cerr << "[YOLOv8DetectorOptimized] Failed to set RKNN inputs (thread " << threadId << "): " << ret << std::endl;
+src/ai/YOLOv8DetectorOptimized.cpp:324:    // Get outputs
+src/ai/YOLOv8DetectorOptimized.cpp:325:    std::vector<rknn_output> outputs(io_num.n_output);
+src/ai/YOLOv8DetectorOptimized.cpp:326:    memset(outputs.data(), 0, sizeof(rknn_output) * io_num.n_output);
+src/ai/YOLOv8DetectorOptimized.cpp:328:        outputs[i].want_float = 0; // Get quantized output for better performance
+src/ai/YOLOv8DetectorOptimized.cpp:331:    ret = rknn_outputs_get(ctx, io_num.n_output, outputs.data(), nullptr);
+src/ai/YOLOv8DetectorOptimized.cpp:337:    detections = postprocessRKNNResultsOptimized(outputs.data(), output_attrs.data(), io_num.n_output, frame.size());
+src/ai/YOLOv8DetectorOptimized.cpp:339:    // Release outputs
+src/ai/YOLOv8DetectorOptimized.cpp:340:    rknn_outputs_release(ctx, io_num.n_output, outputs.data());
+src/ai/YOLOv8DetectorOptimized.cpp:348:std::vector<YOLOv8DetectorOptimized::Detection> YOLOv8DetectorOptimized::postprocessRKNNResultsOptimized(rknn_output* outputs, rknn_tensor_attr* output_attrs, uint32_t n_output, const cv::Size& originalSize) {
+src/ai/YOLOv8DetectorOptimized.cpp:353:    return YOLOv8Detector::postprocessRKNNResultsOfficial(outputs, output_attrs, n_output, originalSize);
+
+找到 80 处使用，涉及 5 个文件
+
+----------------------------------------
+
+=== 查找 fputs ===
+
+未找到使用 fputs 的代码
+
+----------------------------------------
+
+=== 汇总统计 ===
+总计找到 644 处标准输出函数使用
+涉及约 45 个文件（可能有重复计算）
+
+=== 按文件分组汇总 ===
+
+文件: src/ai/BehaviorAnalyzer.cpp
+  std::cout:
+    45:    std::cout << "[BehaviorAnalyzer] Initialized with default intrusion rule and ReID matching (threshold: "
+    198:                    std::cout << "[BehaviorAnalyzer] Found " << matches.size()
+    239:                    std::cout << "[BehaviorAnalyzer] New track " << trackId
+    347:    std::cout << "[BehaviorAnalyzer] Added intrusion rule: " << rule.id << std::endl;
+    357:        std::cout << "[BehaviorAnalyzer] Removed intrusion rule: " << ruleId << std::endl;
+    392:    std::cout << "[BehaviorAnalyzer] Added ROI: " << roi.id << std::endl;
+    402:        std::cout << "[BehaviorAnalyzer] Removed ROI: " << roiId << std::endl;
+    519:    std::cout << "[BehaviorAnalyzer] JSON rule loading not yet implemented: " << jsonPath << std::endl;
+    593:                std::cout << "[BehaviorAnalyzer] Enhanced conflict-resolved intrusion event: "
+    999:        std::cout << "[BehaviorAnalyzer] Invalid ReID similarity threshold: "
+    1009:    std::cout << "[BehaviorAnalyzer] ReID config updated: enabled=" << config.enabled
+    1022:        std::cout << "[BehaviorAnalyzer] Invalid ReID similarity threshold: " << threshold
+    1032:    std::cout << "[BehaviorAnalyzer] ReID similarity threshold set to " << threshold << std::endl;
+    1044:    std::cout << "[BehaviorAnalyzer] ReID matching " << (enabled ? "enabled" : "disabled") << std::endl;
+
+文件: src/ai/ByteTracker.cpp
+  std::cout:
+    152:    std::cout << "[ByteTracker] Initializing ByteTracker..." << std::endl;
+    153:    std::cout << "[ByteTracker] Track threshold: " << m_trackThreshold << std::endl;
+    154:    std::cout << "[ByteTracker] High threshold: " << m_highThreshold << std::endl;
+    155:    std::cout << "[ByteTracker] Match threshold: " << m_matchThreshold << std::endl;
+    156:    std::cout << "[ByteTracker] Max lost frames: " << m_maxLostFrames << std::endl;
+    157:    std::cout << "[ByteTracker] ByteTracker initialized successfully" << std::endl;
+    163:    std::cout << "[ByteTracker] Cleanup completed" << std::endl;
+    261:    std::cout << "[ByteTracker] ReID similarity threshold set to: " << m_reidSimilarityThreshold << std::endl;
+    266:    std::cout << "[ByteTracker] ReID weight set to: " << m_reidWeight << std::endl;
+    271:    std::cout << "[ByteTracker] ReID tracking " << (enabled ? "enabled" : "disabled") << std::endl;
+
+文件: src/ai/ReIDExtractor.cpp
+  std::cout:
+    29:    std::cout << "[ReIDExtractor] Constructor called" << std::endl;
+    37:    std::cout << "[ReIDExtractor] Initializing ReID feature extractor..." << std::endl;
+    38:    std::cout << "[ReIDExtractor] Model path: " << modelPath << std::endl;
+    46:            std::cout << "[ReIDExtractor] Model file not found, using built-in feature extraction" << std::endl;
+    53:        std::cout << "[ReIDExtractor] OpenCV DNN is disabled, using built-in feature extraction" << std::endl;
+    59:                std::cout << "[ReIDExtractor] Failed to load ONNX model, using built-in extraction" << std::endl;
+    68:            std::cout << "[ReIDExtractor] Successfully loaded ONNX model with OpenCV DNN" << std::endl;
+    70:            std::cout << "[ReIDExtractor] OpenCV DNN loading failed: " << e.what() << std::endl;
+    71:            std::cout << "[ReIDExtractor] Falling back to built-in feature extraction" << std::endl;
+    80:        std::cout << "[ReIDExtractor] Initialization completed successfully" << std::endl;
+    81:        std::cout << "[ReIDExtractor] Input size: " << m_inputWidth << "x" << m_inputHeight << std::endl;
+    82:        std::cout << "[ReIDExtractor] Feature dimension: " << m_featureDimension << std::endl;
+    95:    std::cout << "[ReIDExtractor] Cleanup completed" << std::endl;
+    162:    std::cout << "[ReIDExtractor] Extracted " << embeddings.size()
+    411:    std::cout << "[ReIDExtractor] Input size set to: " << m_inputWidth << "x" << m_inputHeight << std::endl;
+    417:    std::cout << "[ReIDExtractor] Feature dimension set to: " << m_featureDimension << std::endl;
+    422:    std::cout << "[ReIDExtractor] Normalization " << (enabled ? "enabled" : "disabled") << std::endl;
+    428:    std::cout << "[ReIDExtractor] Min object size set to: " << m_minObjectWidth << "x" << m_minObjectHeight << std::endl;
+  std::cerr:
+    87:        std::cerr << "[ReIDExtractor] Exception during initialization: " << e.what() << std::endl;
+    203:        std::cerr << "[ReIDExtractor] Exception in extractSingleFeature: " << e.what() << std::endl;
+    245:        std::cerr << "[ReIDExtractor] Exception in extractFeaturesFromROI: " << e.what() << std::endl;
+    347:        std::cerr << "[ReIDExtractor] Exception in generateHandcraftedFeatures: " << e.what() << std::endl;
+
+文件: src/ai/YOLOv8Detector.cpp
+  std::cout:
+    44:    std::cout << "[YOLOv8Detector] Initializing YOLOv8 detector..." << std::endl;
+    45:    std::cout << "[YOLOv8Detector] Model path: " << modelPath << std::endl;
+    52:        std::cout << "[YOLOv8Detector] Auto-detected backend: " << getBackendName() << std::endl;
+    55:        std::cout << "[YOLOv8Detector] Using requested backend: " << getBackendName() << std::endl;
+    79:            std::cout << "[YOLOv8Detector] Primary backend failed, trying fallbacks..." << std::endl;
+    91:                    std::cout << "[YOLOv8Detector] Trying RKNN backend with model: " << rknnModelPath << std::endl;
+    99:                std::cout << "[YOLOv8Detector] Trying OpenCV backend..." << std::endl;
+    112:            std::cout << "[YOLOv8Detector] YOLOv8 detector initialized successfully with " << getBackendName() << " backend" << std::endl;
+    113:            std::cout << "[YOLOv8Detector] Input size: " << m_inputWidth << "x" << m_inputHeight << std::endl;
+    114:            std::cout << "[YOLOv8Detector] Classes: " << m_numClasses << std::endl;
+    115:            std::cout << "[YOLOv8Detector] Confidence threshold: " << m_confidenceThreshold << std::endl;
+    116:            std::cout << "[YOLOv8Detector] NMS threshold: " << m_nmsThreshold << std::endl;
+    135:    std::cout << "[YOLOv8Detector] Cleanup completed" << std::endl;
+    222:    std::cout << "[YOLOv8Detector] Confidence threshold set to: " << m_confidenceThreshold << std::endl;
+    227:    std::cout << "[YOLOv8Detector] NMS threshold set to: " << m_nmsThreshold << std::endl;
+    234:    std::cout << "[YOLOv8Detector] Input size set to: " << width << "x" << height << std::endl;
+    332:    std::cout << "[YOLOv8Detector] RKNN support available, preferring RKNN backend" << std::endl;
+    335:    std::cout << "[YOLOv8Detector] RKNN not available, using OpenCV backend" << std::endl;
+    343:    std::cout << "[YOLOv8Detector] Initializing RKNN backend..." << std::endl;
+    377:        std::cout << "[YOLOv8Detector] Warning: Failed to set multi-core NPU, using default core: " << ret << std::endl;
+    379:        std::cout << "[YOLOv8Detector] Successfully enabled 3-core NPU acceleration" << std::endl;
+    391:    std::cout << "[YOLOv8Detector] RKNN model inputs: " << io_num.n_input << ", outputs: " << io_num.n_output << std::endl;
+    416:            std::cout << "[YOLOv8Detector] RKNN model input size: " << m_inputWidth << "x" << m_inputHeight << "x" << channels << std::endl;
+    417:            std::cout << "[YOLOv8Detector] Input format: " << (input_attrs[0].fmt == RKNN_TENSOR_NHWC ? "NHWC" : "NCHW") << std::endl;
+    418:            std::cout << "[YOLOv8Detector] Input type: " << get_type_string(input_attrs[0].type) << std::endl;
+    422:    std::cout << "[YOLOv8Detector] RKNN backend initialized successfully" << std::endl;
+    431:    std::cout << "[YOLOv8Detector] Initializing OpenCV backend..." << std::endl;
+    434:    std::cout << "[YOLOv8Detector] OpenCV DNN is disabled, falling back to simulation" << std::endl;
+    440:        std::cout << "[YOLOv8Detector] Model file not found: " << modelPath << std::endl;
+    441:        std::cout << "[YOLOv8Detector] Using built-in detection simulation" << std::endl;
+    442:        std::cout << "[YOLOv8Detector] To use real models, place ONNX files in models/ directory" << std::endl;
+    448:        std::cout << "[YOLOv8Detector] Loading ONNX model: " << modelPath << std::endl;
+    452:            std::cout << "[YOLOv8Detector] Falling back to built-in detection simulation" << std::endl;
+    464:        std::cout << "[YOLOv8Detector] Model loaded successfully:" << std::endl;
+    465:        std::cout << "[YOLOv8Detector] - Total layers: " << layerNames.size() << std::endl;
+    466:        std::cout << "[YOLOv8Detector] - Output layers: " << outLayers.size() << std::endl;
+    467:        std::cout << "[YOLOv8Detector] OpenCV backend initialized successfully with real model" << std::endl;
+    471:        std::cout << "[YOLOv8Detector] OpenCV DNN loading failed: " << e.what() << std::endl;
+    472:        std::cout << "[YOLOv8Detector] Falling back to built-in detection simulation" << std::endl;
+    479:    std::cout << "[YOLOv8Detector] TensorRT backend not implemented yet" << std::endl;
+    504:    std::cout << "[YOLOv8Detector] Input tensor size: " << inputs[0].size
+    645:    std::cout << "[YOLOv8Detector] Input attrs type: " << get_type_string(m_rknnInputAttrs.type) << std::endl;
+    650:        std::cout << "[YOLOv8Detector] Preprocessed to FLOAT32 with normalization, size: "
+    655:        std::cout << "[YOLOv8Detector] Preprocessed to FLOAT32 for FP16 model with normalization, size: "
+    660:        std::cout << "[YOLOv8Detector] Preprocessed to UINT8 without normalization, size: "
+    786:    std::cout << "[YOLOv8Detector] RKNN post-processing: " << boxes.size()
+    858:    std::cout << "[YOLOv8Detector] Simulated " << detections.size()
+    871:        std::cout << "[YOLOv8Detector] Processing single-output YOLOv8 model" << std::endl;
+    874:        std::cout << "[YOLOv8Detector] Output dims: ";
+    876:            std::cout << output_attrs[0].dims[i];
+    877:            if (i < output_attrs[0].n_dims - 1) std::cout << "x";
+    879:        std::cout << std::endl;
+    884:            std::cout << "[YOLOv8Detector] Converting quantized output to float" << std::endl;
+    906:            std::cout << "[YOLOv8Detector] Output type: " << get_type_string(output_attrs[0].type) << std::endl;
+    907:            std::cout << "[YOLOv8Detector] Output buffer size: " << outputs[0].size << " bytes" << std::endl;
+    930:            std::cout << "[YOLOv8Detector] Expected output size: " << expected_size << " bytes" << std::endl;
+    977:                std::cout << "[YOLOv8Detector] Converted FP16 to FP32 using proper IEEE 754 conversion" << std::endl;
+    1017:    std::cout << "[YOLOv8Detector] RKNN post-processing: " << validCount << " raw detections -> ";
+    1068:    std::cout << detections.size() << " final detections" << std::endl;
+  std::cerr:
+    73:                std::cerr << "[YOLOv8Detector] Unknown backend" << std::endl;
+    119:            std::cerr << "[YOLOv8Detector] Failed to initialize with any backend" << std::endl;
+    124:        std::cerr << "[YOLOv8Detector] Exception during initialization: " << e.what() << std::endl;
+    182:            std::cerr << "[YOLOv8Detector] Unknown backend for detection" << std::endl;
+    348:        std::cerr << "[YOLOv8Detector] RKNN model file not found: " << modelPath << std::endl;
+    354:        std::cerr << "[YOLOv8Detector] Model file must have .rknn extension for RKNN backend" << std::endl;
+    370:        std::cerr << "[YOLOv8Detector] Failed to initialize RKNN context: " << ret << std::endl;
+    386:        std::cerr << "[YOLOv8Detector] Failed to query RKNN input/output number: " << ret << std::endl;
+    400:            std::cerr << "[YOLOv8Detector] Failed to query input attr " << i << ": " << ret << std::endl;
+    425:    std::cerr << "[YOLOv8Detector] RKNN support not compiled in" << std::endl;
+    451:            std::cerr << "[YOLOv8Detector] Failed to load ONNX model with OpenCV" << std::endl;
+    510:        std::cerr << "[YOLOv8Detector] Failed to set RKNN inputs: " << ret << std::endl;
+    517:        std::cerr << "[YOLOv8Detector] Failed to run RKNN inference: " << ret << std::endl;
+    525:        std::cerr << "[YOLOv8Detector] Failed to query RKNN input/output number: " << ret << std::endl;
+    535:            std::cerr << "[YOLOv8Detector] Failed to query output attr " << i << ": " << ret << std::endl;
+    549:        std::cerr << "[YOLOv8Detector] Failed to get RKNN outputs: " << ret << std::endl;
+    562:    std::cerr << "[YOLOv8Detector] RKNN support not compiled in" << std::endl;
+    590:            std::cerr << "[YOLOv8Detector] OpenCV detection failed: " << e.what() << std::endl;
+    605:    std::cerr << "[YOLOv8Detector] TensorRT detection not implemented yet" << std::endl;
+    911:                std::cerr << "[YOLOv8Detector] Error: Output buffer is null!" << std::endl;
+    933:                std::cerr << "[YOLOv8Detector] Error: Output buffer too small!" << std::endl;
+  puts:
+    391:    std::cout << "[YOLOv8Detector] RKNN model inputs: " << io_num.n_input << ", outputs: " << io_num.n_output << std::endl;
+    496:    rknn_input inputs[1];
+    497:    memset(inputs, 0, sizeof(inputs));
+    498:    inputs[0].index = 0;
+    499:    inputs[0].type = m_rknnInputAttrs.type;  // Use model's expected type
+    500:    inputs[0].size = preprocessed.total() * preprocessed.elemSize();
+    501:    inputs[0].fmt = m_rknnInputAttrs.fmt;    // Use model's expected format
+    502:    inputs[0].buf = preprocessed.data;
+    504:    std::cout << "[YOLOv8Detector] Input tensor size: " << inputs[0].size
+    505:              << " bytes, type: " << get_type_string(inputs[0].type)
+    506:              << ", format: " << get_format_string(inputs[0].fmt) << std::endl;
+    508:    int ret = rknn_inputs_set(m_rknnContext, 1, inputs);
+    510:        std::cerr << "[YOLOv8Detector] Failed to set RKNN inputs: " << ret << std::endl;
+    540:    // Get outputs
+    541:    std::vector<rknn_output> outputs(io_num.n_output);
+    542:    memset(outputs.data(), 0, sizeof(rknn_output) * io_num.n_output);
+    544:        outputs[i].want_float = 0; // Get quantized output for better performance
+    547:    ret = rknn_outputs_get(m_rknnContext, io_num.n_output, outputs.data(), nullptr);
+    549:        std::cerr << "[YOLOv8Detector] Failed to get RKNN outputs: " << ret << std::endl;
+    554:    detections = postprocessRKNNResultsOfficial(outputs.data(), output_attrs.data(), io_num.n_output, frame.size());
+    556:    // Release outputs
+    557:    rknn_outputs_release(m_rknnContext, io_num.n_output, outputs.data());
+    707:            // YOLOv8 outputs normalized coordinates [0, 1]
+    865:std::vector<YOLOv8Detector::Detection> YOLOv8Detector::postprocessRKNNResultsOfficial(rknn_output* outputs, rknn_tensor_attr* output_attrs, uint32_t n_output, const cv::Size& originalSize) {
+    894:            int8_t* int8_output = (int8_t*)outputs[0].buf;
+    907:            std::cout << "[YOLOv8Detector] Output buffer size: " << outputs[0].size << " bytes" << std::endl;
+    910:            if (outputs[0].buf == nullptr) {
+    932:            if (outputs[0].size < expected_size) {
+    944:                uint16_t* fp16_data = (uint16_t*)outputs[0].buf;
+    981:                detections = postprocessRKNNResults((float*)outputs[0].buf, originalSize);
+    1006:        // Process quantized outputs
+    1009:                (int8_t*)outputs[box_idx].buf, output_attrs[box_idx].zp, output_attrs[box_idx].scale,
+    1010:                (int8_t*)outputs[score_idx].buf, output_attrs[score_idx].zp, output_attrs[score_idx].scale,
+
+文件: src/ai/YOLOv8Detector.h
+  puts:
+    158:    std::vector<Detection> postprocessRKNNResultsOfficial(rknn_output* outputs, rknn_tensor_attr* output_attrs, uint32_t n_output, const cv::Size& originalSize);
+
+文件: src/ai/YOLOv8DetectorOptimized.cpp
+  std::cout:
+    18:    std::cout << "[YOLOv8DetectorOptimized] Creating optimized detector with " << numThreads << " threads" << std::endl;
+    36:    std::cout << "[YOLOv8DetectorOptimized] Optimized detector destroyed" << std::endl;
+    40:    std::cout << "[YOLOv8DetectorOptimized] Initializing optimized detector..." << std::endl;
+    50:        std::cout << "[YOLOv8DetectorOptimized] Multi-threading optimization only available for RKNN backend" << std::endl;
+    66:    std::cout << "[YOLOv8DetectorOptimized] Optimized detector initialized successfully with "
+    73:    std::cout << "[YOLOv8DetectorOptimized] Initializing " << m_numThreads << " RKNN contexts..." << std::endl;
+    105:            std::cout << "[YOLOv8DetectorOptimized] Warning: Failed to set multi-core NPU for context " << i << std::endl;
+    107:            std::cout << "[YOLOv8DetectorOptimized] Enabled multi-core NPU (0_1_2) for context " << i << std::endl;
+    130:        std::cout << "[YOLOv8DetectorOptimized] RKNN context " << i << " initialized successfully" << std::endl;
+    186:    std::cout << "[YOLOv8DetectorOptimized] Worker thread " << threadId << " started" << std::endl;
+    211:    std::cout << "[YOLOv8DetectorOptimized] Worker thread " << threadId << " stopped" << std::endl;
+  std::cerr:
+    44:        std::cerr << "[YOLOv8DetectorOptimized] Failed to initialize base detector" << std::endl;
+    56:        std::cerr << "[YOLOv8DetectorOptimized] Failed to initialize multi-RKNN contexts" << std::endl;
+    78:        std::cerr << "[YOLOv8DetectorOptimized] Failed to open model file: " << modelPath << std::endl;
+    98:            std::cerr << "[YOLOv8DetectorOptimized] Failed to initialize RKNN context " << i << ": " << ret << std::endl;
+    117:            std::cerr << "[YOLOv8DetectorOptimized] Failed to query I/O for context " << i << std::endl;
+    125:                std::cerr << "[YOLOv8DetectorOptimized] Failed to query input attr for context " << i << std::endl;
+    135:    std::cerr << "[YOLOv8DetectorOptimized] RKNN support not compiled in" << std::endl;
+    229:        std::cerr << "[YOLOv8DetectorOptimized] Inference failed in thread " << threadId << ": " << e.what() << std::endl;
+    297:        std::cerr << "[YOLOv8DetectorOptimized] Failed to set RKNN inputs (thread " << threadId << "): " << ret << std::endl;
+    304:        std::cerr << "[YOLOv8DetectorOptimized] Failed to run RKNN inference (thread " << threadId << "): " << ret << std::endl;
+  puts:
+    287:    rknn_input inputs[1];
+    288:    memset(inputs, 0, sizeof(inputs));
+    289:    inputs[0].index = 0;
+    290:    inputs[0].type = inputAttrs.type;
+    291:    inputs[0].size = preprocessed.total() * preprocessed.elemSize();
+    292:    inputs[0].fmt = inputAttrs.fmt;
+    293:    inputs[0].buf = preprocessed.data;
+    295:    int ret = rknn_inputs_set(ctx, 1, inputs);
+    297:        std::cerr << "[YOLOv8DetectorOptimized] Failed to set RKNN inputs (thread " << threadId << "): " << ret << std::endl;
+    324:    // Get outputs
+    325:    std::vector<rknn_output> outputs(io_num.n_output);
+    326:    memset(outputs.data(), 0, sizeof(rknn_output) * io_num.n_output);
+    328:        outputs[i].want_float = 0; // Get quantized output for better performance
+    331:    ret = rknn_outputs_get(ctx, io_num.n_output, outputs.data(), nullptr);
+    337:    detections = postprocessRKNNResultsOptimized(outputs.data(), output_attrs.data(), io_num.n_output, frame.size());
+    339:    // Release outputs
+    340:    rknn_outputs_release(ctx, io_num.n_output, outputs.data());
+    348:std::vector<YOLOv8DetectorOptimized::Detection> YOLOv8DetectorOptimized::postprocessRKNNResultsOptimized(rknn_output* outputs, rknn_tensor_attr* output_attrs, uint32_t n_output, const cv::Size& originalSize) {
+    353:    return YOLOv8Detector::postprocessRKNNResultsOfficial(outputs, output_attrs, n_output, originalSize);
+
+文件: src/ai/YOLOv8DetectorOptimized.h
+  puts:
+    121:     * @param outputs RKNN output data
+    123:     * @param n_output Number of outputs
+    127:    std::vector<Detection> postprocessRKNNResultsOptimized(rknn_output* outputs, rknn_tensor_attr* output_attrs, uint32_t n_output, const cv::Size& originalSize);
+
+文件: src/ai/YOLOv8DetectorZeroCopy.cpp
+  std::cout:
+    24:    std::cout << "[YOLOv8DetectorZeroCopy] Creating zero-copy optimized detector" << std::endl;
+    31:    std::cout << "[YOLOv8DetectorZeroCopy] Zero-copy detector destroyed" << std::endl;
+    36:    std::cout << "[YOLOv8DetectorZeroCopy] Initializing zero-copy detector..." << std::endl;
+    51:        std::cout << "[YOLOv8DetectorZeroCopy] Zero-copy mode enabled successfully" << std::endl;
+    53:        std::cout << "[YOLOv8DetectorZeroCopy] RKNN not available, using standard mode" << std::endl;
+    74:    std::cout << "[YOLOv8DetectorZeroCopy] Model has " << m_ioNum.n_input 
+    115:    std::cout << "[YOLOv8DetectorZeroCopy] Created DMA buffers - Input: " 
+    245:    std::cout << "[ZeroCopy] Frame processed in " << total_time << "ms "
+  std::cerr:
+    40:        std::cerr << "[YOLOv8DetectorZeroCopy] Base initialization failed" << std::endl;
+    48:            std::cerr << "[YOLOv8DetectorZeroCopy] Zero-copy initialization failed" << std::endl;
+    63:        std::cerr << "[YOLOv8DetectorZeroCopy] RKNN context not initialized" << std::endl;
+    70:        std::cerr << "[YOLOv8DetectorZeroCopy] Failed to query I/O number: " << ret << std::endl;
+    86:            std::cerr << "[YOLOv8DetectorZeroCopy] Failed to query input attr " << i << std::endl;
+    96:            std::cerr << "[YOLOv8DetectorZeroCopy] Failed to query output attr " << i << std::endl;
+    104:        std::cerr << "[YOLOv8DetectorZeroCopy] Failed to create input memory" << std::endl;
+    111:        std::cerr << "[YOLOv8DetectorZeroCopy] Failed to create output memory" << std::endl;
+    167:        std::cerr << "[YOLOv8DetectorZeroCopy] Unsupported input type" << std::endl;
+    201:        std::cerr << "[YOLOv8DetectorZeroCopy] Failed to set inputs: " << ret << std::endl;
+    209:        std::cerr << "[YOLOv8DetectorZeroCopy] Failed to run inference: " << ret << std::endl;
+    226:        std::cerr << "[YOLOv8DetectorZeroCopy] Failed to get outputs: " << ret << std::endl;
+  puts:
+    75:              << " inputs, " << m_ioNum.n_output << " outputs" << std::endl;
+    191:    rknn_input inputs[1];
+    192:    memset(inputs, 0, sizeof(inputs));
+    193:    inputs[0].index = 0;
+    194:    inputs[0].type = m_inputAttrs[0].type;
+    195:    inputs[0].fmt = m_inputAttrs[0].fmt;
+    196:    inputs[0].size = m_inputAttrs[0].size;
+    197:    inputs[0].buf = m_inputMem->virt_addr;
+    199:    int ret = rknn_inputs_set(m_rknnContext, 1, inputs);
+    201:        std::cerr << "[YOLOv8DetectorZeroCopy] Failed to set inputs: " << ret << std::endl;
+    216:    rknn_output outputs[1];
+    217:    memset(outputs, 0, sizeof(outputs));
+    218:    outputs[0].index = 0;
+    219:    outputs[0].want_float = 0;  // 获取原始输出
+    220:    outputs[0].is_prealloc = 1; // 使用预分配的缓冲区
+    221:    outputs[0].buf = m_outputMem->virt_addr;
+    222:    outputs[0].size = m_outputAttrs[0].size;
+    224:    ret = rknn_outputs_get(m_rknnContext, 1, outputs, nullptr);
+    226:        std::cerr << "[YOLOv8DetectorZeroCopy] Failed to get outputs: " << ret << std::endl;
+    237:    // rknn_outputs_release(m_rknnContext, 1, outputs);
+    254:    rknn_output outputs[1];
+    255:    outputs[0].buf = buffer;
+    256:    outputs[0].size = m_outputAttrs[0].size;
+    258:    return YOLOv8Detector::postprocessRKNNResultsOfficial(outputs, m_outputAttrs, 1, originalSize);
+
+文件: src/ai/YOLOv8DetectorZeroCopy.h
+  std::cout:
+    79:        std::cout << "=== Zero-Copy Performance Stats ===" << std::endl;
+    80:        std::cout << "Frames processed: " << frameCount << std::endl;
+    81:        std::cout << "Avg preprocess: " << avgPreprocessTime << " ms" << std::endl;
+    82:        std::cout << "Avg inference: " << avgInferenceTime << " ms" << std::endl;
+    83:        std::cout << "Avg postprocess: " << avgPostprocessTime << " ms" << std::endl;
+    84:        std::cout << "Avg total: " << avgTotalTime << " ms" << std::endl;
+    85:        std::cout << "Avg FPS: " << (avgTotalTime > 0 ? 1000.0 / avgTotalTime : 0) << std::endl;
+
+文件: src/api/APIService.cpp
+  std::cout:
+    21:    std::cout << "[APIService] Initializing API service on port " << port << std::endl;
+    28:        std::cout << "[APIService] ONVIF discovery manager initialized" << std::endl;
+    41:        std::cout << "[APIService] Service already running" << std::endl;
+    52:        std::cout << "[APIService] API service started on port " << m_port << std::endl;
+    67:    std::cout << "[APIService] Stopping API service..." << std::endl;
+    80:    std::cout << "[APIService] API service stopped" << std::endl;
+    96:    std::cout << "[APIService] Server thread started on port " << m_port << std::endl;
+    110:    std::cout << "[APIService] Server thread stopped" << std::endl;
+    119:    std::cout << "[APIService] Setting up HTTP routes..." << std::endl;
+    471:    std::cout << "[APIService] HTTP routes configured successfully" << std::endl;
+    552:            std::cout << "[APIService] Added video source: " << id << " (" << protocol << ")" << std::endl;
+    641:        std::cout << "[APIService] Manual recording started for camera: " << cameraId
+    678:        std::cout << "[APIService] Manual recording stopped for camera: " << cameraId << std::endl;
+    720:        std::cout << "[APIService] Recording configuration updated: pre=" << preEventDuration
+    1122:        std::cout << "[APIService] Configured " << protocol << " streaming for camera: " << cameraId << std::endl;
+    1210:        std::cout << "[APIService] Started streaming for camera: " << cameraId << std::endl;
+    1249:        std::cout << "[APIService] Stopped streaming for camera: " << cameraId << std::endl;
+    1400:        std::cout << "[APIService] Created intrusion rule: " << rule.id
+    1557:        std::cout << "[APIService] Updated intrusion rule: " << rule.id << std::endl;
+    1600:        std::cout << "[APIService] Deleted intrusion rule: " << ruleId << std::endl;
+    1730:            std::cout << "[APIService] Added ROI to active pipeline: " << cameraId << std::endl;
+    1756:        std::cout << "[APIService] Created ROI: " << roi.id << " (" << roi.name << ") for camera: " << cameraId << std::endl;
+    1811:        std::cout << "[APIService] Retrieved " << rois.size() << " ROIs"
+    1862:        std::cout << "[APIService] Retrieved ROI: " << roiId << std::endl;
+    2006:            std::cout << "[APIService] Updated ROI in active pipeline: " << cameraId << std::endl;
+    2032:        std::cout << "[APIService] Updated ROI: " << roiId << " (" << roi.name << ") for camera: " << cameraId << std::endl;
+    2070:            std::cout << "[APIService] Removed ROI from active pipeline: " << existingROI.camera_id << std::endl;
+    2083:        std::cout << "[APIService] Deleted ROI: " << roiId << " from camera: " << existingROI.camera_id << std::endl;
+    2422:            std::cout << "[APIService] Bulk ROI operations completed successfully: "
+    2433:            std::cout << "[APIService] Bulk ROI operation failed and rolled back: " << transactionError << std::endl;
+    2703:        std::cout << "[APIService] Starting ONVIF device discovery..." << std::endl;
+    2741:        std::cout << "[APIService] ONVIF discovery completed. Found " << devices.size() << " devices" << std::endl;
+    2775:            std::cout << "[APIService] Testing authentication for device: " << device->ipAddress
+    2791:            std::cout << "[APIService] Authentication successful for device: " << device->ipAddress << std::endl;
+    2838:        std::cout << "[APIService] Added ONVIF device as video source: " << device->uuid
+    2938:        std::cout << "[APIService] Saved face image: " << imagePath << std::endl;
+    2949:                std::cout << "[APIService] Generated face embedding with " << embedding.size() << " dimensions" << std::endl;
+    2951:                std::cout << "[APIService] Warning: Face recognizer initialization failed, using dummy embedding" << std::endl;
+    2957:            std::cout << "[APIService] Using dummy embedding as fallback" << std::endl;
+    2996:        std::cout << "[APIService] Face added successfully: " << name
+    3040:        std::cout << "[APIService] Retrieved " << faces.size() << " faces" << std::endl;
+    3081:                std::cout << "[APIService] Deleted face image: " << face.image_path << std::endl;
+    3083:                std::cout << "[APIService] Warning: Could not delete face image: " << face.image_path << std::endl;
+    3098:        std::cout << "[APIService] Face deleted successfully: " << face.name
+    3147:        std::cout << "[APIService] Face verification request with threshold: " << threshold << std::endl;
+    3163:        std::cout << "[APIService] Found " << registeredFaces.size() << " registered faces for verification" << std::endl;
+    3174:        std::cout << "[APIService] Decoded input image: " << inputImage.cols << "x" << inputImage.rows << std::endl;
+    3212:        std::cout << "[APIService] Face verification completed: " << verificationResults.size()
+    3404:        std::cout << "[APIService] Created alarm config: " << config.id
+    3624:        std::cout << "[APIService] Updated alarm config: " << configId << std::endl;
+    3654:        std::cout << "[APIService] Deleted alarm config: " << configId << std::endl;
+    3696:        std::cout << "[APIService] Test alarm triggered: " << eventType
+    3818:        std::cout << "[APIService] ReID configuration updated: enabled=" << enabled
+    3918:        std::cout << "[APIService] ReID similarity threshold updated to " << threshold
+  std::cerr:
+    25:        std::cerr << "[APIService] Warning: Failed to initialize ONVIF manager: "
+    56:        std::cerr << "[APIService] Failed to start: " << e.what() << std::endl;
+    101:            std::cerr << "[APIService] Failed to start HTTP server on port " << m_port << std::endl;
+    106:        std::cerr << "[APIService] HTTP server error: " << e.what() << std::endl;
+    115:        std::cerr << "[APIService] HTTP server not initialized" << std::endl;
+    2544:        std::cerr << "[APIService] Failed to deserialize ROI: " << e.what() << std::endl;
+    2573:        std::cerr << "[APIService] Failed to deserialize IntrusionRule: " << e.what() << std::endl;
+    2921:            std::cerr << "[APIService] Warning: Could not create faces directory" << std::endl;
+
+文件: src/core/TaskManager.cpp
+  std::cout:
+    29:    std::cout << "[TaskManager] Initializing TaskManager singleton" << std::endl;
+    36:        std::cout << "[TaskManager] GPU monitoring not available" << std::endl;
+    48:        std::cout << "[TaskManager] Already running" << std::endl;
+    55:    std::cout << "[TaskManager] Started successfully" << std::endl;
+    59:    std::cout << "[TaskManager] Stopping..." << std::endl;
+    76:    std::cout << "[TaskManager] Stopped successfully" << std::endl;
+    107:            std::cout << "[TaskManager] Added video source: " << source.id
+    135:    std::cout << "[TaskManager] Removed video source: " << sourceId << std::endl;
+    181:    std::cout << "[TaskManager] Enhanced monitoring thread started with 1s precision" << std::endl;
+    195:            std::cout << "[TaskManager] Warning: Could not set thread priority" << std::endl;
+    232:                std::cout << "[TaskManager] Cleaning up failed pipeline: " << id << std::endl;
+    290:    std::cout << "[TaskManager] Enhanced monitoring thread stopped after "
+    360:        std::cout << "[TaskManager] Failed to initialize NVML: " << nvmlErrorString(result) << std::endl;
+    366:        std::cout << "[TaskManager] Failed to get GPU device count: " << nvmlErrorString(result) << std::endl;
+    372:        std::cout << "[TaskManager] No NVIDIA GPUs found" << std::endl;
+    381:        std::cout << "[TaskManager] Failed to get GPU device handle: " << nvmlErrorString(result) << std::endl;
+    394:        std::cout << "[TaskManager] GPU monitoring initialized for: " << name << std::endl;
+    396:        std::cout << "[TaskManager] GPU monitoring initialized (unknown device)" << std::endl;
+    401:    std::cout << "[TaskManager] NVML not available - GPU monitoring disabled" << std::endl;
+    412:        std::cout << "[TaskManager] GPU monitoring cleanup complete" << std::endl;
+    606:    std::cout << "[TaskManager] Monitoring statistics reset" << std::endl;
+    643:            std::cout << "[TaskManager] Cross-camera match: camera " << cameraId
+    721:    std::cout << "[TaskManager] Cross-camera tracking " << (enabled ? "enabled" : "disabled") << std::endl;
+    727:        std::cout << "[TaskManager] ReID similarity threshold set to " << threshold << std::endl;
+    734:        std::cout << "[TaskManager] Max track age set to " << ageSeconds << " seconds" << std::endl;
+    740:    std::cout << "[TaskManager] Cross-camera matching " << (enabled ? "enabled" : "disabled") << std::endl;
+    782:    std::cout << "[TaskManager] Cross-camera tracking statistics reset" << std::endl;
+    799:    std::cout << "[CrossCameraTrack] Created global track " << globalTrackId
+    824:    std::cout << "[CrossCameraTrack] Updated global track " << globalTrackId
+    863:    std::cout << "[TaskManager] Created new global track " << globalId
+    913:            std::cout << "[TaskManager] Cleaned up expired global track " << it->first << std::endl;
+  std::cerr:
+    85:        std::cerr << "[TaskManager] Invalid video source: " << source.toString() << std::endl;
+    92:        std::cerr << "[TaskManager] Maximum pipeline limit reached: " << MAX_PIPELINES << std::endl;
+    97:        std::cerr << "[TaskManager] Pipeline already exists for source: " << source.id << std::endl;
+    111:            std::cerr << "[TaskManager] Failed to initialize pipeline for: " << source.id << std::endl;
+    115:        std::cerr << "[TaskManager] Exception creating pipeline: " << e.what() << std::endl;
+    125:        std::cerr << "[TaskManager] Pipeline not found: " << sourceId << std::endl;
+    266:                std::cerr << "[TaskManager] Warning: Monitoring cycle took " << cycleDuration
+    273:            std::cerr << "[TaskManager] Monitoring error: " << e.what() << std::endl;
+    286:            std::cerr << "[TaskManager] Warning: Monitoring thread behind schedule" << std::endl;
+    298:        std::cerr << "[TaskManager] Failed to open /proc/stat" << std::endl;
+    304:        std::cerr << "[TaskManager] Failed to read from /proc/stat" << std::endl;
+    315:        std::cerr << "[TaskManager] Invalid /proc/stat format" << std::endl;
+    321:        std::cerr << "[TaskManager] Failed to parse CPU stats" << std::endl;
+
+文件: src/core/VideoPipeline.cpp
+  std::cout:
+    21:    std::cout << "[VideoPipeline] Creating pipeline for: " << source.id << std::endl;
+    38:        std::cout << "[VideoPipeline] Initializing pipeline: " << m_source.id << std::endl;
+    49:            std::cout << "[VideoPipeline] Initializing optimized RKNN YOLOv8 detector with "
+    54:                std::cout << "[VideoPipeline] Failed to initialize optimized detector, falling back to standard detector" << std::endl;
+    64:                std::cout << "[VideoPipeline] Optimized RKNN YOLOv8 detector initialized successfully!" << std::endl;
+    97:            std::cout << "[VideoPipeline] Warning: Face recognizer initialization failed" << std::endl;
+    102:            std::cout << "[VideoPipeline] Warning: License plate recognizer initialization failed" << std::endl;
+    140:        std::cout << "[VideoPipeline] MJPEG stream available at: " << m_streamer->getStreamUrl() << std::endl;
+    142:        std::cout << "[VideoPipeline] Pipeline initialized successfully: " << m_source.id << std::endl;
+    153:        std::cout << "[VideoPipeline] Pipeline already running: " << m_source.id << std::endl;
+    163:    std::cout << "[VideoPipeline] Pipeline started: " << m_source.id << std::endl;
+    171:    std::cout << "[VideoPipeline] Stopping pipeline: " << m_source.id << std::endl;
+    179:    std::cout << "[VideoPipeline] Pipeline stopped: " << m_source.id << std::endl;
+    191:    std::cout << "[VideoPipeline] Processing thread started: " << m_source.id << std::endl;
+    207:                    std::cout << "[VideoPipeline] Attempting reconnection: " << m_source.id
+    250:    std::cout << "[VideoPipeline] Processing thread stopped: " << m_source.id << std::endl;
+    322:                std::cout << "[VideoPipeline] Processed " << result.detections.size()
+    424:    std::cout << "[VideoPipeline] Optimized detection "
+    436:        std::cout << "[VideoPipeline] Detection threads set to " << threads
+    456:        std::cout << "[VideoPipeline] Added intrusion rule: " << rule.id
+    473:        std::cout << "[VideoPipeline] Removed intrusion rule: " << ruleId
+    490:        std::cout << "[VideoPipeline] Updated intrusion rule: " << rule.id
+    518:        std::cout << "[VideoPipeline] Added ROI: " << roi.id
+    535:        std::cout << "[VideoPipeline] Removed ROI: " << roiId
+    628:        std::cout << "[VideoPipeline] Streaming configured for " << m_source.id
+    659:        std::cout << "[VideoPipeline] Streaming already enabled for " << m_source.id << std::endl;
+    675:            std::cout << "[VideoPipeline] Streaming started for " << m_source.id
+    696:        std::cout << "[VideoPipeline] Streaming already disabled for " << m_source.id << std::endl;
+    705:        std::cout << "[VideoPipeline] Streaming stopped for " << m_source.id << std::endl;
+    801:            std::cout << "[VideoPipeline] Stream " << m_source.id << " is now STABLE" << std::endl;
+    804:            std::cout << "[VideoPipeline] Stream " << m_source.id << " is now UNSTABLE" << std::endl;
+    805:            std::cout << "  - Frame timeout: " << (frameTimeout ? "YES" : "NO")
+    807:            std::cout << "  - Too many errors: " << (tooManyErrors ? "YES" : "NO")
+    809:            std::cout << "  - Frame rate stable: " << (frameRateStable ? "YES" : "NO")
+    817:        std::cout << "[VideoPipeline] Stream " << m_source.id
+  std::cerr:
+    376:    std::cerr << "[VideoPipeline] Error in " << m_source.id << ": " << error << std::endl;
+    450:        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+    467:        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+    484:        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+    501:        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+    512:        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+    529:        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+    546:        std::cerr << "[VideoPipeline] BehaviorAnalyzer not initialized" << std::endl;
+    602:        std::cerr << "[VideoPipeline] Streamer not initialized" << std::endl;
+    617:                    std::cerr << "[VideoPipeline] Failed to restart MJPEG server" << std::endl;
+    622:                    std::cerr << "[VideoPipeline] Failed to restart RTMP stream" << std::endl;
+    635:        std::cerr << "[VideoPipeline] Failed to configure streaming: " << e.what() << std::endl;
+    654:        std::cerr << "[VideoPipeline] Streamer not initialized" << std::endl;
+    682:        std::cerr << "[VideoPipeline] Failed to start streaming: " << e.what() << std::endl;
+    691:        std::cerr << "[VideoPipeline] Streamer not initialized" << std::endl;
+    709:        std::cerr << "[VideoPipeline] Failed to stop streaming: " << e.what() << std::endl;
+
+文件: src/database/DatabaseManager.cpp
+  std::cout:
+    44:    std::cout << "[DatabaseManager] Initialized with database: " << dbPath << std::endl;
+  std::cerr:
+    25:        std::cerr << "[DatabaseManager] " << m_lastError << std::endl;
+    34:        std::cerr << "[DatabaseManager] Failed to create tables" << std::endl;
+    40:        std::cerr << "[DatabaseManager] Failed to prepare statements" << std::endl;
+
+文件: src/main.cpp
+  std::cout:
+    15:    std::cout << "\n[Main] Received signal " << signal << ", shutting down..." << std::endl;
+    20:    std::cout << "Usage: " << programName << " [options]\n"
+    34:    std::cout << "=== AI Security Vision System ===" << std::endl;
+    35:    std::cout << "Version: 1.0.0" << std::endl;
+    36:    std::cout << "Build: " << __DATE__ << " " << __TIME__ << std::endl;
+    37:    std::cout << "===================================" << std::endl;
+    100:        std::cout << "[Main] Initializing TaskManager..." << std::endl;
+    105:        std::cout << "[Main] Starting API service on port " << apiPort << "..." << std::endl;
+    115:                std::cout << "[Main] Running with real RTSP cameras..." << std::endl;
+    117:                    std::cout << "[Main] Using optimized multi-threaded RKNN detection with "
+    150:                    std::cout << "[Main] Adding camera: " << camera.id << " (" << camera.url << ")" << std::endl;
+    153:                        std::cout << "[Main] Camera added successfully: " << camera.id << std::endl;
+    161:                                std::cout << "[Main] Optimized detection enabled for " << camera.id
+    166:                        std::cout << "[Main] Failed to add camera: " << camera.id << std::endl;
+    171:                std::cout << "[Main] Running in test mode..." << std::endl;
+    183:                    std::cout << "[Main] Test video source added successfully" << std::endl;
+    185:                    std::cout << "[Main] Failed to add test video source" << std::endl;
+    190:        std::cout << "[Main] System started successfully!" << std::endl;
+    191:        std::cout << "[Main] API endpoints available at http://localhost:" << apiPort << std::endl;
+    195:            std::cout << "\n[Main] === MJPEG Video Streams ===" << std::endl;
+    200:                    std::cout << "[Main] 📺 " << pipelineId << ": " << pipeline->getStreamUrl() << std::endl;
+    203:            std::cout << "[Main] ================================" << std::endl;
+    206:        std::cout << "[Main] Press Ctrl+C to stop..." << std::endl;
+    220:                std::cout << "\n[Main] === System Status ===" << std::endl;
+    221:                std::cout << "🖥️  Active Pipelines: " << activePipelines.size() << std::endl;
+    222:                std::cout << "🖥️  CPU Usage: " << taskManager.getCpuUsage() << "%" << std::endl;
+    223:                std::cout << "🎮 GPU Memory: " << taskManager.getGpuMemoryUsage() << std::endl;
+    229:                            std::cout << "🎥 Pipeline " << pipelineId << ":" << std::endl;
+    230:                            std::cout << "  📈 FPS: " << std::fixed << std::setprecision(1)
+    232:                            std::cout << "  🎯 Processed: " << pipeline->getProcessedFrames() << " frames" << std::endl;
+    233:                            std::cout << "  ❌ Dropped: " << pipeline->getDroppedFrames() << " frames" << std::endl;
+    234:                            std::cout << "  🧠 Optimized: " << (pipeline->isOptimizedDetectionEnabled() ? "Yes" : "No") << std::endl;
+    236:                                std::cout << "  🔄 Threads: " << pipeline->getDetectionThreads() << std::endl;
+    238:                            std::cout << "  🌐 Stream: " << pipeline->getStreamUrl() << std::endl;
+    239:                            std::cout << "  👥 Clients: " << pipeline->getConnectedClients() << std::endl;
+    240:                            std::cout << "  ❤️  Healthy: " << (pipeline->isHealthy() ? "Yes" : "No") << std::endl;
+    243:                                std::cout << "  ⚠️  Last Error: " << pipeline->getLastError() << std::endl;
+    245:                            std::cout << std::endl;
+    249:                std::cout << "================================" << std::endl;
+    254:        std::cout << "[Main] Shutting down..." << std::endl;
+    259:        std::cout << "[Main] Shutdown complete" << std::endl;
+  std::cerr:
+    58:                std::cerr << "Error: Port number required" << std::endl;
+    65:                std::cerr << "Error: Config file path required" << std::endl;
+    80:                    std::cerr << "Error: Detection threads must be between 1 and 8" << std::endl;
+    84:                std::cerr << "Error: Number of threads required" << std::endl;
+    88:            std::cerr << "Error: Unknown argument: " << arg << std::endl;
+    108:            std::cerr << "[Main] Failed to start API service" << std::endl;
+    263:        std::cerr << "[Main] Fatal error: " << e.what() << std::endl;
+    266:        std::cerr << "[Main] Unknown fatal error occurred" << std::endl;
+
+文件: src/onvif/ONVIFDiscovery.cpp
+  std::cout:
+    378:    std::cout << "[ONVIFDiscovery] " << message << std::endl;
+    1038:            std::cout << "[ONVIFManager] Successfully auto-configured device: " << deviceCopy.name << std::endl;
+    1154:        std::cout << "[ONVIFManager] Auto-configured ONVIF device: " << device.name
+  std::cerr:
+    382:    std::cerr << "[ONVIFDiscovery] ERROR: " << message << std::endl;
+    1040:            std::cerr << "[ONVIFManager] Failed to auto-configure device: " << deviceCopy.name << std::endl;
+  printf:
+    172:    snprintf(probeMessage, sizeof(probeMessage), WS_DISCOVERY_PROBE_MESSAGE, messageId.c_str());
+  snprintf:
+    172:    snprintf(probeMessage, sizeof(probeMessage), WS_DISCOVERY_PROBE_MESSAGE, messageId.c_str());
+
+文件: src/output/AlarmTrigger.cpp
+  std::cout:
+    70:        std::cout << "[AlarmTrigger] Already initialized" << std::endl;
+    77:    std::cout << "[AlarmTrigger] Initialized with HTTP POST delivery support" << std::endl;
+    100:        std::cout << "[AlarmTrigger] Shutdown complete" << std::endl;
+    128:        std::cout << "[AlarmTrigger] Queued alarm: " << event.eventType
+    163:    std::cout << "[AlarmTrigger] Queued test alarm: " << eventType
+    182:    std::cout << "[AlarmTrigger] Added alarm config: " << config.id
+    197:        std::cout << "[AlarmTrigger] Removed alarm config: " << configId << std::endl;
+    211:            std::cout << "[AlarmTrigger] Updated alarm config: " << config.id << std::endl;
+    241:    std::cout << "[AlarmTrigger] Alarm processing thread started" << std::endl;
+    279:    std::cout << "[AlarmTrigger] Alarm processing thread stopped" << std::endl;
+    306:    std::cout << "[AlarmTrigger] Delivering alarm " << payload.alarm_id
+    358:    std::cout << "[AlarmTrigger] Alarm " << payload.alarm_id << " routing complete: "
+    421:            std::cout << "[AlarmTrigger] HTTP POST successful (code: " << responseCode << ")" << std::endl;
+    496:        std::cout << "[AlarmTrigger] WebSocket server already running" << std::endl;
+    506:        std::cout << "[AlarmTrigger] WebSocket server started on port " << port << std::endl;
+    524:        std::cout << "[AlarmTrigger] WebSocket server stopped" << std::endl;
+    556:            std::cout << "[AlarmTrigger] Connected to MQTT broker: " << config.broker
+    586:        std::cout << "[AlarmTrigger] Disconnected from MQTT broker" << std::endl;
+    654:        std::cout << "[AlarmTrigger] HTTP alarm delivered to: " << config.httpConfig.url
+    687:    std::cout << "[AlarmTrigger] WebSocket alarm broadcasted to "
+    737:    std::cout << "[AlarmTrigger] MQTT alarm published to " << config.mqttConfig.broker
+    807:    std::cout << "[AlarmTrigger] Routing history cleared" << std::endl;
+  std::cerr:
+    121:            std::cerr << "[AlarmTrigger] Alarm queue full, dropping lowest priority alarm" << std::endl;
+    176:            std::cerr << "[AlarmTrigger] Config with ID " << config.id << " already exists" << std::endl;
+    201:    std::cerr << "[AlarmTrigger] Config not found: " << configId << std::endl;
+    216:    std::cerr << "[AlarmTrigger] Config not found for update: " << config.id << std::endl;
+    301:        std::cerr << "[AlarmTrigger] No enabled alarm configurations found" << std::endl;
+    346:            std::cerr << "[AlarmTrigger] Exception during delivery: " << e.what() << std::endl;
+    373:        std::cerr << "[AlarmTrigger] Failed to initialize CURL" << std::endl;
+    412:            std::cerr << "[AlarmTrigger] CURL error: " << curl_easy_strerror(res) << std::endl;
+    424:            std::cerr << "[AlarmTrigger] HTTP POST failed with code: " << responseCode << std::endl;
+    429:        std::cerr << "[AlarmTrigger] Exception in HTTP POST: " << e.what() << std::endl;
+    508:        std::cerr << "[AlarmTrigger] Failed to start WebSocket server" << std::endl;
+    511:    std::cerr << "[AlarmTrigger] WebSocket support not compiled" << std::endl;
+    560:            std::cerr << "[AlarmTrigger] Failed to connect to MQTT broker: "
+    566:        std::cerr << "[AlarmTrigger] Paho MQTT C++ client not yet implemented" << std::endl;
+    571:        std::cerr << "[AlarmTrigger] MQTT connection error: " << e.what() << std::endl;
+    575:    std::cerr << "[AlarmTrigger] MQTT support not compiled" << std::endl;
+    594:        std::cerr << "[AlarmTrigger] MQTT client not connected" << std::endl;
+    601:        std::cerr << "[AlarmTrigger] MQTT publish error: " << e.what() << std::endl;
+    605:    std::cerr << "[AlarmTrigger] MQTT support not compiled" << std::endl;
+    658:        std::cerr << "[AlarmTrigger] Failed to deliver HTTP alarm to: " << config.httpConfig.url << std::endl;
+
+文件: src/output/Recorder.cpp
+  std::cout:
+    38:    std::cout << "[Recorder] Initialized for " << sourceId
+    68:    std::cout << "[Recorder] Circular buffer initialized with size: " << m_maxBufferSize << std::endl;
+    137:        std::cout << "[Recorder] Already recording, cannot start manual recording" << std::endl;
+    168:        std::cout << "[Recorder] Already recording, ignoring event trigger" << std::endl;
+    197:    std::cout << "[Recorder] Started recording: " << reason
+    235:    std::cout << "[Recorder] Recording stopped: " << m_currentOutputPath << std::endl;
+    339:        std::cout << "[Recorder] No database manager available" << std::endl;
+    347:        std::cout << "[Recorder] Event saved to database: " << eventType
+  std::cerr:
+    31:        std::cerr << "[Recorder] Failed to create output directory: " << e.what() << std::endl;
+    51:        std::cerr << "[Recorder] Failed to create output directory: " << e.what() << std::endl;
+    190:        std::cerr << "[Recorder] Failed to open video writer: " << m_currentOutputPath << std::endl;
+    351:        std::cerr << "[Recorder] Failed to save event to database: "
+
+文件: src/output/Streamer.cpp
+  std::cout:
+    35:    std::cout << "[Streamer] Creating multi-protocol streamer" << std::endl;
+    41:        std::cout << "[Streamer] FFmpeg initialized" << std::endl;
+    65:        std::cout << "[Streamer] Initialized MJPEG streamer for " << sourceId
+    73:        std::cout << "[Streamer] Initialized RTMP streamer for " << sourceId
+    81:    std::cout << "[Streamer] Cleaning up streamer for " << m_sourceId << std::endl;
+    120:    std::cout << "[Streamer] Cleanup complete for " << m_sourceId << std::endl;
+    126:    std::cout << "[Streamer] Updated config: " << config.width << "x" << config.height
+    190:    std::cout << "[Streamer] HTTP server started on port " << m_config.port << std::endl;
+    199:    std::cout << "[Streamer] Stopping HTTP server..." << std::endl;
+    276:    std::cout << "[Streamer] Server thread started" << std::endl;
+    294:                std::cout << "[Streamer] Maximum clients reached, rejecting connection" << std::endl;
+    302:        std::cout << "[Streamer] New client connected: " << clientAddrStr << std::endl;
+    308:    std::cout << "[Streamer] Server thread stopped" << std::endl;
+    312:    std::cout << "[Streamer] Client handler started for " << clientAddr << std::endl;
+    325:            std::cout << "[Streamer] Failed to read request from " << clientAddr << std::endl;
+    350:    std::cout << "[Streamer] Client handler stopped for " << clientAddr << std::endl;
+    359:    std::cout << "[Streamer] HTTP Request: " << method << " " << path << std::endl;
+    430:    std::cout << "[Streamer] Frame processing thread started" << std::endl;
+    450:    std::cout << "[Streamer] Frame processing thread stopped" << std::endl;
+    685:    std::cout << "[Streamer] RTMP stream started to " << m_config.rtmpUrl << std::endl;
+    694:    std::cout << "[Streamer] Stopping RTMP stream..." << std::endl;
+    826:    std::cout << "[Streamer] RTMP encoder setup complete" << std::endl;
+    861:    std::cout << "[Streamer] RTMP encoder cleanup complete" << std::endl;
+    933:    std::cout << "[Streamer] RTMP streaming thread started" << std::endl;
+    941:    std::cout << "[Streamer] RTMP streaming thread stopped" << std::endl;
+  std::cerr:
+    62:            std::cerr << "[Streamer] Failed to start HTTP server for " << sourceId << std::endl;
+    70:            std::cerr << "[Streamer] Failed to start RTMP stream for " << sourceId << std::endl;
+    240:        std::cerr << "[Streamer] Failed to create socket: " << strerror(errno) << std::endl;
+    247:        std::cerr << "[Streamer] Failed to set socket options: " << strerror(errno) << std::endl;
+    259:        std::cerr << "[Streamer] Failed to bind socket to port " << m_config.port
+    267:        std::cerr << "[Streamer] Failed to listen on socket: " << strerror(errno) << std::endl;
+    285:                std::cerr << "[Streamer] Failed to accept connection: " << strerror(errno) << std::endl;
+    334:        std::cerr << "[Streamer] Exception in client handler: " << e.what() << std::endl;
+    593:        std::cerr << "[Streamer] Failed to encode frame to JPEG" << std::endl;
+    673:        std::cerr << "[Streamer] RTMP URL not configured" << std::endl;
+    678:        std::cerr << "[Streamer] Failed to setup RTMP encoder" << std::endl;
+    720:        std::cerr << "[Streamer] Failed to allocate output context: " << ffmpeg_error_string(ret) << std::endl;
+    727:        std::cerr << "[Streamer] H.264 encoder not found" << std::endl;
+    734:        std::cerr << "[Streamer] Failed to create video stream" << std::endl;
+    741:        std::cerr << "[Streamer] Failed to allocate codec context" << std::endl;
+    768:        std::cerr << "[Streamer] Failed to open codec: " << ffmpeg_error_string(ret) << std::endl;
+    775:        std::cerr << "[Streamer] Failed to copy codec parameters: " << ffmpeg_error_string(ret) << std::endl;
+    784:        std::cerr << "[Streamer] Failed to allocate frame" << std::endl;
+    794:        std::cerr << "[Streamer] Failed to allocate frame buffer: " << ffmpeg_error_string(ret) << std::endl;
+    805:        std::cerr << "[Streamer] Failed to initialize SWS context" << std::endl;
+    813:            std::cerr << "[Streamer] Failed to open output URL: " << ffmpeg_error_string(ret) << std::endl;
+    821:        std::cerr << "[Streamer] Failed to write header: " << ffmpeg_error_string(ret) << std::endl;
+    882:        std::cerr << "[Streamer] Failed to convert frame: " << ffmpeg_error_string(ret) << std::endl;
+    892:        std::cerr << "[Streamer] Failed to send frame to encoder: " << ffmpeg_error_string(ret) << std::endl;
+    899:        std::cerr << "[Streamer] Failed to allocate packet" << std::endl;
+    908:            std::cerr << "[Streamer] Failed to receive packet: " << ffmpeg_error_string(ret) << std::endl;
+    920:            std::cerr << "[Streamer] Failed to write packet: " << ffmpeg_error_string(ret) << std::endl;
+
+文件: src/output/WebSocketServer.cpp
+  std::cout:
+    26:    std::cout << "[WebSocketServer] WebSocket server initialized" << std::endl;
+    35:        std::cout << "[WebSocketServer] Server already running" << std::endl;
+    49:        std::cout << "[WebSocketServer] WebSocket server started on port " << port << std::endl;
+    64:    std::cout << "[WebSocketServer] Stopping WebSocket server..." << std::endl;
+    90:        std::cout << "[WebSocketServer] WebSocket server stopped" << std::endl;
+    121:        std::cout << "[WebSocketServer] Broadcasted alarm to " << sentCount << " clients" << std::endl;
+    163:        std::cout << "[WebSocketServer] Connection limit reached, rejecting new connection" << std::endl;
+    176:    std::cout << "[WebSocketServer] Client connected: " << clientInfo
+    196:    std::cout << "[WebSocketServer] Client disconnected: " << clientInfo
+    203:    std::cout << "[WebSocketServer] Received message: " << payload << std::endl;
+    222:        std::cout << "[WebSocketServer] Server thread started" << std::endl;
+    224:        std::cout << "[WebSocketServer] Server thread finished" << std::endl;
+  std::cerr:
+    53:        std::cerr << "[WebSocketServer] Failed to start server: " << e.what() << std::endl;
+    76:                    std::cerr << "[WebSocketServer] Error closing connection: " << e.what() << std::endl;
+    93:        std::cerr << "[WebSocketServer] Error during shutdown: " << e.what() << std::endl;
+    114:            std::cerr << "[WebSocketServer] Failed to send message to client: " << e.what() << std::endl;
+    130:        std::cerr << "[WebSocketServer] Failed to send message to specific client: " << e.what() << std::endl;
+    167:            std::cerr << "[WebSocketServer] Error rejecting connection: " << e.what() << std::endl;
+    186:        std::cerr << "[WebSocketServer] Failed to send welcome message: " << e.what() << std::endl;
+    210:        std::cerr << "[WebSocketServer] Failed to send echo response: " << e.what() << std::endl;
+    226:        std::cerr << "[WebSocketServer] Server thread error: " << e.what() << std::endl;
+
+文件: src/recognition/FaceRecognizer.cpp
+  std::cout:
+    12:    std::cout << "[FaceRecognizer] Initialized with face verification support" << std::endl;
+    52:    std::cout << "[FaceRecognizer] Verifying face against " << registeredFaces.size()
+    58:            std::cout << "[FaceRecognizer] Skipping face " << face.name << " (no embedding)" << std::endl;
+    68:        std::cout << "[FaceRecognizer] Face " << face.name << " similarity: "
+    83:    std::cout << "[FaceRecognizer] Found " << results.size() << " matches above threshold" << std::endl;
+  std::cerr:
+    23:        std::cerr << "[FaceRecognizer] Empty face image provided" << std::endl;
+    41:        std::cerr << "[FaceRecognizer] Empty face image for verification" << std::endl;
+    48:        std::cerr << "[FaceRecognizer] Failed to extract embedding from input image" << std::endl;
+    91:        std::cerr << "[FaceRecognizer] Embedding size mismatch or empty embeddings" << std::endl;
+
+文件: src/recognition/LicensePlateRecognizer.cpp
+  std::cout:
+    8:    std::cout << "[LicensePlateRecognizer] Initialized (stub)" << std::endl;
+
+文件: src/test/MultiCameraTestSequence.cpp
+  std::cout:
+    325:    std::cout << "[" << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S")
+  std::cerr:
+    32:        std::cerr << "[MultiCameraTestSequence] Failed to open config file: " << configPath << std::endl;
+    69:        std::cerr << "[MultiCameraTestSequence] Failed to open ground truth file: " << groundTruthPath << std::endl;
+    152:        std::cerr << "[MultiCameraTestSequence] Test mode already running" << std::endl;
+
+文件: src/video/FFmpegDecoder.cpp
+  std::cout:
+    12:        std::cout << "[FFmpeg] Initializing FFmpeg libraries" << std::endl;
+    19:        std::cout << "[FFmpeg] Cleaning up FFmpeg libraries" << std::endl;
+    25:    std::cout << "[FFmpeg] FFmpeg not available - using stub implementation" << std::endl;
+    53:    std::cout << "[FFmpegDecoder] Initializing decoder for: " << source.url << std::endl;
+    57:    std::cout << "[FFmpegDecoder] Using real FFmpeg implementation" << std::endl;
+    90:    std::cout << "[FFmpegDecoder] Successfully initialized for " << source.url << std::endl;
+    93:    std::cout << "[FFmpegDecoder] Using stub implementation (FFmpeg not available)" << std::endl;
+    117:            std::cout << "[FFmpegDecoder] End of stream reached" << std::endl;
+    242:    std::cout << "[FFmpegDecoder] Found video stream: " << m_videoStreamIndex
+    300:    std::cout << "[FFmpegDecoder] Decoder setup complete: " << m_codec->name
+    335:    std::cout << "[FFmpegDecoder] Scaler setup complete" << std::endl;
+    380:    std::cout << "[FFmpegDecoder] Cleanup completed" << std::endl;
+    387:    std::cout << "[FFmpegDecoder] Attempting to reconnect..." << std::endl;
+  std::cerr:
+    70:        std::cerr << "[FFmpegDecoder] Failed to open stream: " << source.url << std::endl;
+    76:        std::cerr << "[FFmpegDecoder] Failed to setup decoder" << std::endl;
+    83:        std::cerr << "[FFmpegDecoder] Failed to setup scaler" << std::endl;
+    121:            std::cerr << "[FFmpegDecoder] Error reading frame: " << errbuf << std::endl;
+    137:        std::cerr << "[FFmpegDecoder] Error sending packet: " << errbuf << std::endl;
+    151:            std::cerr << "[FFmpegDecoder] Error receiving frame: " << errbuf << std::endl;
+    214:        std::cerr << "[FFmpegDecoder] Failed to open input: " << errbuf << std::endl;
+    223:        std::cerr << "[FFmpegDecoder] Failed to find stream info: " << errbuf << std::endl;
+    237:        std::cerr << "[FFmpegDecoder] No video stream found" << std::endl;
+    256:        std::cerr << "[FFmpegDecoder] Codec not found" << std::endl;
+    263:        std::cerr << "[FFmpegDecoder] Failed to allocate codec context" << std::endl;
+    272:        std::cerr << "[FFmpegDecoder] Failed to copy codec parameters: " << errbuf << std::endl;
+    281:        std::cerr << "[FFmpegDecoder] Failed to open codec: " << errbuf << std::endl;
+    289:        std::cerr << "[FFmpegDecoder] Failed to allocate frames" << std::endl;
+    296:        std::cerr << "[FFmpegDecoder] Failed to allocate packet" << std::endl;
+    315:        std::cerr << "[FFmpegDecoder] Failed to allocate buffer" << std::endl;
+    331:        std::cerr << "[FFmpegDecoder] Failed to initialize scaler context" << std::endl;
+    394:        std::cerr << "[FFmpegDecoder] " << message << " (error code: " << errorCode << ")" << std::endl;
+    396:        std::cerr << "[FFmpegDecoder] " << message << std::endl;
+

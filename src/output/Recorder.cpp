@@ -7,6 +7,8 @@
 #include <iomanip>
 #include <sstream>
 
+#include "../core/Logger.h"
+using namespace AISecurityVision;
 Recorder::Recorder()
     : m_bufferIndex(0), m_maxBufferSize(0), m_currentConfidence(0.0),
       m_manualRecordingDuration(0) {
@@ -28,15 +30,15 @@ bool Recorder::initialize(const std::string& sourceId, std::shared_ptr<DatabaseM
     try {
         std::filesystem::create_directories(m_config.outputDir);
     } catch (const std::exception& e) {
-        std::cerr << "[Recorder] Failed to create output directory: " << e.what() << std::endl;
+        LOG_ERROR() << "[Recorder] Failed to create output directory: " << e.what();
         return false;
     }
 
     // Initialize circular buffer
     initializeCircularBuffer();
 
-    std::cout << "[Recorder] Initialized for " << sourceId
-              << " with output directory: " << m_config.outputDir << std::endl;
+    LOG_INFO() << "[Recorder] Initialized for " << sourceId
+              << " with output directory: " << m_config.outputDir;
     return true;
 }
 
@@ -48,7 +50,7 @@ void Recorder::setConfig(const RecordingConfig& config) {
     try {
         std::filesystem::create_directories(m_config.outputDir);
     } catch (const std::exception& e) {
-        std::cerr << "[Recorder] Failed to create output directory: " << e.what() << std::endl;
+        LOG_ERROR() << "[Recorder] Failed to create output directory: " << e.what();
     }
 
     // Reinitialize buffer if duration changed
@@ -65,7 +67,7 @@ void Recorder::initializeCircularBuffer() {
     m_frameBuffer.reserve(m_maxBufferSize);
     m_bufferIndex = 0;
 
-    std::cout << "[Recorder] Circular buffer initialized with size: " << m_maxBufferSize << std::endl;
+    LOG_INFO() << "[Recorder] Circular buffer initialized with size: " << m_maxBufferSize;
 }
 
 void Recorder::processFrame(const FrameResult& result) {
@@ -134,7 +136,7 @@ bool Recorder::startManualRecording(int durationSeconds) {
     std::lock_guard<std::mutex> lock(m_recordingMutex);
 
     if (m_isRecording.load()) {
-        std::cout << "[Recorder] Already recording, cannot start manual recording" << std::endl;
+        LOG_INFO() << "[Recorder] Already recording, cannot start manual recording";
         return false;
     }
 
@@ -165,7 +167,7 @@ void Recorder::triggerEventRecording(const std::string& eventType, double confid
     std::lock_guard<std::mutex> lock(m_recordingMutex);
 
     if (m_isRecording.load()) {
-        std::cout << "[Recorder] Already recording, ignoring event trigger" << std::endl;
+        LOG_INFO() << "[Recorder] Already recording, ignoring event trigger";
         return;
     }
 
@@ -187,15 +189,15 @@ bool Recorder::startRecording(const std::string& reason, const std::string& even
     double fps = 25.0;
 
     if (!m_videoWriter.open(m_currentOutputPath, fourcc, fps, frameSize)) {
-        std::cerr << "[Recorder] Failed to open video writer: " << m_currentOutputPath << std::endl;
+        LOG_ERROR() << "[Recorder] Failed to open video writer: " << m_currentOutputPath;
         return false;
     }
 
     m_recordingStartTime = std::chrono::steady_clock::now();
     m_isRecording.store(true);
 
-    std::cout << "[Recorder] Started recording: " << reason
-              << " -> " << m_currentOutputPath << std::endl;
+    LOG_INFO() << "[Recorder] Started recording: " << reason
+              << " -> " << m_currentOutputPath;
 
     // Write pre-event frames from circular buffer
     {
@@ -232,7 +234,7 @@ void Recorder::stopRecording() {
                           m_currentConfidence, m_currentMetadata);
     }
 
-    std::cout << "[Recorder] Recording stopped: " << m_currentOutputPath << std::endl;
+    LOG_INFO() << "[Recorder] Recording stopped: " << m_currentOutputPath;
 
     // Reset state
     m_currentOutputPath.clear();
@@ -336,7 +338,7 @@ std::string Recorder::generateOutputPath(const std::string& eventType) {
 bool Recorder::saveEventToDatabase(const std::string& videoPath, const std::string& eventType,
                                   double confidence, const std::string& metadata) {
     if (!m_dbManager) {
-        std::cout << "[Recorder] No database manager available" << std::endl;
+        LOG_INFO() << "[Recorder] No database manager available";
         return false;
     }
 
@@ -344,12 +346,12 @@ bool Recorder::saveEventToDatabase(const std::string& videoPath, const std::stri
     event.metadata = metadata;
 
     if (m_dbManager->insertEvent(event)) {
-        std::cout << "[Recorder] Event saved to database: " << eventType
-                  << " for camera " << m_sourceId << std::endl;
+        LOG_INFO() << "[Recorder] Event saved to database: " << eventType
+                  << " for camera " << m_sourceId;
         return true;
     } else {
-        std::cerr << "[Recorder] Failed to save event to database: "
-                  << m_dbManager->getErrorMessage() << std::endl;
+        LOG_ERROR() << "[Recorder] Failed to save event to database: "
+                  << m_dbManager->getErrorMessage();
         return false;
     }
 }

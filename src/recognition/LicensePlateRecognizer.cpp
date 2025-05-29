@@ -1,11 +1,13 @@
 #include "LicensePlateRecognizer.h"
 #include <iostream>
 
+#include "../core/Logger.h"
+using namespace AISecurityVision;
 LicensePlateRecognizer::LicensePlateRecognizer() {}
 LicensePlateRecognizer::~LicensePlateRecognizer() {}
 
 bool LicensePlateRecognizer::initialize() {
-    std::cout << "[LicensePlateRecognizer] Initialized (stub)" << std::endl;
+    LOG_INFO() << "[LicensePlateRecognizer] Initialized (stub)";
     return true;
 }
 

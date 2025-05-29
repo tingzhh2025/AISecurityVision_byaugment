@@ -1,9 +1,14 @@
 #include "ReIDExtractor.h"
+#include "../core/Logger.h"
+using namespace AISecurityVision;
 #include <iostream>
 #include <chrono>
 #include <fstream>
 #include <cmath>
 #include <algorithm>
+#ifndef DISABLE_OPENCV_DNN
+#include <opencv2/dnn.hpp>
+#endif
 
 ReIDExtractor::ReIDExtractor()
     : m_engine(nullptr)
@@ -23,7 +28,7 @@ ReIDExtractor::ReIDExtractor()
     , m_inferenceTime(0.0)
     , m_extractionCount(0)
 {
-    std::cout << "[ReIDExtractor] Constructor called" << std::endl;
+    LOG_INFO() << "[ReIDExtractor] Constructor called";
 }
 
 ReIDExtractor::~ReIDExtractor() {
@@ -31,8 +36,8 @@ ReIDExtractor::~ReIDExtractor() {
 }
 
 bool ReIDExtractor::initialize(const std::string& modelPath) {
-    std::cout << "[ReIDExtractor] Initializing ReID feature extractor..." << std::endl;
-    std::cout << "[ReIDExtractor] Model path: " << modelPath << std::endl;
+    LOG_INFO() << "[ReIDExtractor] Initializing ReID feature extractor...";
+    LOG_INFO() << "[ReIDExtractor] Model path: " << modelPath;
 
     try {
         m_modelPath = modelPath;
@@ -40,17 +45,20 @@ bool ReIDExtractor::initialize(const std::string& modelPath) {
         // Check if model file exists
         std::ifstream modelFile(modelPath);
         if (!modelFile.good()) {
-            std::cout << "[ReIDExtractor] Model file not found, using built-in feature extraction" << std::endl;
+            LOG_INFO() << "[ReIDExtractor] Model file not found, using built-in feature extraction";
             // Initialize with built-in feature extraction for now
             m_initialized = true;
             return true;
         }
 
+#ifdef DISABLE_OPENCV_DNN
+        LOG_INFO() << "[ReIDExtractor] OpenCV DNN is disabled, using built-in feature extraction";
+#else
         // Try to load with OpenCV DNN (fallback when TensorRT not available)
         try {
             m_net = cv::dnn::readNetFromONNX(modelPath);
             if (m_net.empty()) {
-                std::cout << "[ReIDExtractor] Failed to load ONNX model, using built-in extraction" << std::endl;
+                LOG_ERROR() << "[ReIDExtractor] Failed to load ONNX model, using built-in extraction";
                 m_initialized = true;
                 return true;
             }
@@ -59,25 +67,26 @@ bool ReIDExtractor::initialize(const std::string& modelPath) {
             m_net.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
             m_net.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
 
-            std::cout << "[ReIDExtractor] Successfully loaded ONNX model with OpenCV DNN" << std::endl;
+            LOG_INFO() << "[ReIDExtractor] Successfully loaded ONNX model with OpenCV DNN";
         } catch (const std::exception& e) {
-            std::cout << "[ReIDExtractor] OpenCV DNN loading failed: " << e.what() << std::endl;
-            std::cout << "[ReIDExtractor] Falling back to built-in feature extraction" << std::endl;
+            LOG_ERROR() << "[ReIDExtractor] OpenCV DNN loading failed: " << e.what();
+            LOG_INFO() << "[ReIDExtractor] Falling back to built-in feature extraction";
         }
+#endif
 
         // Calculate buffer sizes
         m_inputSize = m_inputWidth * m_inputHeight * 3 * sizeof(float);
         m_outputSize = m_featureDimension * sizeof(float);
 
         m_initialized = true;
-        std::cout << "[ReIDExtractor] Initialization completed successfully" << std::endl;
-        std::cout << "[ReIDExtractor] Input size: " << m_inputWidth << "x" << m_inputHeight << std::endl;
-        std::cout << "[ReIDExtractor] Feature dimension: " << m_featureDimension << std::endl;
+        LOG_INFO() << "[ReIDExtractor] Initialization completed successfully";
+        LOG_INFO() << "[ReIDExtractor] Input size: " << m_inputWidth << "x" << m_inputHeight;
+        LOG_INFO() << "[ReIDExtractor] Feature dimension: " << m_featureDimension;
 
         return true;
 
     } catch (const std::exception& e) {
-        std::cerr << "[ReIDExtractor] Exception during initialization: " << e.what() << std::endl;
+        LOG_ERROR() << "[ReIDExtractor] Exception during initialization: " << e.what();
         return false;
     }
 }
@@ -85,7 +94,7 @@ bool ReIDExtractor::initialize(const std::string& modelPath) {
 void ReIDExtractor::cleanup() {
     deallocateBuffers();
     m_initialized = false;
-    std::cout << "[ReIDExtractor] Cleanup completed" << std::endl;
+    LOG_INFO() << "[ReIDExtractor] Cleanup completed";
 }
 
 bool ReIDExtractor::isInitialized() const {
@@ -152,8 +161,8 @@ std::vector<ReIDExtractor::ReIDEmbedding> ReIDExtractor::extractFeatures(
         m_inferenceTimes.erase(m_inferenceTimes.begin());
     }
 
-    std::cout << "[ReIDExtractor] Extracted " << embeddings.size()
-              << " embeddings in " << m_inferenceTime << "ms" << std::endl;
+    LOG_INFO() << "[ReIDExtractor] Extracted " << embeddings.size()
+              << " embeddings in " << m_inferenceTime << "ms";
 
     return embeddings;
 }
@@ -193,7 +202,7 @@ ReIDExtractor::ReIDEmbedding ReIDExtractor::extractSingleFeature(
         }
 
     } catch (const std::exception& e) {
-        std::cerr << "[ReIDExtractor] Exception in extractSingleFeature: " << e.what() << std::endl;
+        LOG_ERROR() << "[ReIDExtractor] Exception in extractSingleFeature: " << e.what();
     }
 
     return embedding;
@@ -207,6 +216,10 @@ std::vector<float> ReIDExtractor::extractFeaturesFromROI(const cv::Mat& roi) {
     }
 
     try {
+#ifdef DISABLE_OPENCV_DNN
+        // Use hand-crafted features when DNN is disabled
+        features = generateHandcraftedFeatures(roi);
+#else
         // If we have a loaded model, use it
         if (!m_net.empty()) {
             // Preprocess image for neural network
@@ -228,9 +241,10 @@ std::vector<float> ReIDExtractor::extractFeaturesFromROI(const cv::Mat& roi) {
             // Fallback: Use hand-crafted features based on image content
             features = generateHandcraftedFeatures(roi);
         }
+#endif
 
     } catch (const std::exception& e) {
-        std::cerr << "[ReIDExtractor] Exception in extractFeaturesFromROI: " << e.what() << std::endl;
+        LOG_ERROR() << "[ReIDExtractor] Exception in extractFeaturesFromROI: " << e.what();
         // Fallback to hand-crafted features
         features = generateHandcraftedFeatures(roi);
     }
@@ -332,7 +346,7 @@ std::vector<float> ReIDExtractor::generateHandcraftedFeatures(const cv::Mat& roi
         }
 
     } catch (const std::exception& e) {
-        std::cerr << "[ReIDExtractor] Exception in generateHandcraftedFeatures: " << e.what() << std::endl;
+        LOG_ERROR() << "[ReIDExtractor] Exception in generateHandcraftedFeatures: " << e.what();
         // Fill with default values
         for (int i = 0; i < m_featureDimension; ++i) {
             features[i] = static_cast<float>(i) / m_featureDimension;
@@ -396,24 +410,24 @@ void ReIDExtractor::setInputSize(int width, int height) {
     m_inputWidth = std::max(32, width);
     m_inputHeight = std::max(64, height);
     m_inputSize = m_inputWidth * m_inputHeight * 3 * sizeof(float);
-    std::cout << "[ReIDExtractor] Input size set to: " << m_inputWidth << "x" << m_inputHeight << std::endl;
+    LOG_INFO() << "[ReIDExtractor] Input size set to: " << m_inputWidth << "x" << m_inputHeight;
 }
 
 void ReIDExtractor::setFeatureDimension(int dimension) {
     m_featureDimension = std::max(128, std::min(2048, dimension));
     m_outputSize = m_featureDimension * sizeof(float);
-    std::cout << "[ReIDExtractor] Feature dimension set to: " << m_featureDimension << std::endl;
+    LOG_INFO() << "[ReIDExtractor] Feature dimension set to: " << m_featureDimension;
 }
 
 void ReIDExtractor::setNormalization(bool enabled) {
     m_normalizationEnabled = enabled;
-    std::cout << "[ReIDExtractor] Normalization " << (enabled ? "enabled" : "disabled") << std::endl;
+    LOG_INFO() << "[ReIDExtractor] Normalization " << (enabled ? "enabled" : "disabled");
 }
 
 void ReIDExtractor::setMinObjectSize(int minWidth, int minHeight) {
     m_minObjectWidth = std::max(16, minWidth);
     m_minObjectHeight = std::max(32, minHeight);
-    std::cout << "[ReIDExtractor] Min object size set to: " << m_minObjectWidth << "x" << m_minObjectHeight << std::endl;
+    LOG_INFO() << "[ReIDExtractor] Min object size set to: " << m_minObjectWidth << "x" << m_minObjectHeight;
 }
 
 // Getters

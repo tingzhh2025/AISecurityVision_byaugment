@@ -4,8 +4,8 @@
     <div class="toolbar">
       <div class="toolbar-left">
         <el-button-group>
-          <el-button 
-            v-for="layout in layouts" 
+          <el-button
+            v-for="layout in layouts"
             :key="layout.value"
             :type="currentLayout === layout.value ? 'primary' : 'default'"
             @click="changeLayout(layout.value)"
@@ -14,13 +14,13 @@
           </el-button>
         </el-button-group>
       </div>
-      
+
       <div class="toolbar-right">
         <el-button @click="refreshStreams">
           <el-icon><Refresh /></el-icon>
           刷新
         </el-button>
-        
+
         <el-button @click="toggleFullscreen">
           <el-icon><FullScreen /></el-icon>
           全屏
@@ -29,44 +29,44 @@
     </div>
 
     <!-- 视频网格 -->
-    <div 
+    <div
       ref="videoContainer"
-      class="video-grid" 
+      class="video-grid"
       :class="`layout-${currentLayout}`"
     >
-      <div 
-        v-for="(camera, index) in displayCameras" 
+      <div
+        v-for="(camera, index) in displayCameras"
         :key="camera?.id || `empty-${index}`"
         class="video-cell"
-        :class="{ 
+        :class="{
           'active': selectedCamera === camera?.id,
-          'empty': !camera 
+          'empty': !camera
         }"
         @click="selectCamera(camera)"
       >
         <div v-if="camera" class="video-content">
           <!-- 视频流 -->
           <div class="video-stream">
-            <img 
+            <img
               v-if="camera.status === 'online'"
               :src="getStreamUrl(camera.id)"
               :alt="camera.name"
               @error="handleStreamError(camera.id)"
               @load="handleStreamLoad(camera.id)"
             />
-            
+
             <div v-else class="stream-offline">
               <el-icon><VideoCamera /></el-icon>
               <span>摄像头离线</span>
             </div>
-            
+
             <!-- 加载状态 -->
             <div v-if="loadingStreams.includes(camera.id)" class="stream-loading">
               <el-icon class="is-loading"><Loading /></el-icon>
               <span>加载中...</span>
             </div>
           </div>
-          
+
           <!-- 摄像头信息覆盖层 -->
           <div class="video-overlay">
             <div class="camera-info">
@@ -78,20 +78,20 @@
                 </div>
               </div>
             </div>
-            
+
             <div class="camera-controls">
-              <el-button 
-                type="primary" 
-                size="small" 
+              <el-button
+                type="primary"
+                size="small"
                 circle
                 @click.stop="openCameraDialog(camera)"
               >
                 <el-icon><Setting /></el-icon>
               </el-button>
-              
-              <el-button 
-                type="success" 
-                size="small" 
+
+              <el-button
+                type="success"
+                size="small"
                 circle
                 @click.stop="startRecording(camera)"
               >
@@ -99,11 +99,11 @@
               </el-button>
             </div>
           </div>
-          
+
           <!-- AI检测结果覆盖层 -->
           <div v-if="detections[camera.id]" class="detection-overlay">
-            <div 
-              v-for="detection in detections[camera.id]" 
+            <div
+              v-for="detection in detections[camera.id]"
               :key="detection.id"
               class="detection-box"
               :style="getDetectionStyle(detection)"
@@ -114,16 +114,107 @@
             </div>
           </div>
         </div>
-        
+
         <!-- 空白单元格 -->
-        <div v-else class="empty-cell">
+        <div v-else class="empty-cell" @click="openAddCameraDialog">
           <el-icon><Plus /></el-icon>
           <span>点击添加摄像头</span>
         </div>
       </div>
     </div>
 
-    <!-- 摄像头选择对话框 -->
+    <!-- 添加摄像头对话框 -->
+    <el-dialog
+      v-model="addCameraDialogVisible"
+      title="添加摄像头"
+      width="600px"
+    >
+      <el-form
+        ref="addCameraForm"
+        :model="newCameraData"
+        :rules="cameraRules"
+        label-width="120px"
+      >
+        <el-form-item label="摄像头名称" prop="name">
+          <el-input
+            v-model="newCameraData.name"
+            placeholder="请输入摄像头名称"
+          />
+        </el-form-item>
+
+        <el-form-item label="协议类型" prop="protocol">
+          <el-select v-model="newCameraData.protocol" placeholder="请选择协议">
+            <el-option label="RTSP" value="rtsp" />
+            <el-option label="RTMP" value="rtmp" />
+            <el-option label="HTTP" value="http" />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="RTSP地址" prop="url">
+          <el-input
+            v-model="newCameraData.url"
+            placeholder="rtsp://username:password@ip:port/path"
+          />
+          <div class="form-tip">
+            示例: rtsp://admin:password@192.168.1.100:554/stream1
+          </div>
+        </el-form-item>
+
+        <el-form-item label="用户名">
+          <el-input
+            v-model="newCameraData.username"
+            placeholder="摄像头用户名（可选）"
+          />
+        </el-form-item>
+
+        <el-form-item label="密码">
+          <el-input
+            v-model="newCameraData.password"
+            type="password"
+            placeholder="摄像头密码（可选）"
+            show-password
+          />
+        </el-form-item>
+
+        <el-form-item label="分辨率">
+          <el-select v-model="newCameraData.resolution">
+            <el-option label="1920x1080 (Full HD)" value="1920x1080" />
+            <el-option label="1280x720 (HD)" value="1280x720" />
+            <el-option label="640x480 (VGA)" value="640x480" />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="帧率">
+          <el-input-number
+            v-model="newCameraData.fps"
+            :min="1"
+            :max="30"
+            controls-position="right"
+          />
+          <span class="form-tip">fps</span>
+        </el-form-item>
+
+        <el-form-item label="启用AI检测">
+          <el-switch v-model="newCameraData.aiEnabled" />
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="addCameraDialogVisible = false">取消</el-button>
+        <el-button @click="testCameraConnection" :loading="testingConnection">
+          测试连接
+        </el-button>
+        <el-button
+          type="primary"
+          @click="addCamera"
+          :loading="addingCamera"
+        >
+          添加摄像头
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 摄像头设置对话框 -->
     <el-dialog
       v-model="cameraDialogVisible"
       title="摄像头设置"
@@ -134,11 +225,11 @@
           <el-form-item label="摄像头名称">
             <el-input v-model="selectedCameraData.name" />
           </el-form-item>
-          
+
           <el-form-item label="RTSP地址">
             <el-input v-model="selectedCameraData.rtspUrl" />
           </el-form-item>
-          
+
           <el-form-item label="分辨率">
             <el-select v-model="selectedCameraData.resolution">
               <el-option label="1920x1080" value="1920x1080" />
@@ -146,21 +237,21 @@
               <el-option label="640x480" value="640x480" />
             </el-select>
           </el-form-item>
-          
+
           <el-form-item label="帧率">
-            <el-input-number 
-              v-model="selectedCameraData.fps" 
-              :min="1" 
-              :max="30" 
+            <el-input-number
+              v-model="selectedCameraData.fps"
+              :min="1"
+              :max="30"
             />
           </el-form-item>
-          
+
           <el-form-item label="AI检测">
             <el-switch v-model="selectedCameraData.aiEnabled" />
           </el-form-item>
         </el-form>
       </div>
-      
+
       <template #footer>
         <el-button @click="cameraDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="saveCameraSettings">保存</el-button>
@@ -188,6 +279,41 @@ const cameraDialogVisible = ref(false)
 const selectedCameraData = ref(null)
 const videoContainer = ref(null)
 
+// 添加摄像头相关
+const addCameraDialogVisible = ref(false)
+const addCameraForm = ref(null)
+const testingConnection = ref(false)
+const addingCamera = ref(false)
+const newCameraData = ref({
+  name: '',
+  protocol: 'rtsp',
+  url: '',
+  username: '',
+  password: '',
+  resolution: '1920x1080',
+  fps: 25,
+  aiEnabled: true
+})
+
+// 表单验证规则
+const cameraRules = {
+  name: [
+    { required: true, message: '请输入摄像头名称', trigger: 'blur' },
+    { min: 2, max: 50, message: '长度在 2 到 50 个字符', trigger: 'blur' }
+  ],
+  protocol: [
+    { required: true, message: '请选择协议类型', trigger: 'change' }
+  ],
+  url: [
+    { required: true, message: '请输入RTSP地址', trigger: 'blur' },
+    {
+      pattern: /^(rtsp|rtmp|http):\/\/.+/,
+      message: '请输入有效的URL地址',
+      trigger: 'blur'
+    }
+  ]
+}
+
 // 布局选项
 const layouts = [
   { label: '1x1', value: '1x1' },
@@ -204,15 +330,15 @@ const displayCameras = computed(() => {
     '3x3': 9,
     '4x4': 16
   }
-  
+
   const maxCameras = layoutSizes[currentLayout.value]
   const cameras = [...systemStore.cameras]
-  
+
   // 填充空白单元格
   while (cameras.length < maxCameras) {
     cameras.push(null)
   }
-  
+
   return cameras.slice(0, maxCameras)
 })
 
@@ -250,7 +376,7 @@ const refreshStreams = () => {
   loadingStreams.value = systemStore.cameras
     .filter(camera => camera.status === 'online')
     .map(camera => camera.id)
-  
+
   // 重新加载所有图片
   nextTick(() => {
     const images = videoContainer.value?.querySelectorAll('img')
@@ -304,22 +430,116 @@ const getDetectionStyle = (detection) => {
   }
 }
 
+// 添加摄像头相关方法
+const openAddCameraDialog = () => {
+  // 重置表单数据
+  newCameraData.value = {
+    name: '',
+    protocol: 'rtsp',
+    url: '',
+    username: '',
+    password: '',
+    resolution: '1920x1080',
+    fps: 25,
+    aiEnabled: true
+  }
+  addCameraDialogVisible.value = true
+}
+
+const testCameraConnection = async () => {
+  if (!addCameraForm.value) return
+
+  try {
+    await addCameraForm.value.validate()
+    testingConnection.value = true
+
+    // 调用后端API测试连接
+    const response = await apiService.testCameraConnection({
+      url: newCameraData.value.url,
+      username: newCameraData.value.username,
+      password: newCameraData.value.password,
+      protocol: newCameraData.value.protocol
+    })
+
+    if (response.success) {
+      ElMessage.success('摄像头连接测试成功！')
+    } else {
+      ElMessage.error(`连接测试失败: ${response.message}`)
+    }
+  } catch (error) {
+    if (error.message) {
+      // 表单验证错误
+      return
+    }
+    ElMessage.error('连接测试失败，请检查网络和摄像头设置')
+  } finally {
+    testingConnection.value = false
+  }
+}
+
+const addCamera = async () => {
+  if (!addCameraForm.value) return
+
+  try {
+    await addCameraForm.value.validate()
+    addingCamera.value = true
+
+    // 解析分辨率
+    const [width, height] = newCameraData.value.resolution.split('x').map(Number)
+
+    // 构建摄像头数据
+    const cameraData = {
+      id: `camera_${Date.now()}`,
+      name: newCameraData.value.name,
+      url: newCameraData.value.url,
+      protocol: newCameraData.value.protocol,
+      username: newCameraData.value.username,
+      password: newCameraData.value.password,
+      width,
+      height,
+      fps: newCameraData.value.fps,
+      enabled: true
+    }
+
+    // 调用后端API添加摄像头
+    await apiService.addCamera(cameraData)
+
+    ElMessage.success('摄像头添加成功！')
+    addCameraDialogVisible.value = false
+
+    // 刷新摄像头列表
+    await systemStore.fetchCameras()
+
+    // 刷新视频流
+    refreshStreams()
+
+  } catch (error) {
+    if (error.message) {
+      // 表单验证错误
+      return
+    }
+    ElMessage.error('添加摄像头失败，请检查设置')
+  } finally {
+    addingCamera.value = false
+  }
+}
+
 // WebSocket连接用于接收AI检测结果
 let detectionSocket = null
 
 const connectDetectionSocket = () => {
   const wsUrl = `ws://${window.location.host}/ws/detections`
   detectionSocket = new WebSocket(wsUrl)
-  
+
   detectionSocket.onmessage = (event) => {
     const data = JSON.parse(event.data)
     detections.value[data.cameraId] = data.detections
   }
-  
+
   detectionSocket.onerror = (error) => {
     console.error('WebSocket error:', error)
   }
-  
+
   detectionSocket.onclose = () => {
     // 重连逻辑
     setTimeout(connectDetectionSocket, 5000)
@@ -331,10 +551,10 @@ onMounted(() => {
   if (route.query.camera) {
     selectedCamera.value = route.query.camera
   }
-  
+
   // 连接WebSocket接收检测结果
   connectDetectionSocket()
-  
+
   // 初始加载流
   refreshStreams()
 })
@@ -540,13 +760,24 @@ onUnmounted(() => {
   padding: 20px 0;
 }
 
+.form-tip {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.el-form-item .form-tip {
+  margin-left: 4px;
+}
+
 /* 响应式 */
 @media (max-width: 768px) {
   .toolbar {
     flex-direction: column;
     gap: 12px;
   }
-  
+
   .layout-3x3,
   .layout-4x4 {
     grid-template-columns: repeat(2, 1fr);

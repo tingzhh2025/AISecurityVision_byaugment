@@ -17,7 +17,40 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
 
 # Find required packages
 find_package(PkgConfig REQUIRED)
-find_package(OpenCV REQUIRED)
+
+# Force OpenCV 4.5.5 to avoid version conflicts
+set(OpenCV_DIR "/usr/lib/aarch64-linux-gnu/cmake/opencv4")
+find_package(OpenCV 4.5.5 EXACT REQUIRED)
+
+# Verify we're using the correct OpenCV version
+if(OpenCV_VERSION VERSION_LESS "4.5.5")
+    message(FATAL_ERROR "OpenCV 4.5.5 is required, found ${OpenCV_VERSION}")
+endif()
+
+# Force specific OpenCV library paths to ensure 4.5.5 is used
+set(OpenCV_LIBS_OVERRIDE
+    /usr/lib/aarch64-linux-gnu/libopencv_core.so.4.5.5
+    /usr/lib/aarch64-linux-gnu/libopencv_imgproc.so.4.5.5
+    /usr/lib/aarch64-linux-gnu/libopencv_imgcodecs.so.4.5.5
+    /usr/lib/aarch64-linux-gnu/libopencv_videoio.so.4.5.5
+    /usr/lib/aarch64-linux-gnu/libopencv_video.so.4.5.5
+    /usr/lib/aarch64-linux-gnu/libopencv_calib3d.so.4.5.5
+    /usr/lib/aarch64-linux-gnu/libopencv_features2d.so.4.5.5
+    /usr/lib/aarch64-linux-gnu/libopencv_flann.so.4.5.5
+    /usr/lib/aarch64-linux-gnu/libopencv_highgui.so.4.5.5
+    /usr/lib/aarch64-linux-gnu/libopencv_photo.so.4.5.5
+    /usr/lib/aarch64-linux-gnu/libopencv_stitching.so.4.5.5
+)
+
+# Check if all required 4.5.5 libraries exist
+foreach(lib ${OpenCV_LIBS_OVERRIDE})
+    if(NOT EXISTS ${lib})
+        message(WARNING "OpenCV 4.5.5 library not found: ${lib}")
+    endif()
+endforeach()
+
+# Override OpenCV_LIBS with our specific 4.5.5 libraries
+set(OpenCV_LIBS ${OpenCV_LIBS_OVERRIDE})
 
 # Find or download httplib
 find_path(HTTPLIB_INCLUDE_DIR httplib.h
@@ -297,6 +330,15 @@ file(GLOB_RECURSE SOURCES
     "src/onvif/*.cpp"
 )
 
+# Remove LoggerExample.cpp from sources as it contains unimplemented features
+list(REMOVE_ITEM SOURCES "${CMAKE_SOURCE_DIR}/src/core/LoggerExample.cpp")
+
+# AI-only sources for simple tests
+file(GLOB AI_SOURCES
+    "src/ai/YOLOv8Detector.cpp"
+    "src/core/TaskManager.cpp"
+)
+
 # Add MQTT client source if using simple MQTT
 if(USE_SIMPLE_MQTT)
     list(APPEND SOURCES "third_party/mqtt/simple_mqtt.cpp")
@@ -312,17 +354,11 @@ add_executable(${PROJECT_NAME}
 # Link libraries
 set(LINK_LIBRARIES ${OpenCV_LIBS} pthread dl)
 
-# Explicitly add OpenCV DNN library if not included
-list(FIND OpenCV_LIBS "opencv_dnn" DNN_FOUND)
-if(DNN_FOUND EQUAL -1)
-    find_library(OPENCV_DNN_LIB opencv_dnn PATHS ${OpenCV_INSTALL_PATH}/lib)
-    if(OPENCV_DNN_LIB)
-        list(APPEND LINK_LIBRARIES ${OPENCV_DNN_LIB})
-        message(STATUS "Added OpenCV DNN library: ${OPENCV_DNN_LIB}")
-    else()
-        message(WARNING "OpenCV DNN library not found, some features may not work")
-    endif()
-endif()
+# Skip OpenCV DNN library completely due to protobuf compatibility issues
+# We use RKNN NPU for AI inference instead, which provides better performance
+message(STATUS "Skipping OpenCV DNN library - using RKNN NPU for AI inference")
+message(STATUS "Note: OpenCV DNN disabled to avoid protobuf version conflicts")
+add_definitions(-DDISABLE_OPENCV_DNN)
 
 # Add SQLite3 if found
 if(SQLITE3_FOUND)
@@ -401,6 +437,63 @@ add_executable(test_rknn_integration
     ${SOURCES}
 )
 
+# Create test executable for real cameras with RKNN
+add_executable(test_real_cameras_rknn
+    tests/cpp/test_real_cameras_rknn.cpp
+    ${SOURCES}
+)
+
+# Create simple test executable for real cameras with RKNN
+add_executable(test_real_cameras_simple
+    tests/cpp/test_real_cameras_simple.cpp
+)
+
+# Create RTSP OpenCV test executable
+add_executable(test_rtsp_opencv
+    tests/cpp/test_rtsp_opencv.cpp
+)
+
+# Create FFmpeg real cameras test executable
+add_executable(test_real_cameras_ffmpeg
+    tests/cpp/test_real_cameras_ffmpeg.cpp
+)
+
+# Create MJPEG real cameras test executable
+add_executable(test_real_cameras_mjpeg
+    tests/cpp/test_real_cameras_mjpeg.cpp
+)
+
+# Create FINAL real cameras + RKNN test executable
+add_executable(test_real_cameras_rknn_final
+    tests/cpp/test_real_cameras_rknn_final.cpp
+    src/ai/YOLOv8Detector.cpp
+    src/core/Logger.cpp
+)
+
+# Create OPTIMIZED real cameras + multi-threaded RKNN test executable
+add_executable(test_optimized_cameras
+    tests/test_optimized_cameras.cpp
+    src/ai/YOLOv8Detector.cpp
+    src/ai/YOLOv8DetectorOptimized.cpp
+    src/core/Logger.cpp
+)
+
+# Create OPTIMIZED performance test executable
+add_executable(test_optimized_performance
+    tests/test_optimized_performance.cpp
+    src/ai/YOLOv8Detector.cpp
+    src/ai/YOLOv8DetectorOptimized.cpp
+    src/core/Logger.cpp
+)
+
+# Create SIMPLE integrated optimized test executable
+add_executable(test_simple_integrated
+    tests/test_simple_integrated.cpp
+    src/ai/YOLOv8Detector.cpp
+    src/ai/YOLOv8DetectorOptimized.cpp
+    src/core/Logger.cpp
+)
+
 target_link_libraries(test_rknn_yolov8 ${LINK_LIBRARIES})
 target_compile_features(test_rknn_yolov8 PRIVATE cxx_std_17)
 
@@ -410,16 +503,54 @@ target_compile_features(test_rtsp_streams PRIVATE cxx_std_17)
 target_link_libraries(test_rknn_integration ${LINK_LIBRARIES})
 target_compile_features(test_rknn_integration PRIVATE cxx_std_17)
 
+target_link_libraries(test_real_cameras_rknn ${LINK_LIBRARIES})
+target_compile_features(test_real_cameras_rknn PRIVATE cxx_std_17)
+
+target_link_libraries(test_real_cameras_simple ${LINK_LIBRARIES})
+target_compile_features(test_real_cameras_simple PRIVATE cxx_std_17)
+
+target_link_libraries(test_rtsp_opencv ${LINK_LIBRARIES})
+target_compile_features(test_rtsp_opencv PRIVATE cxx_std_17)
+
+target_link_libraries(test_real_cameras_ffmpeg ${LINK_LIBRARIES})
+target_compile_features(test_real_cameras_ffmpeg PRIVATE cxx_std_17)
+
+target_link_libraries(test_real_cameras_mjpeg ${LINK_LIBRARIES})
+target_compile_features(test_real_cameras_mjpeg PRIVATE cxx_std_17)
+
+target_link_libraries(test_real_cameras_rknn_final ${LINK_LIBRARIES})
+target_compile_features(test_real_cameras_rknn_final PRIVATE cxx_std_17)
+
+target_link_libraries(test_optimized_cameras ${LINK_LIBRARIES})
+target_compile_features(test_optimized_cameras PRIVATE cxx_std_17)
+
+target_link_libraries(test_optimized_performance ${LINK_LIBRARIES})
+target_compile_features(test_optimized_performance PRIVATE cxx_std_17)
+
+target_link_libraries(test_simple_integrated ${LINK_LIBRARIES})
+target_compile_features(test_simple_integrated PRIVATE cxx_std_17)
+
 # Add compile definitions for test executables
 if(RKNN_FOUND)
     target_compile_definitions(test_rknn_yolov8 PRIVATE HAVE_RKNN)
     target_compile_definitions(test_rtsp_streams PRIVATE HAVE_RKNN)
     target_compile_definitions(test_rknn_integration PRIVATE HAVE_RKNN)
+    target_compile_definitions(test_real_cameras_rknn PRIVATE HAVE_RKNN)
+    target_compile_definitions(test_real_cameras_simple PRIVATE HAVE_RKNN)
+    target_compile_definitions(test_real_cameras_rknn_final PRIVATE HAVE_RKNN)
+    target_compile_definitions(test_optimized_cameras PRIVATE HAVE_RKNN)
+    target_compile_definitions(test_optimized_performance PRIVATE HAVE_RKNN)
+    target_compile_definitions(test_simple_integrated PRIVATE HAVE_RKNN)
 endif()
 if(LIBAV_FOUND)
     target_compile_definitions(test_rknn_yolov8 PRIVATE HAVE_FFMPEG)
     target_compile_definitions(test_rtsp_streams PRIVATE HAVE_FFMPEG)
     target_compile_definitions(test_rknn_integration PRIVATE HAVE_FFMPEG)
+    target_compile_definitions(test_real_cameras_rknn PRIVATE HAVE_FFMPEG)
+    target_compile_definitions(test_real_cameras_rknn_final PRIVATE HAVE_FFMPEG)
+    target_compile_definitions(test_optimized_cameras PRIVATE HAVE_FFMPEG)
+    target_compile_definitions(test_optimized_performance PRIVATE HAVE_FFMPEG)
+    target_compile_definitions(test_simple_integrated PRIVATE HAVE_FFMPEG)
 endif()
 if(NVML_FOUND)
     target_compile_definitions(test_rknn_yolov8 PRIVATE HAVE_NVML)
@@ -429,18 +560,21 @@ if(WEBSOCKETPP_INCLUDE_DIR)
     if(Boost_FOUND)
         target_compile_definitions(test_rknn_yolov8 PRIVATE HAVE_WEBSOCKETPP)
         target_compile_definitions(test_rtsp_streams PRIVATE HAVE_WEBSOCKETPP)
+        target_compile_definitions(test_real_cameras_rknn PRIVATE HAVE_WEBSOCKETPP)
     else()
         target_compile_definitions(test_rknn_yolov8 PRIVATE HAVE_WEBSOCKETPP ASIO_STANDALONE)
         target_compile_definitions(test_rtsp_streams PRIVATE HAVE_WEBSOCKETPP ASIO_STANDALONE)
+        target_compile_definitions(test_real_cameras_rknn PRIVATE HAVE_WEBSOCKETPP ASIO_STANDALONE)
     endif()
 endif()
 if(PAHO_MQTT_CPP_FOUND AND PAHO_MQTT_CPP_LIBRARIES)
     target_compile_definitions(test_rknn_yolov8 PRIVATE HAVE_PAHO_MQTT)
     target_compile_definitions(test_rtsp_streams PRIVATE HAVE_PAHO_MQTT)
+    target_compile_definitions(test_real_cameras_rknn PRIVATE HAVE_PAHO_MQTT)
 endif()
 
 # Install targets
-install(TARGETS ${PROJECT_NAME} test_rknn_yolov8 test_rtsp_streams DESTINATION bin)
+install(TARGETS ${PROJECT_NAME} test_rknn_yolov8 test_rtsp_streams test_real_cameras_rknn DESTINATION bin)
 install(DIRECTORY models/ DESTINATION share/${PROJECT_NAME}/models OPTIONAL)
 install(DIRECTORY config/ DESTINATION share/${PROJECT_NAME}/config OPTIONAL)
 install(FILES scripts/convert_yolov8_to_rknn.py DESTINATION share/${PROJECT_NAME}/scripts

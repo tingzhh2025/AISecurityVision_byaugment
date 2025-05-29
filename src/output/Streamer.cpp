@@ -13,6 +13,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <cctype>
+#include "../core/Logger.h"
+using namespace AISecurityVision;
 
 // FFmpeg includes for RTMP streaming
 extern "C" {
@@ -32,13 +34,13 @@ static std::string ffmpeg_error_string(int errnum) {
 }
 
 Streamer::Streamer() : m_lastFpsUpdate(std::chrono::steady_clock::now()) {
-    std::cout << "[Streamer] Creating multi-protocol streamer" << std::endl;
+    LOG_INFO() << "[Streamer] Creating multi-protocol streamer";
 
     // Initialize FFmpeg (thread-safe in newer versions)
     static std::once_flag ffmpeg_init_flag;
     std::call_once(ffmpeg_init_flag, []() {
         av_log_set_level(AV_LOG_WARNING);
-        std::cout << "[Streamer] FFmpeg initialized" << std::endl;
+        LOG_INFO() << "[Streamer] FFmpeg initialized";
     });
 }
 
@@ -59,26 +61,26 @@ bool Streamer::initialize(const std::string& sourceId) {
     if (m_config.protocol == StreamProtocol::MJPEG) {
         // Start HTTP server for MJPEG
         if (!startServer()) {
-            std::cerr << "[Streamer] Failed to start HTTP server for " << sourceId << std::endl;
+            LOG_ERROR() << "[Streamer] Failed to start HTTP server for " << sourceId;
             return false;
         }
-        std::cout << "[Streamer] Initialized MJPEG streamer for " << sourceId
-                  << " on port " << m_config.port << std::endl;
+        LOG_INFO() << "[Streamer] Initialized MJPEG streamer for " << sourceId
+                  << " on port " << m_config.port;
     } else if (m_config.protocol == StreamProtocol::RTMP) {
         // Start RTMP stream
         if (!startRtmpStream()) {
-            std::cerr << "[Streamer] Failed to start RTMP stream for " << sourceId << std::endl;
+            LOG_ERROR() << "[Streamer] Failed to start RTMP stream for " << sourceId;
             return false;
         }
-        std::cout << "[Streamer] Initialized RTMP streamer for " << sourceId
-                  << " to " << m_config.rtmpUrl << std::endl;
+        LOG_INFO() << "[Streamer] Initialized RTMP streamer for " << sourceId
+                  << " to " << m_config.rtmpUrl;
     }
 
     return true;
 }
 
 void Streamer::cleanup() {
-    std::cout << "[Streamer] Cleaning up streamer for " << m_sourceId << std::endl;
+    LOG_INFO() << "[Streamer] Cleaning up streamer for " << m_sourceId;
 
     stopServer();
     stopRtmpStream();
@@ -117,14 +119,14 @@ void Streamer::cleanup() {
         m_serverSocket = -1;
     }
 
-    std::cout << "[Streamer] Cleanup complete for " << m_sourceId << std::endl;
+    LOG_INFO() << "[Streamer] Cleanup complete for " << m_sourceId;
 }
 
 void Streamer::setConfig(const StreamConfig& config) {
     std::lock_guard<std::mutex> lock(m_mutex);
     m_config = config;
-    std::cout << "[Streamer] Updated config: " << config.width << "x" << config.height
-              << "@" << config.fps << "fps, quality=" << config.quality << std::endl;
+    LOG_INFO() << "[Streamer] Updated config: " << config.width << "x" << config.height
+              << "@" << config.fps << "fps, quality=" << config.quality;
 }
 
 StreamConfig Streamer::getConfig() const {
@@ -187,7 +189,7 @@ bool Streamer::startServer() {
     m_serverRunning.store(true);
     m_serverThread = std::thread(&Streamer::serverThread, this);
 
-    std::cout << "[Streamer] HTTP server started on port " << m_config.port << std::endl;
+    LOG_INFO() << "[Streamer] HTTP server started on port " << m_config.port;
     return true;
 }
 
@@ -196,7 +198,7 @@ void Streamer::stopServer() {
         return;
     }
 
-    std::cout << "[Streamer] Stopping HTTP server..." << std::endl;
+    LOG_INFO() << "[Streamer] Stopping HTTP server...";
     m_serverRunning.store(false);
 
     // Close all client connections
@@ -237,14 +239,14 @@ bool Streamer::setupHttpServer() {
     // Create socket
     m_serverSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (m_serverSocket < 0) {
-        std::cerr << "[Streamer] Failed to create socket: " << strerror(errno) << std::endl;
+        LOG_ERROR() << "[Streamer] Failed to create socket: " << strerror(errno);
         return false;
     }
 
     // Set socket options
     int opt = 1;
     if (setsockopt(m_serverSocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-        std::cerr << "[Streamer] Failed to set socket options: " << strerror(errno) << std::endl;
+        LOG_ERROR() << "[Streamer] Failed to set socket options: " << strerror(errno);
         close(m_serverSocket);
         return false;
     }
@@ -256,15 +258,15 @@ bool Streamer::setupHttpServer() {
     address.sin_port = htons(m_config.port);
 
     if (bind(m_serverSocket, (struct sockaddr*)&address, sizeof(address)) < 0) {
-        std::cerr << "[Streamer] Failed to bind socket to port " << m_config.port
-                  << ": " << strerror(errno) << std::endl;
+        LOG_ERROR() << "[Streamer] Failed to bind socket to port " << m_config.port
+                  << ": " << strerror(errno);
         close(m_serverSocket);
         return false;
     }
 
     // Listen for connections
     if (listen(m_serverSocket, LISTEN_BACKLOG) < 0) {
-        std::cerr << "[Streamer] Failed to listen on socket: " << strerror(errno) << std::endl;
+        LOG_ERROR() << "[Streamer] Failed to listen on socket: " << strerror(errno);
         close(m_serverSocket);
         return false;
     }
@@ -273,7 +275,7 @@ bool Streamer::setupHttpServer() {
 }
 
 void Streamer::serverThread() {
-    std::cout << "[Streamer] Server thread started" << std::endl;
+    LOG_INFO() << "[Streamer] Server thread started";
 
     while (m_serverRunning.load()) {
         struct sockaddr_in clientAddr;
@@ -282,7 +284,7 @@ void Streamer::serverThread() {
         int clientSocket = accept(m_serverSocket, (struct sockaddr*)&clientAddr, &clientLen);
         if (clientSocket < 0) {
             if (m_serverRunning.load()) {
-                std::cerr << "[Streamer] Failed to accept connection: " << strerror(errno) << std::endl;
+                LOG_ERROR() << "[Streamer] Failed to accept connection: " << strerror(errno);
             }
             continue;
         }
@@ -291,7 +293,7 @@ void Streamer::serverThread() {
         {
             std::lock_guard<std::mutex> lock(m_clientsMutex);
             if (m_clients.size() >= MAX_CLIENTS) {
-                std::cout << "[Streamer] Maximum clients reached, rejecting connection" << std::endl;
+                LOG_INFO() << "[Streamer] Maximum clients reached, rejecting connection";
                 close(clientSocket);
                 continue;
             }
@@ -299,17 +301,17 @@ void Streamer::serverThread() {
 
         // Get client address
         std::string clientAddrStr = inet_ntoa(clientAddr.sin_addr);
-        std::cout << "[Streamer] New client connected: " << clientAddrStr << std::endl;
+        LOG_INFO() << "[Streamer] New client connected: " << clientAddrStr;
 
         // Create client thread
         m_clientThreads.emplace_back(&Streamer::clientHandlerThread, this, clientSocket, clientAddrStr);
     }
 
-    std::cout << "[Streamer] Server thread stopped" << std::endl;
+    LOG_INFO() << "[Streamer] Server thread stopped";
 }
 
 void Streamer::clientHandlerThread(int clientSocket, const std::string& clientAddr) {
-    std::cout << "[Streamer] Client handler started for " << clientAddr << std::endl;
+    LOG_INFO() << "[Streamer] Client handler started for " << clientAddr;
 
     // Add client to list
     {
@@ -322,7 +324,7 @@ void Streamer::clientHandlerThread(int clientSocket, const std::string& clientAd
         char buffer[1024] = {0};
         ssize_t bytesRead = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
         if (bytesRead <= 0) {
-            std::cout << "[Streamer] Failed to read request from " << clientAddr << std::endl;
+            LOG_ERROR() << "[Streamer] Failed to read request from " << clientAddr;
             close(clientSocket);
             return;
         }
@@ -331,7 +333,7 @@ void Streamer::clientHandlerThread(int clientSocket, const std::string& clientAd
         handleHttpRequest(clientSocket, request);
 
     } catch (const std::exception& e) {
-        std::cerr << "[Streamer] Exception in client handler: " << e.what() << std::endl;
+        LOG_ERROR() << "[Streamer] Exception in client handler: " << e.what();
     }
 
     // Remove client from list
@@ -347,7 +349,7 @@ void Streamer::clientHandlerThread(int clientSocket, const std::string& clientAd
     }
 
     close(clientSocket);
-    std::cout << "[Streamer] Client handler stopped for " << clientAddr << std::endl;
+    LOG_INFO() << "[Streamer] Client handler stopped for " << clientAddr;
 }
 
 void Streamer::handleHttpRequest(int clientSocket, const std::string& request) {
@@ -356,7 +358,7 @@ void Streamer::handleHttpRequest(int clientSocket, const std::string& request) {
     std::string method, path, version;
     iss >> method >> path >> version;
 
-    std::cout << "[Streamer] HTTP Request: " << method << " " << path << std::endl;
+    LOG_INFO() << "[Streamer] HTTP Request: " << method << " " << path;
 
     // Check if this is a request for our MJPEG stream
     if (method == "GET" && path == m_config.endpoint) {
@@ -427,7 +429,7 @@ void Streamer::sendMjpegFrame(int clientSocket, const std::vector<uint8_t>& jpeg
 }
 
 void Streamer::frameProcessingThread() {
-    std::cout << "[Streamer] Frame processing thread started" << std::endl;
+    LOG_INFO() << "[Streamer] Frame processing thread started";
 
     while (m_running.load()) {
         std::unique_lock<std::mutex> lock(m_frameBufferMutex);
@@ -447,7 +449,7 @@ void Streamer::frameProcessingThread() {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
-    std::cout << "[Streamer] Frame processing thread stopped" << std::endl;
+    LOG_INFO() << "[Streamer] Frame processing thread stopped";
 }
 
 cv::Mat Streamer::renderOverlays(const cv::Mat& frame, const FrameResult& result) {
@@ -590,7 +592,7 @@ std::vector<uint8_t> Streamer::encodeJpeg(const cv::Mat& frame) {
 
     // Encode frame to JPEG
     if (!cv::imencode(".jpg", frame, jpegData, compressionParams)) {
-        std::cerr << "[Streamer] Failed to encode frame to JPEG" << std::endl;
+        LOG_ERROR() << "[Streamer] Failed to encode frame to JPEG";
         jpegData.clear();
     }
 
@@ -670,19 +672,19 @@ bool Streamer::startRtmpStream() {
     }
 
     if (m_config.rtmpUrl.empty()) {
-        std::cerr << "[Streamer] RTMP URL not configured" << std::endl;
+        LOG_ERROR() << "[Streamer] RTMP URL not configured";
         return false;
     }
 
     if (!setupRtmpEncoder()) {
-        std::cerr << "[Streamer] Failed to setup RTMP encoder" << std::endl;
+        LOG_ERROR() << "[Streamer] Failed to setup RTMP encoder";
         return false;
     }
 
     m_rtmpStreaming.store(true);
     m_rtmpStreamingThread = std::thread(&Streamer::rtmpStreamingThread, this);
 
-    std::cout << "[Streamer] RTMP stream started to " << m_config.rtmpUrl << std::endl;
+    LOG_INFO() << "[Streamer] RTMP stream started to " << m_config.rtmpUrl;
     return true;
 }
 
@@ -691,7 +693,7 @@ void Streamer::stopRtmpStream() {
         return;
     }
 
-    std::cout << "[Streamer] Stopping RTMP stream..." << std::endl;
+    LOG_INFO() << "[Streamer] Stopping RTMP stream...";
     m_rtmpStreaming.store(false);
 
     // Cleanup RTMP encoder
@@ -717,28 +719,28 @@ bool Streamer::setupRtmpEncoder() {
     // Allocate format context
     int ret = avformat_alloc_output_context2(&m_rtmpFormatContext, nullptr, "flv", m_config.rtmpUrl.c_str());
     if (ret < 0) {
-        std::cerr << "[Streamer] Failed to allocate output context: " << ffmpeg_error_string(ret) << std::endl;
+        LOG_ERROR() << "[Streamer] Failed to allocate output context: " << ffmpeg_error_string(ret);
         return false;
     }
 
     // Find H.264 encoder
     const AVCodec* codec = avcodec_find_encoder(AV_CODEC_ID_H264);
     if (!codec) {
-        std::cerr << "[Streamer] H.264 encoder not found" << std::endl;
+        LOG_ERROR() << "[Streamer] H.264 encoder not found";
         return false;
     }
 
     // Create video stream
     m_rtmpStream = avformat_new_stream(m_rtmpFormatContext, nullptr);
     if (!m_rtmpStream) {
-        std::cerr << "[Streamer] Failed to create video stream" << std::endl;
+        LOG_ERROR() << "[Streamer] Failed to create video stream";
         return false;
     }
 
     // Allocate codec context
     m_rtmpCodecContext = avcodec_alloc_context3(codec);
     if (!m_rtmpCodecContext) {
-        std::cerr << "[Streamer] Failed to allocate codec context" << std::endl;
+        LOG_ERROR() << "[Streamer] Failed to allocate codec context";
         return false;
     }
 
@@ -765,14 +767,14 @@ bool Streamer::setupRtmpEncoder() {
     // Open codec
     ret = avcodec_open2(m_rtmpCodecContext, codec, nullptr);
     if (ret < 0) {
-        std::cerr << "[Streamer] Failed to open codec: " << ffmpeg_error_string(ret) << std::endl;
+        LOG_ERROR() << "[Streamer] Failed to open codec: " << ffmpeg_error_string(ret);
         return false;
     }
 
     // Copy codec parameters to stream
     ret = avcodec_parameters_from_context(m_rtmpStream->codecpar, m_rtmpCodecContext);
     if (ret < 0) {
-        std::cerr << "[Streamer] Failed to copy codec parameters: " << ffmpeg_error_string(ret) << std::endl;
+        LOG_ERROR() << "[Streamer] Failed to copy codec parameters: " << ffmpeg_error_string(ret);
         return false;
     }
 
@@ -781,7 +783,7 @@ bool Streamer::setupRtmpEncoder() {
     // Allocate frame
     m_rtmpFrame = av_frame_alloc();
     if (!m_rtmpFrame) {
-        std::cerr << "[Streamer] Failed to allocate frame" << std::endl;
+        LOG_ERROR() << "[Streamer] Failed to allocate frame";
         return false;
     }
 
@@ -791,7 +793,7 @@ bool Streamer::setupRtmpEncoder() {
 
     ret = av_frame_get_buffer(m_rtmpFrame, 0);
     if (ret < 0) {
-        std::cerr << "[Streamer] Failed to allocate frame buffer: " << ffmpeg_error_string(ret) << std::endl;
+        LOG_ERROR() << "[Streamer] Failed to allocate frame buffer: " << ffmpeg_error_string(ret);
         return false;
     }
 
@@ -802,7 +804,7 @@ bool Streamer::setupRtmpEncoder() {
         SWS_BILINEAR, nullptr, nullptr, nullptr);
 
     if (!m_swsContext) {
-        std::cerr << "[Streamer] Failed to initialize SWS context" << std::endl;
+        LOG_ERROR() << "[Streamer] Failed to initialize SWS context";
         return false;
     }
 
@@ -810,7 +812,7 @@ bool Streamer::setupRtmpEncoder() {
     if (!(m_rtmpFormatContext->oformat->flags & AVFMT_NOFILE)) {
         ret = avio_open(&m_rtmpFormatContext->pb, m_config.rtmpUrl.c_str(), AVIO_FLAG_WRITE);
         if (ret < 0) {
-            std::cerr << "[Streamer] Failed to open output URL: " << ffmpeg_error_string(ret) << std::endl;
+            LOG_ERROR() << "[Streamer] Failed to open output URL: " << ffmpeg_error_string(ret);
             return false;
         }
     }
@@ -818,12 +820,12 @@ bool Streamer::setupRtmpEncoder() {
     // Write stream header
     ret = avformat_write_header(m_rtmpFormatContext, nullptr);
     if (ret < 0) {
-        std::cerr << "[Streamer] Failed to write header: " << ffmpeg_error_string(ret) << std::endl;
+        LOG_ERROR() << "[Streamer] Failed to write header: " << ffmpeg_error_string(ret);
         return false;
     }
 
     m_rtmpFrameCount = 0;
-    std::cout << "[Streamer] RTMP encoder setup complete" << std::endl;
+    LOG_INFO() << "[Streamer] RTMP encoder setup complete";
     return true;
 }
 
@@ -858,7 +860,7 @@ void Streamer::cleanupRtmpEncoder() {
     }
 
     m_rtmpStream = nullptr;
-    std::cout << "[Streamer] RTMP encoder cleanup complete" << std::endl;
+    LOG_INFO() << "[Streamer] RTMP encoder cleanup complete";
 }
 
 bool Streamer::encodeAndSendRtmpFrame(const cv::Mat& frame) {
@@ -879,7 +881,7 @@ bool Streamer::encodeAndSendRtmpFrame(const cv::Mat& frame) {
     int ret = sws_scale(m_swsContext, srcData, srcLinesize, 0, frame.rows,
                        m_rtmpFrame->data, m_rtmpFrame->linesize);
     if (ret < 0) {
-        std::cerr << "[Streamer] Failed to convert frame: " << ffmpeg_error_string(ret) << std::endl;
+        LOG_ERROR() << "[Streamer] Failed to convert frame: " << ffmpeg_error_string(ret);
         return false;
     }
 
@@ -889,14 +891,14 @@ bool Streamer::encodeAndSendRtmpFrame(const cv::Mat& frame) {
     // Encode frame
     ret = avcodec_send_frame(m_rtmpCodecContext, m_rtmpFrame);
     if (ret < 0) {
-        std::cerr << "[Streamer] Failed to send frame to encoder: " << ffmpeg_error_string(ret) << std::endl;
+        LOG_ERROR() << "[Streamer] Failed to send frame to encoder: " << ffmpeg_error_string(ret);
         return false;
     }
 
     // Receive encoded packets
     AVPacket* packet = av_packet_alloc();
     if (!packet) {
-        std::cerr << "[Streamer] Failed to allocate packet" << std::endl;
+        LOG_ERROR() << "[Streamer] Failed to allocate packet";
         return false;
     }
 
@@ -905,7 +907,7 @@ bool Streamer::encodeAndSendRtmpFrame(const cv::Mat& frame) {
         if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
             break;
         } else if (ret < 0) {
-            std::cerr << "[Streamer] Failed to receive packet: " << ffmpeg_error_string(ret) << std::endl;
+            LOG_ERROR() << "[Streamer] Failed to receive packet: " << ffmpeg_error_string(ret);
             av_packet_free(&packet);
             return false;
         }
@@ -917,7 +919,7 @@ bool Streamer::encodeAndSendRtmpFrame(const cv::Mat& frame) {
         // Write packet
         ret = av_interleaved_write_frame(m_rtmpFormatContext, packet);
         if (ret < 0) {
-            std::cerr << "[Streamer] Failed to write packet: " << ffmpeg_error_string(ret) << std::endl;
+            LOG_ERROR() << "[Streamer] Failed to write packet: " << ffmpeg_error_string(ret);
             av_packet_free(&packet);
             return false;
         }
@@ -930,7 +932,7 @@ bool Streamer::encodeAndSendRtmpFrame(const cv::Mat& frame) {
 }
 
 void Streamer::rtmpStreamingThread() {
-    std::cout << "[Streamer] RTMP streaming thread started" << std::endl;
+    LOG_INFO() << "[Streamer] RTMP streaming thread started";
 
     while (m_rtmpStreaming.load()) {
         // This thread is mainly for monitoring and cleanup
@@ -938,7 +940,7 @@ void Streamer::rtmpStreamingThread() {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
-    std::cout << "[Streamer] RTMP streaming thread stopped" << std::endl;
+    LOG_INFO() << "[Streamer] RTMP streaming thread stopped";
 }
 
 // Enhanced overlay methods for Task 39

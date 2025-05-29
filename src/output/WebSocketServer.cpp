@@ -6,6 +6,8 @@
 #include <chrono>
 #include <functional>
 
+#include "../core/Logger.h"
+using namespace AISecurityVision;
 WebSocketServer::WebSocketServer() {
     // Set logging settings
     m_server.set_access_channels(websocketpp::log::alevel::all);
@@ -23,7 +25,7 @@ WebSocketServer::WebSocketServer() {
     // Set reuse address
     m_server.set_reuse_addr(true);
 
-    std::cout << "[WebSocketServer] WebSocket server initialized" << std::endl;
+    LOG_INFO() << "[WebSocketServer] WebSocket server initialized";
 }
 
 WebSocketServer::~WebSocketServer() {
@@ -32,7 +34,7 @@ WebSocketServer::~WebSocketServer() {
 
 bool WebSocketServer::start(int port) {
     if (m_running.load()) {
-        std::cout << "[WebSocketServer] Server already running" << std::endl;
+        LOG_INFO() << "[WebSocketServer] Server already running";
         return true;
     }
 
@@ -46,11 +48,11 @@ bool WebSocketServer::start(int port) {
         m_running.store(true);
         m_serverThread = std::thread(&WebSocketServer::serverThread, this);
 
-        std::cout << "[WebSocketServer] WebSocket server started on port " << port << std::endl;
+        LOG_INFO() << "[WebSocketServer] WebSocket server started on port " << port;
         return true;
 
     } catch (const std::exception& e) {
-        std::cerr << "[WebSocketServer] Failed to start server: " << e.what() << std::endl;
+        LOG_ERROR() << "[WebSocketServer] Failed to start server: " << e.what();
         m_running.store(false);
         return false;
     }
@@ -61,7 +63,7 @@ void WebSocketServer::stop() {
         return;
     }
 
-    std::cout << "[WebSocketServer] Stopping WebSocket server..." << std::endl;
+    LOG_INFO() << "[WebSocketServer] Stopping WebSocket server...";
 
     m_running.store(false);
 
@@ -73,7 +75,7 @@ void WebSocketServer::stop() {
                 try {
                     m_server.close(hdl, websocketpp::close::status::going_away, "Server shutdown");
                 } catch (const std::exception& e) {
-                    std::cerr << "[WebSocketServer] Error closing connection: " << e.what() << std::endl;
+                    LOG_ERROR() << "[WebSocketServer] Error closing connection: " << e.what();
                 }
             }
             m_connections.clear();
@@ -87,10 +89,10 @@ void WebSocketServer::stop() {
             m_serverThread.join();
         }
 
-        std::cout << "[WebSocketServer] WebSocket server stopped" << std::endl;
+        LOG_INFO() << "[WebSocketServer] WebSocket server stopped";
 
     } catch (const std::exception& e) {
-        std::cerr << "[WebSocketServer] Error during shutdown: " << e.what() << std::endl;
+        LOG_ERROR() << "[WebSocketServer] Error during shutdown: " << e.what();
     }
 }
 
@@ -111,14 +113,14 @@ void WebSocketServer::broadcast(const std::string& message) {
             m_server.send(hdl, message, websocketpp::frame::opcode::text);
             sentCount++;
         } catch (const std::exception& e) {
-            std::cerr << "[WebSocketServer] Failed to send message to client: " << e.what() << std::endl;
+            LOG_ERROR() << "[WebSocketServer] Failed to send message to client: " << e.what();
         }
     }
 
     m_messagesSent.fetch_add(sentCount);
 
     if (sentCount > 0) {
-        std::cout << "[WebSocketServer] Broadcasted alarm to " << sentCount << " clients" << std::endl;
+        LOG_INFO() << "[WebSocketServer] Broadcasted alarm to " << sentCount << " clients";
     }
 }
 
@@ -127,7 +129,7 @@ void WebSocketServer::sendToConnection(connection_hdl hdl, const std::string& me
         m_server.send(hdl, message, websocketpp::frame::opcode::text);
         m_messagesSent.fetch_add(1);
     } catch (const std::exception& e) {
-        std::cerr << "[WebSocketServer] Failed to send message to specific client: " << e.what() << std::endl;
+        LOG_ERROR() << "[WebSocketServer] Failed to send message to specific client: " << e.what();
     }
 }
 
@@ -160,11 +162,11 @@ void WebSocketServer::onOpen(connection_hdl hdl) {
 
     // Check connection limit
     if (m_connections.size() >= m_maxConnections) {
-        std::cout << "[WebSocketServer] Connection limit reached, rejecting new connection" << std::endl;
+        LOG_INFO() << "[WebSocketServer] Connection limit reached, rejecting new connection";
         try {
             m_server.close(hdl, websocketpp::close::status::try_again_later, "Server full");
         } catch (const std::exception& e) {
-            std::cerr << "[WebSocketServer] Error rejecting connection: " << e.what() << std::endl;
+            LOG_ERROR() << "[WebSocketServer] Error rejecting connection: " << e.what();
         }
         return;
     }
@@ -173,8 +175,8 @@ void WebSocketServer::onOpen(connection_hdl hdl) {
     m_totalConnections.fetch_add(1);
 
     std::string clientInfo = getConnectionInfo(hdl);
-    std::cout << "[WebSocketServer] Client connected: " << clientInfo
-              << " (Total: " << m_connections.size() << ")" << std::endl;
+    LOG_INFO() << "[WebSocketServer] Client connected: " << clientInfo
+              << " (Total: " << m_connections.size() << ")";
 
     // Send welcome message
     try {
@@ -183,7 +185,7 @@ void WebSocketServer::onOpen(connection_hdl hdl) {
                                    std::chrono::system_clock::now().time_since_epoch()).count()) + "\"}";
         m_server.send(hdl, welcomeMsg, websocketpp::frame::opcode::text);
     } catch (const std::exception& e) {
-        std::cerr << "[WebSocketServer] Failed to send welcome message: " << e.what() << std::endl;
+        LOG_ERROR() << "[WebSocketServer] Failed to send welcome message: " << e.what();
     }
 }
 
@@ -193,21 +195,21 @@ void WebSocketServer::onClose(connection_hdl hdl) {
     std::string clientInfo = getConnectionInfo(hdl);
     m_connections.erase(hdl);
 
-    std::cout << "[WebSocketServer] Client disconnected: " << clientInfo
-              << " (Remaining: " << m_connections.size() << ")" << std::endl;
+    LOG_INFO() << "[WebSocketServer] Client disconnected: " << clientInfo
+              << " (Remaining: " << m_connections.size() << ")";
 }
 
 void WebSocketServer::onMessage(connection_hdl hdl, message_ptr msg) {
     // Handle incoming messages (for future use - ping/pong, client commands)
     std::string payload = msg->get_payload();
-    std::cout << "[WebSocketServer] Received message: " << payload << std::endl;
+    LOG_INFO() << "[WebSocketServer] Received message: " << payload;
 
     // Echo back for testing
     try {
         std::string response = R"({"type":"echo","message":")" + payload + "\"}";
         m_server.send(hdl, response, websocketpp::frame::opcode::text);
     } catch (const std::exception& e) {
-        std::cerr << "[WebSocketServer] Failed to send echo response: " << e.what() << std::endl;
+        LOG_ERROR() << "[WebSocketServer] Failed to send echo response: " << e.what();
     }
 }
 
@@ -219,11 +221,11 @@ bool WebSocketServer::onValidate(connection_hdl hdl) {
 
 void WebSocketServer::serverThread() {
     try {
-        std::cout << "[WebSocketServer] Server thread started" << std::endl;
+        LOG_INFO() << "[WebSocketServer] Server thread started";
         m_server.run();
-        std::cout << "[WebSocketServer] Server thread finished" << std::endl;
+        LOG_INFO() << "[WebSocketServer] Server thread finished";
     } catch (const std::exception& e) {
-        std::cerr << "[WebSocketServer] Server thread error: " << e.what() << std::endl;
+        LOG_ERROR() << "[WebSocketServer] Server thread error: " << e.what();
     }
 }
 

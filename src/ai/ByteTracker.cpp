@@ -5,6 +5,8 @@
 #include <numeric>
 #include <chrono>
 
+#include "../core/Logger.h"
+using namespace AISecurityVision;
 // Track implementation
 ByteTracker::Track::Track(int id, const cv::Rect& box, float conf, int cls)
     : trackId(id), bbox(box), confidence(conf), classId(cls)
@@ -149,18 +151,18 @@ ByteTracker::~ByteTracker() {
 }
 
 bool ByteTracker::initialize() {
-    std::cout << "[ByteTracker] Initializing ByteTracker..." << std::endl;
-    std::cout << "[ByteTracker] Track threshold: " << m_trackThreshold << std::endl;
-    std::cout << "[ByteTracker] High threshold: " << m_highThreshold << std::endl;
-    std::cout << "[ByteTracker] Match threshold: " << m_matchThreshold << std::endl;
-    std::cout << "[ByteTracker] Max lost frames: " << m_maxLostFrames << std::endl;
-    std::cout << "[ByteTracker] ByteTracker initialized successfully" << std::endl;
+    LOG_INFO() << "[ByteTracker] Initializing ByteTracker...";
+    LOG_INFO() << "[ByteTracker] Track threshold: " << m_trackThreshold;
+    LOG_INFO() << "[ByteTracker] High threshold: " << m_highThreshold;
+    LOG_INFO() << "[ByteTracker] Match threshold: " << m_matchThreshold;
+    LOG_INFO() << "[ByteTracker] Max lost frames: " << m_maxLostFrames;
+    LOG_INFO() << "[ByteTracker] ByteTracker initialized successfully";
     return true;
 }
 
 void ByteTracker::cleanup() {
     clearTracks();
-    std::cout << "[ByteTracker] Cleanup completed" << std::endl;
+    LOG_INFO() << "[ByteTracker] Cleanup completed";
 }
 
 std::vector<int> ByteTracker::update(const std::vector<cv::Rect>& detections) {
@@ -258,17 +260,17 @@ void ByteTracker::setMinTrackLength(int length) {
 // ReID configuration methods
 void ByteTracker::setReIDSimilarityThreshold(float threshold) {
     m_reidSimilarityThreshold = std::max(0.0f, std::min(1.0f, threshold));
-    std::cout << "[ByteTracker] ReID similarity threshold set to: " << m_reidSimilarityThreshold << std::endl;
+    LOG_INFO() << "[ByteTracker] ReID similarity threshold set to: " << m_reidSimilarityThreshold;
 }
 
 void ByteTracker::setReIDWeight(float weight) {
     m_reidWeight = std::max(0.0f, std::min(1.0f, weight));
-    std::cout << "[ByteTracker] ReID weight set to: " << m_reidWeight << std::endl;
+    LOG_INFO() << "[ByteTracker] ReID weight set to: " << m_reidWeight;
 }
 
 void ByteTracker::enableReIDTracking(bool enabled) {
     m_reidTrackingEnabled = enabled;
-    std::cout << "[ByteTracker] ReID tracking " << (enabled ? "enabled" : "disabled") << std::endl;
+    LOG_INFO() << "[ByteTracker] ReID tracking " << (enabled ? "enabled" : "disabled");
 }
 
 // Statistics methods

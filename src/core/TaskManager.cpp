@@ -18,6 +18,8 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <sched.h>
+#include "../core/Logger.h"
+using namespace AISecurityVision;
 #endif
 
 TaskManager& TaskManager::getInstance() {
@@ -26,14 +28,14 @@ TaskManager& TaskManager::getInstance() {
 }
 
 TaskManager::TaskManager() {
-    std::cout << "[TaskManager] Initializing TaskManager singleton" << std::endl;
+    LOG_INFO() << "[TaskManager] Initializing TaskManager singleton";
 
     // Record system start time
     m_systemStartTime = std::chrono::steady_clock::now();
 
     // Initialize GPU monitoring
     if (!initializeGpuMonitoring()) {
-        std::cout << "[TaskManager] GPU monitoring not available" << std::endl;
+        LOG_INFO() << "[TaskManager] GPU monitoring not available";
     }
 }
 
@@ -45,18 +47,18 @@ TaskManager::~TaskManager() {
 void TaskManager::start() {
     std::lock_guard<std::mutex> lock(m_mutex);
     if (m_running.load()) {
-        std::cout << "[TaskManager] Already running" << std::endl;
+        LOG_INFO() << "[TaskManager] Already running";
         return;
     }
 
     m_running.store(true);
     m_monitoringThread = std::thread(&TaskManager::monitoringThread, this);
 
-    std::cout << "[TaskManager] Started successfully" << std::endl;
+    LOG_INFO() << "[TaskManager] Started successfully";
 }
 
 void TaskManager::stop() {
-    std::cout << "[TaskManager] Stopping..." << std::endl;
+    LOG_INFO() << "[TaskManager] Stopping...";
 
     m_running.store(false);
 
@@ -73,7 +75,7 @@ void TaskManager::stop() {
     }
     m_pipelines.clear();
 
-    std::cout << "[TaskManager] Stopped successfully" << std::endl;
+    LOG_INFO() << "[TaskManager] Stopped successfully";
 }
 
 bool TaskManager::isRunning() const {
@@ -82,19 +84,19 @@ bool TaskManager::isRunning() const {
 
 bool TaskManager::addVideoSource(const VideoSource& source) {
     if (!source.isValid()) {
-        std::cerr << "[TaskManager] Invalid video source: " << source.toString() << std::endl;
+        LOG_ERROR() << "[TaskManager] Invalid video source: " << source.toString();
         return false;
     }
 
     std::lock_guard<std::mutex> lock(m_mutex);
 
     if (m_pipelines.size() >= MAX_PIPELINES) {
-        std::cerr << "[TaskManager] Maximum pipeline limit reached: " << MAX_PIPELINES << std::endl;
+        LOG_ERROR() << "[TaskManager] Maximum pipeline limit reached: " << MAX_PIPELINES;
         return false;
     }
 
     if (m_pipelines.find(source.id) != m_pipelines.end()) {
-        std::cerr << "[TaskManager] Pipeline already exists for source: " << source.id << std::endl;
+        LOG_ERROR() << "[TaskManager] Pipeline already exists for source: " << source.id;
         return false;
     }
 
@@ -104,15 +106,15 @@ bool TaskManager::addVideoSource(const VideoSource& source) {
             m_pipelines[source.id] = pipeline;
             pipeline->start();
 
-            std::cout << "[TaskManager] Added video source: " << source.id
-                      << " (" << source.protocol << ")" << std::endl;
+            LOG_INFO() << "[TaskManager] Added video source: " << source.id
+                      << " (" << source.protocol << ")";
             return true;
         } else {
-            std::cerr << "[TaskManager] Failed to initialize pipeline for: " << source.id << std::endl;
+            LOG_ERROR() << "[TaskManager] Failed to initialize pipeline for: " << source.id;
             return false;
         }
     } catch (const std::exception& e) {
-        std::cerr << "[TaskManager] Exception creating pipeline: " << e.what() << std::endl;
+        LOG_ERROR() << "[TaskManager] Exception creating pipeline: " << e.what();
         return false;
     }
 }
@@ -122,7 +124,7 @@ bool TaskManager::removeVideoSource(const std::string& sourceId) {
 
     auto it = m_pipelines.find(sourceId);
     if (it == m_pipelines.end()) {
-        std::cerr << "[TaskManager] Pipeline not found: " << sourceId << std::endl;
+        LOG_ERROR() << "[TaskManager] Pipeline not found: " << sourceId;
         return false;
     }
 
@@ -132,7 +134,7 @@ bool TaskManager::removeVideoSource(const std::string& sourceId) {
     }
     m_pipelines.erase(it);
 
-    std::cout << "[TaskManager] Removed video source: " << sourceId << std::endl;
+    LOG_INFO() << "[TaskManager] Removed video source: " << sourceId;
     return true;
 }
 
@@ -178,7 +180,7 @@ std::shared_ptr<VideoPipeline> TaskManager::getPipeline(const std::string& sourc
 }
 
 void TaskManager::monitoringThread() {
-    std::cout << "[TaskManager] Enhanced monitoring thread started with 1s precision" << std::endl;
+    LOG_INFO() << "[TaskManager] Enhanced monitoring thread started with 1s precision";
 
     // Initialize timing variables
     auto nextUpdateTime = std::chrono::steady_clock::now();
@@ -192,7 +194,7 @@ void TaskManager::monitoringThread() {
     if (pthread_setschedparam(pthread_self(), SCHED_FIFO, &param) != 0) {
         // Fallback to nice priority if real-time scheduling fails
         if (nice(-5) == -1) {
-            std::cout << "[TaskManager] Warning: Could not set thread priority" << std::endl;
+            LOG_WARN() << "[TaskManager] Warning: Could not set thread priority";
         }
     }
 #endif
@@ -229,7 +231,7 @@ void TaskManager::monitoringThread() {
 
             // Cleanup failed pipelines
             for (const auto& id : failedPipelines) {
-                std::cout << "[TaskManager] Cleaning up failed pipeline: " << id << std::endl;
+                LOG_ERROR() << "[TaskManager] Cleaning up failed pipeline: " << id;
                 removeVideoSource(id);
             }
 
@@ -263,14 +265,14 @@ void TaskManager::monitoringThread() {
             m_monitoringHealthy.store(healthy);
 
             if (!healthy) {
-                std::cerr << "[TaskManager] Warning: Monitoring cycle took " << cycleDuration
-                         << "ms (target: " << MONITORING_INTERVAL_MS << "ms)" << std::endl;
+                LOG_WARN() << "[TaskManager] Warning: Monitoring cycle took " << cycleDuration
+                         << "ms (target: " << MONITORING_INTERVAL_MS << "ms)";
             }
 
             m_lastMonitoringTime = cycleEndTime;
 
         } catch (const std::exception& e) {
-            std::cerr << "[TaskManager] Monitoring error: " << e.what() << std::endl;
+            LOG_ERROR() << "[TaskManager] Monitoring error: " << e.what();
             m_monitoringHealthy.store(false);
         }
 
@@ -283,25 +285,25 @@ void TaskManager::monitoringThread() {
         } else {
             // We're behind schedule, adjust next update time
             nextUpdateTime = now + interval;
-            std::cerr << "[TaskManager] Warning: Monitoring thread behind schedule" << std::endl;
+            LOG_WARN() << "[TaskManager] Warning: Monitoring thread behind schedule";
         }
     }
 
-    std::cout << "[TaskManager] Enhanced monitoring thread stopped after "
-              << m_monitoringCycles.load() << " cycles" << std::endl;
+    LOG_INFO() << "[TaskManager] Enhanced monitoring thread stopped after "
+              << m_monitoringCycles.load() << " cycles";
 }
 
 bool TaskManager::readCpuStats(CpuStats& stats) const {
 #ifdef __linux__
     std::ifstream file("/proc/stat");
     if (!file.is_open()) {
-        std::cerr << "[TaskManager] Failed to open /proc/stat" << std::endl;
+        LOG_ERROR() << "[TaskManager] Failed to open /proc/stat";
         return false;
     }
 
     std::string line;
     if (!std::getline(file, line)) {
-        std::cerr << "[TaskManager] Failed to read from /proc/stat" << std::endl;
+        LOG_ERROR() << "[TaskManager] Failed to read from /proc/stat";
         return false;
     }
 
@@ -312,13 +314,13 @@ bool TaskManager::readCpuStats(CpuStats& stats) const {
     iss >> cpu_label;
 
     if (cpu_label != "cpu") {
-        std::cerr << "[TaskManager] Invalid /proc/stat format" << std::endl;
+        LOG_ERROR() << "[TaskManager] Invalid /proc/stat format";
         return false;
     }
 
     if (!(iss >> stats.user >> stats.nice >> stats.system >> stats.idle
              >> stats.iowait >> stats.irq >> stats.softirq >> stats.steal)) {
-        std::cerr << "[TaskManager] Failed to parse CPU stats" << std::endl;
+        LOG_ERROR() << "[TaskManager] Failed to parse CPU stats";
         return false;
     }
 
@@ -357,19 +359,19 @@ bool TaskManager::initializeGpuMonitoring() {
 #ifdef HAVE_NVML
     nvmlReturn_t result = nvmlInit();
     if (result != NVML_SUCCESS) {
-        std::cout << "[TaskManager] Failed to initialize NVML: " << nvmlErrorString(result) << std::endl;
+        LOG_ERROR() << "[TaskManager] Failed to initialize NVML: " << nvmlErrorString(result);
         return false;
     }
 
     result = nvmlDeviceGetCount(&m_gpuDeviceCount);
     if (result != NVML_SUCCESS) {
-        std::cout << "[TaskManager] Failed to get GPU device count: " << nvmlErrorString(result) << std::endl;
+        LOG_ERROR() << "[TaskManager] Failed to get GPU device count: " << nvmlErrorString(result);
         nvmlShutdown();
         return false;
     }
 
     if (m_gpuDeviceCount == 0) {
-        std::cout << "[TaskManager] No NVIDIA GPUs found" << std::endl;
+        LOG_INFO() << "[TaskManager] No NVIDIA GPUs found";
         nvmlShutdown();
         return false;
     }
@@ -378,7 +380,7 @@ bool TaskManager::initializeGpuMonitoring() {
     nvmlDevice_t device;
     result = nvmlDeviceGetHandleByIndex(0, &device);
     if (result != NVML_SUCCESS) {
-        std::cout << "[TaskManager] Failed to get GPU device handle: " << nvmlErrorString(result) << std::endl;
+        LOG_ERROR() << "[TaskManager] Failed to get GPU device handle: " << nvmlErrorString(result);
         nvmlShutdown();
         return false;
     }
@@ -391,14 +393,14 @@ bool TaskManager::initializeGpuMonitoring() {
     char name[NVML_DEVICE_NAME_BUFFER_SIZE];
     result = nvmlDeviceGetName(device, name, NVML_DEVICE_NAME_BUFFER_SIZE);
     if (result == NVML_SUCCESS) {
-        std::cout << "[TaskManager] GPU monitoring initialized for: " << name << std::endl;
+        LOG_INFO() << "[TaskManager] GPU monitoring initialized for: " << name;
     } else {
-        std::cout << "[TaskManager] GPU monitoring initialized (unknown device)" << std::endl;
+        LOG_INFO() << "[TaskManager] GPU monitoring initialized (unknown device)";
     }
 
     return true;
 #else
-    std::cout << "[TaskManager] NVML not available - GPU monitoring disabled" << std::endl;
+    LOG_INFO() << "[TaskManager] NVML not available - GPU monitoring disabled";
     return false;
 #endif
 }
@@ -409,7 +411,7 @@ void TaskManager::cleanupGpuMonitoring() {
         nvmlShutdown();
         m_nvmlInitialized = false;
         m_gpuDevice = nullptr;
-        std::cout << "[TaskManager] GPU monitoring cleanup complete" << std::endl;
+        LOG_INFO() << "[TaskManager] GPU monitoring cleanup complete";
     }
 #endif
 }
@@ -603,7 +605,7 @@ void TaskManager::resetMonitoringStats() {
     m_avgMonitoringTime.store(0.0);
     m_maxMonitoringTime.store(0.0);
     m_monitoringHealthy.store(true);
-    std::cout << "[TaskManager] Monitoring statistics reset" << std::endl;
+    LOG_INFO() << "[TaskManager] Monitoring statistics reset";
 }
 
 // Task 75: Cross-camera tracking implementation
@@ -640,9 +642,9 @@ void TaskManager::reportTrackUpdate(const std::string& cameraId, int localTrackI
             m_localToGlobalTrackMap[cameraId][localTrackId] = bestMatch->globalTrackId;
             m_totalCrossCameraMatches.fetch_add(1);
 
-            std::cout << "[TaskManager] Cross-camera match: camera " << cameraId
+            LOG_INFO() << "[TaskManager] Cross-camera match: camera " << cameraId
                       << " local track " << localTrackId << " -> global track "
-                      << bestMatch->globalTrackId << std::endl;
+                      << bestMatch->globalTrackId;
             return;
         }
     }
@@ -718,26 +720,26 @@ std::vector<ReIDMatch> TaskManager::findReIDMatches(const std::vector<float>& fe
 // Cross-camera tracking configuration methods
 void TaskManager::setCrossCameraTrackingEnabled(bool enabled) {
     m_crossCameraTrackingEnabled.store(enabled);
-    std::cout << "[TaskManager] Cross-camera tracking " << (enabled ? "enabled" : "disabled") << std::endl;
+    LOG_INFO() << "[TaskManager] Cross-camera tracking " << (enabled ? "enabled" : "disabled");
 }
 
 void TaskManager::setReIDSimilarityThreshold(float threshold) {
     if (threshold >= 0.0f && threshold <= 1.0f) {
         m_reidSimilarityThreshold.store(threshold);
-        std::cout << "[TaskManager] ReID similarity threshold set to " << threshold << std::endl;
+        LOG_INFO() << "[TaskManager] ReID similarity threshold set to " << threshold;
     }
 }
 
 void TaskManager::setMaxTrackAge(double ageSeconds) {
     if (ageSeconds > 0.0) {
         m_maxTrackAge.store(ageSeconds);
-        std::cout << "[TaskManager] Max track age set to " << ageSeconds << " seconds" << std::endl;
+        LOG_INFO() << "[TaskManager] Max track age set to " << ageSeconds << " seconds";
     }
 }
 
 void TaskManager::setCrossCameraMatchingEnabled(bool enabled) {
     m_crossCameraMatchingEnabled.store(enabled);
-    std::cout << "[TaskManager] Cross-camera matching " << (enabled ? "enabled" : "disabled") << std::endl;
+    LOG_INFO() << "[TaskManager] Cross-camera matching " << (enabled ? "enabled" : "disabled");
 }
 
 bool TaskManager::isCrossCameraTrackingEnabled() const {
@@ -779,7 +781,7 @@ void TaskManager::resetCrossCameraTrackingStats() {
     std::lock_guard<std::mutex> lock(m_crossCameraMutex);
     m_totalCrossCameraMatches.store(0);
     m_activeCrossCameraTracks.store(0);
-    std::cout << "[TaskManager] Cross-camera tracking statistics reset" << std::endl;
+    LOG_INFO() << "[TaskManager] Cross-camera tracking statistics reset";
 }
 
 // VideoSource implementation is now in VideoPipeline.cpp
@@ -796,8 +798,8 @@ CrossCameraTrack::CrossCameraTrack(int globalId, const std::string& cameraId, in
     lastSeen = now;
     localTrackIds[cameraId] = localId;
 
-    std::cout << "[CrossCameraTrack] Created global track " << globalTrackId
-              << " for camera " << cameraId << " local track " << localId << std::endl;
+    LOG_INFO() << "[CrossCameraTrack] Created global track " << globalTrackId
+              << " for camera " << cameraId << " local track " << localId;
 }
 
 void CrossCameraTrack::updateTrack(const std::string& cameraId, int localId,
@@ -821,8 +823,8 @@ void CrossCameraTrack::updateTrack(const std::string& cameraId, int localId,
     // Update local track ID for this camera
     localTrackIds[cameraId] = localId;
 
-    std::cout << "[CrossCameraTrack] Updated global track " << globalTrackId
-              << " from camera " << cameraId << " local track " << localId << std::endl;
+    LOG_INFO() << "[CrossCameraTrack] Updated global track " << globalTrackId
+              << " from camera " << cameraId << " local track " << localId;
 }
 
 bool CrossCameraTrack::hasCamera(const std::string& cameraId) const {
@@ -860,8 +862,8 @@ int TaskManager::createNewGlobalTrack(const std::string& cameraId, int localTrac
         cleanupExpiredTracks();
     }
 
-    std::cout << "[TaskManager] Created new global track " << globalId
-              << " for camera " << cameraId << " local track " << localTrackId << std::endl;
+    LOG_INFO() << "[TaskManager] Created new global track " << globalId
+              << " for camera " << cameraId << " local track " << localTrackId;
 
     return globalId;
 }
@@ -910,7 +912,7 @@ void TaskManager::cleanupExpiredTracks() {
                 }
             }
 
-            std::cout << "[TaskManager] Cleaned up expired global track " << it->first << std::endl;
+            LOG_INFO() << "[TaskManager] Cleaned up expired global track " << it->first;
             it = m_globalTracks.erase(it);
         } else {
             ++it;

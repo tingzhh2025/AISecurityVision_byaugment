@@ -2,6 +2,8 @@
 #include "WebSocketServer.h"
 #include "../core/VideoPipeline.h"
 #include "../ai/BehaviorAnalyzer.h"
+#include "../core/Logger.h"
+using namespace AISecurityVision;
 #include <iostream>
 #include <sstream>
 #include <iomanip>
@@ -67,14 +69,14 @@ bool AlarmTrigger::initialize() {
     std::lock_guard<std::mutex> lock(m_configMutex);
 
     if (m_running.load()) {
-        std::cout << "[AlarmTrigger] Already initialized" << std::endl;
+        LOG_INFO() << "[AlarmTrigger] Already initialized";
         return true;
     }
 
     m_running.store(true);
     m_processingThread = std::thread(&AlarmTrigger::processAlarmQueue, this);
 
-    std::cout << "[AlarmTrigger] Initialized with HTTP POST delivery support" << std::endl;
+    LOG_INFO() << "[AlarmTrigger] Initialized with HTTP POST delivery support";
     return true;
 }
 
@@ -97,7 +99,7 @@ void AlarmTrigger::shutdown() {
         disconnectMQTTClient();
 #endif
 
-        std::cout << "[AlarmTrigger] Shutdown complete" << std::endl;
+        LOG_INFO() << "[AlarmTrigger] Shutdown complete";
     }
 }
 
@@ -118,17 +120,17 @@ void AlarmTrigger::triggerAlarm(const FrameResult& result) {
 
         // Check queue size limit
         if (m_alarmQueue.size() >= MAX_QUEUE_SIZE) {
-            std::cerr << "[AlarmTrigger] Alarm queue full, dropping lowest priority alarm" << std::endl;
+            LOG_ERROR() << "[AlarmTrigger] Alarm queue full, dropping lowest priority alarm";
             m_alarmQueue.pop();
         }
 
         m_alarmQueue.push(payload);
         m_queueCondition.notify_one();
 
-        std::cout << "[AlarmTrigger] Queued alarm: " << event.eventType
+        LOG_INFO() << "[AlarmTrigger] Queued alarm: " << event.eventType
                   << " for camera: " << payload.camera_id
                   << " (Priority: " << payload.priority
-                  << ", ID: " << payload.alarm_id << ")" << std::endl;
+                  << ", ID: " << payload.alarm_id << ")";
     }
 }
 
@@ -160,10 +162,10 @@ void AlarmTrigger::triggerTestAlarm(const std::string& eventType, const std::str
     m_alarmQueue.push(payload);
     m_queueCondition.notify_one();
 
-    std::cout << "[AlarmTrigger] Queued test alarm: " << eventType
+    LOG_INFO() << "[AlarmTrigger] Queued test alarm: " << eventType
               << " for camera: " << cameraId
               << " (Priority: " << payload.priority
-              << ", ID: " << payload.alarm_id << ")" << std::endl;
+              << ", ID: " << payload.alarm_id << ")";
 }
 
 // Configuration management methods
@@ -173,14 +175,14 @@ bool AlarmTrigger::addAlarmConfig(const AlarmConfig& config) {
     // Check if config with same ID already exists
     for (const auto& existing : m_alarmConfigs) {
         if (existing.id == config.id) {
-            std::cerr << "[AlarmTrigger] Config with ID " << config.id << " already exists" << std::endl;
+            LOG_ERROR() << "[AlarmTrigger] Config with ID " << config.id << " already exists";
             return false;
         }
     }
 
     m_alarmConfigs.push_back(config);
-    std::cout << "[AlarmTrigger] Added alarm config: " << config.id
-              << " (method: " << (config.method == AlarmMethod::HTTP_POST ? "HTTP_POST" : "OTHER") << ")" << std::endl;
+    LOG_INFO() << "[AlarmTrigger] Added alarm config: " << config.id
+              << " (method: " << (config.method == AlarmMethod::HTTP_POST ? "HTTP_POST" : "OTHER") << ")";
     return true;
 }
 
@@ -194,11 +196,11 @@ bool AlarmTrigger::removeAlarmConfig(const std::string& configId) {
 
     if (it != m_alarmConfigs.end()) {
         m_alarmConfigs.erase(it, m_alarmConfigs.end());
-        std::cout << "[AlarmTrigger] Removed alarm config: " << configId << std::endl;
+        LOG_INFO() << "[AlarmTrigger] Removed alarm config: " << configId;
         return true;
     }
 
-    std::cerr << "[AlarmTrigger] Config not found: " << configId << std::endl;
+    LOG_ERROR() << "[AlarmTrigger] Config not found: " << configId;
     return false;
 }
 
@@ -208,12 +210,12 @@ bool AlarmTrigger::updateAlarmConfig(const AlarmConfig& config) {
     for (auto& existing : m_alarmConfigs) {
         if (existing.id == config.id) {
             existing = config;
-            std::cout << "[AlarmTrigger] Updated alarm config: " << config.id << std::endl;
+            LOG_INFO() << "[AlarmTrigger] Updated alarm config: " << config.id;
             return true;
         }
     }
 
-    std::cerr << "[AlarmTrigger] Config not found for update: " << config.id << std::endl;
+    LOG_ERROR() << "[AlarmTrigger] Config not found for update: " << config.id;
     return false;
 }
 
@@ -238,7 +240,7 @@ size_t AlarmTrigger::getFailedAlarmsCount() const {
 
 // Private alarm processing methods
 void AlarmTrigger::processAlarmQueue() {
-    std::cout << "[AlarmTrigger] Alarm processing thread started" << std::endl;
+    LOG_INFO() << "[AlarmTrigger] Alarm processing thread started";
 
     while (m_running.load()) {
         std::unique_lock<std::mutex> lock(m_queueMutex);
@@ -276,7 +278,7 @@ void AlarmTrigger::processAlarmQueue() {
         }
     }
 
-    std::cout << "[AlarmTrigger] Alarm processing thread stopped" << std::endl;
+    LOG_INFO() << "[AlarmTrigger] Alarm processing thread stopped";
 }
 
 AlarmRoutingResult AlarmTrigger::deliverAlarm(const AlarmPayload& payload) {
@@ -298,13 +300,13 @@ AlarmRoutingResult AlarmTrigger::deliverAlarm(const AlarmPayload& payload) {
     }
 
     if (enabledConfigs.empty()) {
-        std::cerr << "[AlarmTrigger] No enabled alarm configurations found" << std::endl;
+        LOG_ERROR() << "[AlarmTrigger] No enabled alarm configurations found";
         m_failedCount.fetch_add(1);
         return routingResult;
     }
 
-    std::cout << "[AlarmTrigger] Delivering alarm " << payload.alarm_id
-              << " to " << enabledConfigs.size() << " channels simultaneously" << std::endl;
+    LOG_INFO() << "[AlarmTrigger] Delivering alarm " << payload.alarm_id
+              << " to " << enabledConfigs.size() << " channels simultaneously";
 
     // Prepare futures for parallel delivery
     std::vector<std::future<DeliveryResult>> futures;
@@ -343,7 +345,7 @@ AlarmRoutingResult AlarmTrigger::deliverAlarm(const AlarmPayload& payload) {
                 m_failedCount.fetch_add(1);
             }
         } catch (const std::exception& e) {
-            std::cerr << "[AlarmTrigger] Exception during delivery: " << e.what() << std::endl;
+            LOG_ERROR() << "[AlarmTrigger] Exception during delivery: " << e.what();
             routingResult.delivery_results.emplace_back("exception", AlarmMethod::HTTP_POST,
                                                       false, std::chrono::milliseconds(0),
                                                       e.what());
@@ -355,22 +357,20 @@ AlarmRoutingResult AlarmTrigger::deliverAlarm(const AlarmPayload& payload) {
     auto endTime = std::chrono::high_resolution_clock::now();
     routingResult.total_time = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
 
-    std::cout << "[AlarmTrigger] Alarm " << payload.alarm_id << " routing complete: "
+    LOG_ERROR() << "[AlarmTrigger] Alarm " << payload.alarm_id << " routing complete: "
               << routingResult.successful_deliveries << " successful, "
               << routingResult.failed_deliveries << " failed, "
-              << routingResult.total_time.count() << "ms total" << std::endl;
+              << routingResult.total_time.count() << "ms total";
 
     return routingResult;
 }
-
-
 
 // HTTP client functionality
 bool AlarmTrigger::sendHttpPost(const std::string& url, const std::string& jsonPayload,
                                const std::map<std::string, std::string>& headers, int timeout_ms) {
     CURL* curl = curl_easy_init();
     if (!curl) {
-        std::cerr << "[AlarmTrigger] Failed to initialize CURL" << std::endl;
+        LOG_ERROR() << "[AlarmTrigger] Failed to initialize CURL";
         return false;
     }
 
@@ -409,7 +409,7 @@ bool AlarmTrigger::sendHttpPost(const std::string& url, const std::string& jsonP
         CURLcode res = curl_easy_perform(curl);
 
         if (res != CURLE_OK) {
-            std::cerr << "[AlarmTrigger] CURL error: " << curl_easy_strerror(res) << std::endl;
+            LOG_ERROR() << "[AlarmTrigger] CURL error: " << curl_easy_strerror(res);
             return false;
         }
 
@@ -418,15 +418,15 @@ bool AlarmTrigger::sendHttpPost(const std::string& url, const std::string& jsonP
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
 
         if (responseCode >= 200 && responseCode < 300) {
-            std::cout << "[AlarmTrigger] HTTP POST successful (code: " << responseCode << ")" << std::endl;
+            LOG_INFO() << "[AlarmTrigger] HTTP POST successful (code: " << responseCode << ")";
             return true;
         } else {
-            std::cerr << "[AlarmTrigger] HTTP POST failed with code: " << responseCode << std::endl;
+            LOG_ERROR() << "[AlarmTrigger] HTTP POST failed with code: " << responseCode;
             return false;
         }
 
     } catch (const std::exception& e) {
-        std::cerr << "[AlarmTrigger] Exception in HTTP POST: " << e.what() << std::endl;
+        LOG_ERROR() << "[AlarmTrigger] Exception in HTTP POST: " << e.what();
         return false;
     }
 
@@ -487,13 +487,11 @@ AlarmPayload AlarmTrigger::createAlarmPayload(const FrameResult& result, const B
     return payload;
 }
 
-
-
 // WebSocket server management
 void AlarmTrigger::startWebSocketServer(int port) {
 #ifdef HAVE_WEBSOCKETPP
     if (m_webSocketRunning.load()) {
-        std::cout << "[AlarmTrigger] WebSocket server already running" << std::endl;
+        LOG_INFO() << "[AlarmTrigger] WebSocket server already running";
         return;
     }
 
@@ -503,12 +501,12 @@ void AlarmTrigger::startWebSocketServer(int port) {
 
     if (m_webSocketServer->start(port)) {
         m_webSocketRunning.store(true);
-        std::cout << "[AlarmTrigger] WebSocket server started on port " << port << std::endl;
+        LOG_INFO() << "[AlarmTrigger] WebSocket server started on port " << port;
     } else {
-        std::cerr << "[AlarmTrigger] Failed to start WebSocket server" << std::endl;
+        LOG_ERROR() << "[AlarmTrigger] Failed to start WebSocket server";
     }
 #else
-    std::cerr << "[AlarmTrigger] WebSocket support not compiled" << std::endl;
+    LOG_ERROR() << "[AlarmTrigger] WebSocket support not compiled";
 #endif
 }
 
@@ -521,7 +519,7 @@ void AlarmTrigger::stopWebSocketServer() {
     if (m_webSocketServer) {
         m_webSocketServer->stop();
         m_webSocketRunning.store(false);
-        std::cout << "[AlarmTrigger] WebSocket server stopped" << std::endl;
+        LOG_INFO() << "[AlarmTrigger] WebSocket server stopped";
     }
 #endif
 }
@@ -533,8 +531,6 @@ void AlarmTrigger::broadcastToWebSocketClients(const std::string& message) {
     }
 #endif
 }
-
-
 
 // MQTT client management
 bool AlarmTrigger::connectMQTTClient(const MQTTAlarmConfig& config) {
@@ -553,26 +549,26 @@ bool AlarmTrigger::connectMQTTClient(const MQTTAlarmConfig& config) {
         if (m_mqttClient->connect(config.client_id, config.username, config.password)) {
             m_mqttConnected.store(true);
             m_currentMQTTConfig = config;
-            std::cout << "[AlarmTrigger] Connected to MQTT broker: " << config.broker
-                      << ":" << config.port << std::endl;
+            LOG_INFO() << "[AlarmTrigger] Connected to MQTT broker: " << config.broker
+                      << ":" << config.port;
             return true;
         } else {
-            std::cerr << "[AlarmTrigger] Failed to connect to MQTT broker: "
-                      << m_mqttClient->getLastError() << std::endl;
+            LOG_ERROR() << "[AlarmTrigger] Failed to connect to MQTT broker: "
+                      << m_mqttClient->getLastError();
             return false;
         }
 #else
         // TODO: Implement Paho MQTT C++ client connection
-        std::cerr << "[AlarmTrigger] Paho MQTT C++ client not yet implemented" << std::endl;
+        LOG_ERROR() << "[AlarmTrigger] Paho MQTT C++ client not yet implemented";
         return false;
 #endif
 
     } catch (const std::exception& e) {
-        std::cerr << "[AlarmTrigger] MQTT connection error: " << e.what() << std::endl;
+        LOG_ERROR() << "[AlarmTrigger] MQTT connection error: " << e.what();
         return false;
     }
 #else
-    std::cerr << "[AlarmTrigger] MQTT support not compiled" << std::endl;
+    LOG_ERROR() << "[AlarmTrigger] MQTT support not compiled";
     return false;
 #endif
 }
@@ -583,7 +579,7 @@ void AlarmTrigger::disconnectMQTTClient() {
         m_mqttClient->disconnect();
         m_mqttClient.reset();
         m_mqttConnected.store(false);
-        std::cout << "[AlarmTrigger] Disconnected from MQTT broker" << std::endl;
+        LOG_INFO() << "[AlarmTrigger] Disconnected from MQTT broker";
     }
 #endif
 }
@@ -591,18 +587,18 @@ void AlarmTrigger::disconnectMQTTClient() {
 bool AlarmTrigger::publishMQTTMessage(const std::string& topic, const std::string& payload, int qos, bool retain) {
 #ifdef HAVE_MQTT
     if (!m_mqttClient || !m_mqttConnected.load()) {
-        std::cerr << "[AlarmTrigger] MQTT client not connected" << std::endl;
+        LOG_ERROR() << "[AlarmTrigger] MQTT client not connected";
         return false;
     }
 
     try {
         return m_mqttClient->publish(topic, payload, qos, retain);
     } catch (const std::exception& e) {
-        std::cerr << "[AlarmTrigger] MQTT publish error: " << e.what() << std::endl;
+        LOG_ERROR() << "[AlarmTrigger] MQTT publish error: " << e.what();
         return false;
     }
 #else
-    std::cerr << "[AlarmTrigger] MQTT support not compiled" << std::endl;
+    LOG_ERROR() << "[AlarmTrigger] MQTT support not compiled";
     return false;
 #endif
 }
@@ -651,11 +647,11 @@ DeliveryResult AlarmTrigger::deliverHttpAlarm(const AlarmPayload& payload, const
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
 
     if (success) {
-        std::cout << "[AlarmTrigger] HTTP alarm delivered to: " << config.httpConfig.url
-                  << " (" << duration.count() << "ms)" << std::endl;
+        LOG_INFO() << "[AlarmTrigger] HTTP alarm delivered to: " << config.httpConfig.url
+                  << " (" << duration.count() << "ms)";
         return DeliveryResult(config.id, AlarmMethod::HTTP_POST, true, duration);
     } else {
-        std::cerr << "[AlarmTrigger] Failed to deliver HTTP alarm to: " << config.httpConfig.url << std::endl;
+        LOG_ERROR() << "[AlarmTrigger] Failed to deliver HTTP alarm to: " << config.httpConfig.url;
         return DeliveryResult(config.id, AlarmMethod::HTTP_POST, false, duration, "HTTP delivery failed");
     }
 }
@@ -684,9 +680,9 @@ DeliveryResult AlarmTrigger::deliverWebSocketAlarm(const AlarmPayload& payload, 
     auto endTime = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
 
-    std::cout << "[AlarmTrigger] WebSocket alarm broadcasted to "
+    LOG_INFO() << "[AlarmTrigger] WebSocket alarm broadcasted to "
               << m_webSocketServer->getConnectionCount() << " clients ("
-              << duration.count() << "ms)" << std::endl;
+              << duration.count() << "ms)";
 
     return DeliveryResult(config.id, AlarmMethod::WEBSOCKET, true, duration);
 #else
@@ -734,9 +730,9 @@ DeliveryResult AlarmTrigger::deliverMQTTAlarm(const AlarmPayload& payload, const
     auto endTime = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
 
-    std::cout << "[AlarmTrigger] MQTT alarm published to " << config.mqttConfig.broker
+    LOG_INFO() << "[AlarmTrigger] MQTT alarm published to " << config.mqttConfig.broker
               << " topic: " << config.mqttConfig.topic << " (QoS " << config.mqttConfig.qos
-              << ", " << duration.count() << "ms)" << std::endl;
+              << ", " << duration.count() << "ms)";
 
     return DeliveryResult(config.id, AlarmMethod::MQTT, true, duration);
 #else
@@ -804,7 +800,7 @@ std::vector<AlarmRoutingResult> AlarmTrigger::getRecentRoutingResults(size_t cou
 void AlarmTrigger::clearRoutingHistory() {
     std::lock_guard<std::mutex> lock(m_routingHistoryMutex);
     m_routingHistory.clear();
-    std::cout << "[AlarmTrigger] Routing history cleared" << std::endl;
+    LOG_INFO() << "[AlarmTrigger] Routing history cleared";
 }
 
 // Performance monitoring methods
