@@ -17,15 +17,17 @@
 #include <algorithm>
 #include <fstream>
 
+#include "../core/Logger.h"
+using namespace AISecurityVision;
 APIService::APIService(int port) : m_port(port), m_httpServer(std::make_unique<httplib::Server>()), m_onvifManager(std::make_unique<ONVIFManager>()) {
-    std::cout << "[APIService] Initializing API service on port " << port << std::endl;
+    LOG_INFO() << "[APIService] Initializing API service on port " << port;
 
     // Initialize ONVIF manager
     if (!m_onvifManager->initialize()) {
-        std::cerr << "[APIService] Warning: Failed to initialize ONVIF manager: "
-                  << m_onvifManager->getLastError() << std::endl;
+        LOG_ERROR() << "[APIService] Warning: Failed to initialize ONVIF manager: "
+                  << m_onvifManager->getLastError();
     } else {
-        std::cout << "[APIService] ONVIF discovery manager initialized" << std::endl;
+        LOG_INFO() << "[APIService] ONVIF discovery manager initialized";
     }
 
     // Setup HTTP routes
@@ -38,7 +40,7 @@ APIService::~APIService() {
 
 bool APIService::start() {
     if (m_running.load()) {
-        std::cout << "[APIService] Service already running" << std::endl;
+        LOG_INFO() << "[APIService] Service already running";
         return true;
     }
 
@@ -49,11 +51,11 @@ bool APIService::start() {
         // Give the server a moment to start
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-        std::cout << "[APIService] API service started on port " << m_port << std::endl;
+        LOG_INFO() << "[APIService] API service started on port " << m_port;
         return true;
 
     } catch (const std::exception& e) {
-        std::cerr << "[APIService] Failed to start: " << e.what() << std::endl;
+        LOG_ERROR() << "[APIService] Failed to start: " << e.what();
         m_running.store(false);
         return false;
     }
@@ -64,7 +66,7 @@ void APIService::stop() {
         return;
     }
 
-    std::cout << "[APIService] Stopping API service..." << std::endl;
+    LOG_INFO() << "[APIService] Stopping API service...";
 
     m_running.store(false);
 
@@ -77,7 +79,7 @@ void APIService::stop() {
         m_serverThread.join();
     }
 
-    std::cout << "[APIService] API service stopped" << std::endl;
+    LOG_INFO() << "[APIService] API service stopped";
 }
 
 bool APIService::isRunning() const {
@@ -93,30 +95,30 @@ int APIService::getPort() const {
 }
 
 void APIService::serverThread() {
-    std::cout << "[APIService] Server thread started on port " << m_port << std::endl;
+    LOG_INFO() << "[APIService] Server thread started on port " << m_port;
 
     try {
         // Start the HTTP server
         if (!m_httpServer->listen("0.0.0.0", m_port)) {
-            std::cerr << "[APIService] Failed to start HTTP server on port " << m_port << std::endl;
+            LOG_ERROR() << "[APIService] Failed to start HTTP server on port " << m_port;
             m_running.store(false);
             return;
         }
     } catch (const std::exception& e) {
-        std::cerr << "[APIService] HTTP server error: " << e.what() << std::endl;
+        LOG_ERROR() << "[APIService] HTTP server error: " << e.what();
         m_running.store(false);
     }
 
-    std::cout << "[APIService] Server thread stopped" << std::endl;
+    LOG_INFO() << "[APIService] Server thread stopped";
 }
 
 void APIService::setupRoutes() {
     if (!m_httpServer) {
-        std::cerr << "[APIService] HTTP server not initialized" << std::endl;
+        LOG_ERROR() << "[APIService] HTTP server not initialized";
         return;
     }
 
-    std::cout << "[APIService] Setting up HTTP routes..." << std::endl;
+    LOG_INFO() << "[APIService] Setting up HTTP routes...";
 
     // System endpoints
     m_httpServer->Get("/api/system/status", [this](const httplib::Request& req, httplib::Response& res) {
@@ -319,6 +321,57 @@ void APIService::setupRoutes() {
         res.set_content(response, "application/json");
     });
 
+    // Frontend compatibility endpoints
+    m_httpServer->Get("/api/alerts", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handleGetAlerts("", response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Get("/api/system/info", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handleGetSystemInfo("", response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Get("/api/cameras", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handleGetCameras("", response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Get("/api/recordings", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handleGetRecordings("", response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Get("/api/detection/config", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handleGetDetectionConfig("", response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
     // ROI management endpoints - Task 68
     m_httpServer->Post("/api/rois", [this](const httplib::Request& req, httplib::Response& res) {
         std::string response;
@@ -468,7 +521,7 @@ void APIService::setupRoutes() {
         }
     });
 
-    std::cout << "[APIService] HTTP routes configured successfully" << std::endl;
+    LOG_INFO() << "[APIService] HTTP routes configured successfully";
 }
 
 void APIService::handleGetStatus(const std::string& request, std::string& response) {
@@ -549,7 +602,7 @@ void APIService::handlePostVideoSource(const std::string& request, std::string& 
                  << "}";
 
             response = createJsonResponse(json.str(), 201);
-            std::cout << "[APIService] Added video source: " << id << " (" << protocol << ")" << std::endl;
+            LOG_INFO() << "[APIService] Added video source: " << id << " (" << protocol << ")";
         } else {
             response = createErrorResponse("Failed to add video source. Check if ID already exists or maximum limit reached.", 409);
         }
@@ -638,8 +691,8 @@ void APIService::handlePostRecordStart(const std::string& request, std::string& 
 
         response = createJsonResponse(json.str());
 
-        std::cout << "[APIService] Manual recording started for camera: " << cameraId
-                  << ", duration: " << duration << "s" << std::endl;
+        LOG_INFO() << "[APIService] Manual recording started for camera: " << cameraId
+                  << ", duration: " << duration << "s";
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to start recording: " + std::string(e.what()), 500);
@@ -675,7 +728,7 @@ void APIService::handlePostRecordStop(const std::string& request, std::string& r
 
         response = createJsonResponse(json.str());
 
-        std::cout << "[APIService] Manual recording stopped for camera: " << cameraId << std::endl;
+        LOG_INFO() << "[APIService] Manual recording stopped for camera: " << cameraId;
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to stop recording: " + std::string(e.what()), 500);
@@ -717,8 +770,8 @@ void APIService::handlePostRecordConfig(const std::string& request, std::string&
 
         response = createJsonResponse(json.str());
 
-        std::cout << "[APIService] Recording configuration updated: pre=" << preEventDuration
-                  << "s, post=" << postEventDuration << "s" << std::endl;
+        LOG_INFO() << "[APIService] Recording configuration updated: pre=" << preEventDuration
+                  << "s, post=" << postEventDuration << "s";
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to update config: " + std::string(e.what()), 500);
@@ -1119,7 +1172,7 @@ void APIService::handlePostStreamConfig(const std::string& request, std::string&
 
         response = createJsonResponse(json.str());
 
-        std::cout << "[APIService] Configured " << protocol << " streaming for camera: " << cameraId << std::endl;
+        LOG_INFO() << "[APIService] Configured " << protocol << " streaming for camera: " << cameraId;
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to configure streaming: " + std::string(e.what()), 500);
@@ -1207,7 +1260,7 @@ void APIService::handlePostStreamStart(const std::string& request, std::string& 
 
         response = createJsonResponse(json.str());
 
-        std::cout << "[APIService] Started streaming for camera: " << cameraId << std::endl;
+        LOG_INFO() << "[APIService] Started streaming for camera: " << cameraId;
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to start streaming: " + std::string(e.what()), 500);
@@ -1246,7 +1299,7 @@ void APIService::handlePostStreamStop(const std::string& request, std::string& r
 
         response = createJsonResponse(json.str());
 
-        std::cout << "[APIService] Stopped streaming for camera: " << cameraId << std::endl;
+        LOG_INFO() << "[APIService] Stopped streaming for camera: " << cameraId;
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to stop streaming: " + std::string(e.what()), 500);
@@ -1397,8 +1450,8 @@ void APIService::handlePostRules(const std::string& request, std::string& respon
 
         response = createJsonResponse(json.str(), 201);
 
-        std::cout << "[APIService] Created intrusion rule: " << rule.id
-                  << " with ROI: " << rule.roi.id << std::endl;
+        LOG_INFO() << "[APIService] Created intrusion rule: " << rule.id
+                  << " with ROI: " << rule.roi.id;
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to create rule: " + std::string(e.what()), 500);
@@ -1554,7 +1607,7 @@ void APIService::handlePutRule(const std::string& request, std::string& response
 
         response = createJsonResponse(json.str());
 
-        std::cout << "[APIService] Updated intrusion rule: " << rule.id << std::endl;
+        LOG_INFO() << "[APIService] Updated intrusion rule: " << rule.id;
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to update rule: " + std::string(e.what()), 500);
@@ -1597,7 +1650,7 @@ void APIService::handleDeleteRule(const std::string& request, std::string& respo
 
         response = createJsonResponse(json.str());
 
-        std::cout << "[APIService] Deleted intrusion rule: " << ruleId << std::endl;
+        LOG_INFO() << "[APIService] Deleted intrusion rule: " << ruleId;
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to delete rule: " + std::string(e.what()), 500);
@@ -1727,7 +1780,7 @@ void APIService::handlePostROIs(const std::string& request, std::string& respons
         auto pipeline = taskManager.getPipeline(cameraId);
         if (pipeline) {
             pipeline->addROI(roi);
-            std::cout << "[APIService] Added ROI to active pipeline: " << cameraId << std::endl;
+            LOG_INFO() << "[APIService] Added ROI to active pipeline: " << cameraId;
         }
 
         std::ostringstream json;
@@ -1753,7 +1806,7 @@ void APIService::handlePostROIs(const std::string& request, std::string& respons
 
         response = createJsonResponse(json.str(), 201);
 
-        std::cout << "[APIService] Created ROI: " << roi.id << " (" << roi.name << ") for camera: " << cameraId << std::endl;
+        LOG_INFO() << "[APIService] Created ROI: " << roi.id << " (" << roi.name << ") for camera: " << cameraId;
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to create ROI: " + std::string(e.what()), 500);
@@ -1808,8 +1861,8 @@ void APIService::handleGetROIs(const std::string& cameraId, std::string& respons
 
         response = createJsonResponse(json.str());
 
-        std::cout << "[APIService] Retrieved " << rois.size() << " ROIs"
-                  << (cameraId.empty() ? "" : " for camera: " + cameraId) << std::endl;
+        LOG_INFO() << "[APIService] Retrieved " << rois.size() << " ROIs"
+                  << (cameraId.empty() ? "" : " for camera: " + cameraId);
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to get ROIs: " + std::string(e.what()), 500);
@@ -1859,7 +1912,7 @@ void APIService::handleGetROI(const std::string& request, std::string& response,
 
         response = createJsonResponse(json.str());
 
-        std::cout << "[APIService] Retrieved ROI: " << roiId << std::endl;
+        LOG_INFO() << "[APIService] Retrieved ROI: " << roiId;
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to get ROI: " + std::string(e.what()), 500);
@@ -2003,7 +2056,7 @@ void APIService::handlePutROI(const std::string& request, std::string& response,
             // Remove old ROI and add updated one
             pipeline->removeROI(roiId);
             pipeline->addROI(roi);
-            std::cout << "[APIService] Updated ROI in active pipeline: " << cameraId << std::endl;
+            LOG_INFO() << "[APIService] Updated ROI in active pipeline: " << cameraId;
         }
 
         std::ostringstream json;
@@ -2029,7 +2082,7 @@ void APIService::handlePutROI(const std::string& request, std::string& response,
 
         response = createJsonResponse(json.str());
 
-        std::cout << "[APIService] Updated ROI: " << roiId << " (" << roi.name << ") for camera: " << cameraId << std::endl;
+        LOG_INFO() << "[APIService] Updated ROI: " << roiId << " (" << roi.name << ") for camera: " << cameraId;
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to update ROI: " + std::string(e.what()), 500);
@@ -2067,7 +2120,7 @@ void APIService::handleDeleteROI(const std::string& request, std::string& respon
         auto pipeline = taskManager.getPipeline(existingROI.camera_id);
         if (pipeline) {
             pipeline->removeROI(roiId);
-            std::cout << "[APIService] Removed ROI from active pipeline: " << existingROI.camera_id << std::endl;
+            LOG_INFO() << "[APIService] Removed ROI from active pipeline: " << existingROI.camera_id;
         }
 
         std::ostringstream json;
@@ -2080,7 +2133,7 @@ void APIService::handleDeleteROI(const std::string& request, std::string& respon
 
         response = createJsonResponse(json.str());
 
-        std::cout << "[APIService] Deleted ROI: " << roiId << " from camera: " << existingROI.camera_id << std::endl;
+        LOG_INFO() << "[APIService] Deleted ROI: " << roiId << " from camera: " << existingROI.camera_id;
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to delete ROI: " + std::string(e.what()), 500);
@@ -2419,10 +2472,10 @@ void APIService::handlePostBulkROIs(const std::string& request, std::string& res
 
             response = createJsonResponse(json.str(), 200);
 
-            std::cout << "[APIService] Bulk ROI operations completed successfully: "
+            LOG_INFO() << "[APIService] Bulk ROI operations completed successfully: "
                       << roisToInsert.size() << " created, "
                       << roisToUpdate.size() << " updated, "
-                      << roisToDelete.size() << " deleted" << std::endl;
+                      << roisToDelete.size() << " deleted";
 
         } else {
             // Rollback transaction
@@ -2430,7 +2483,7 @@ void APIService::handlePostBulkROIs(const std::string& request, std::string& res
 
             response = createErrorResponse("Bulk operation failed: " + transactionError + ". All changes have been rolled back.", 500);
 
-            std::cout << "[APIService] Bulk ROI operation failed and rolled back: " << transactionError << std::endl;
+            LOG_ERROR() << "[APIService] Bulk ROI operation failed and rolled back: " << transactionError;
         }
 
     } catch (const std::exception& e) {
@@ -2541,7 +2594,7 @@ bool APIService::deserializeROI(const std::string& json, ROI& roi) {
         return !roi.id.empty() && !roi.name.empty();
 
     } catch (const std::exception& e) {
-        std::cerr << "[APIService] Failed to deserialize ROI: " << e.what() << std::endl;
+        LOG_ERROR() << "[APIService] Failed to deserialize ROI: " << e.what();
         return false;
     }
 }
@@ -2570,7 +2623,7 @@ bool APIService::deserializeIntrusionRule(const std::string& json, IntrusionRule
         return !rule.id.empty() && !rule.roi.id.empty();
 
     } catch (const std::exception& e) {
-        std::cerr << "[APIService] Failed to deserialize IntrusionRule: " << e.what() << std::endl;
+        LOG_ERROR() << "[APIService] Failed to deserialize IntrusionRule: " << e.what();
         return false;
     }
 }
@@ -2700,7 +2753,7 @@ void APIService::handleGetDiscoverDevices(const std::string& request, std::strin
             return;
         }
 
-        std::cout << "[APIService] Starting ONVIF device discovery..." << std::endl;
+        LOG_INFO() << "[APIService] Starting ONVIF device discovery...";
 
         // Perform network scan for ONVIF devices
         auto devices = m_onvifManager->scanNetwork(5000); // 5 second timeout
@@ -2738,7 +2791,7 @@ void APIService::handleGetDiscoverDevices(const std::string& request, std::strin
 
         response = createJsonResponse(json.str());
 
-        std::cout << "[APIService] ONVIF discovery completed. Found " << devices.size() << " devices" << std::endl;
+        LOG_INFO() << "[APIService] ONVIF discovery completed. Found " << devices.size() << " devices";
 
     } catch (const std::exception& e) {
         response = createErrorResponse("ONVIF discovery failed: " + std::string(e.what()), 500);
@@ -2772,8 +2825,8 @@ void APIService::handlePostAddDiscoveredDevice(const std::string& request, std::
 
         // Test authentication if credentials are provided
         if (!username.empty()) {
-            std::cout << "[APIService] Testing authentication for device: " << device->ipAddress
-                      << " with username: " << username << std::endl;
+            LOG_INFO() << "[APIService] Testing authentication for device: " << device->ipAddress
+                      << " with username: " << username;
 
             // Get the discovery instance to test authentication
             auto discoveryInstance = std::make_unique<ONVIFDiscovery>();
@@ -2788,7 +2841,7 @@ void APIService::handlePostAddDiscoveredDevice(const std::string& request, std::
                 return;
             }
 
-            std::cout << "[APIService] Authentication successful for device: " << device->ipAddress << std::endl;
+            LOG_INFO() << "[APIService] Authentication successful for device: " << device->ipAddress;
 
             // If this is just a test, return success without configuring
             if (testOnly == "true") {
@@ -2835,8 +2888,8 @@ void APIService::handlePostAddDiscoveredDevice(const std::string& request, std::
 
         response = createJsonResponse(json.str(), 201);
 
-        std::cout << "[APIService] Added ONVIF device as video source: " << device->uuid
-                  << " (" << device->name << ")" << std::endl;
+        LOG_INFO() << "[APIService] Added ONVIF device as video source: " << device->uuid
+                  << " (" << device->name << ")";
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to add discovered device: " + std::string(e.what()), 500);
@@ -2918,7 +2971,7 @@ void APIService::handlePostFaceAdd(const httplib::Request& request, std::string&
         // Create faces directory if it doesn't exist
         std::string facesDir = "faces";
         if (system(("mkdir -p " + facesDir).c_str()) != 0) {
-            std::cerr << "[APIService] Warning: Could not create faces directory" << std::endl;
+            LOG_WARN() << "[APIService] Warning: Could not create faces directory";
         }
 
         // Generate unique filename
@@ -2935,7 +2988,7 @@ void APIService::handlePostFaceAdd(const httplib::Request& request, std::string&
         outFile.write(imageFile.content.data(), imageFile.content.size());
         outFile.close();
 
-        std::cout << "[APIService] Saved face image: " << imagePath << std::endl;
+        LOG_INFO() << "[APIService] Saved face image: " << imagePath;
 
         // Extract face embedding using face recognition module
         std::vector<uchar> imageData(imageFile.content.begin(), imageFile.content.end());
@@ -2946,15 +2999,15 @@ void APIService::handlePostFaceAdd(const httplib::Request& request, std::string&
             FaceRecognizer faceRecognizer;
             if (faceRecognizer.initialize()) {
                 embedding = faceRecognizer.extractFaceEmbedding(faceImage);
-                std::cout << "[APIService] Generated face embedding with " << embedding.size() << " dimensions" << std::endl;
+                LOG_INFO() << "[APIService] Generated face embedding with " << embedding.size() << " dimensions";
             } else {
-                std::cout << "[APIService] Warning: Face recognizer initialization failed, using dummy embedding" << std::endl;
+                LOG_ERROR() << "[APIService] Warning: Face recognizer initialization failed, using dummy embedding";
             }
         }
 
         // Fallback to dummy embedding if face recognition failed
         if (embedding.empty()) {
-            std::cout << "[APIService] Using dummy embedding as fallback" << std::endl;
+            LOG_INFO() << "[APIService] Using dummy embedding as fallback";
             for (int i = 0; i < 128; i++) {
                 embedding.push_back(static_cast<float>(rand()) / RAND_MAX);
             }
@@ -2993,8 +3046,8 @@ void APIService::handlePostFaceAdd(const httplib::Request& request, std::string&
 
         response = createJsonResponse(json.str(), 201);
 
-        std::cout << "[APIService] Face added successfully: " << name
-                  << " (ID: " << faceId << ")" << std::endl;
+        LOG_INFO() << "[APIService] Face added successfully: " << name
+                  << " (ID: " << faceId << ")";
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to add face: " + std::string(e.what()), 500);
@@ -3037,7 +3090,7 @@ void APIService::handleGetFaces(const std::string& request, std::string& respons
 
         response = createJsonResponse(json.str());
 
-        std::cout << "[APIService] Retrieved " << faces.size() << " faces" << std::endl;
+        LOG_INFO() << "[APIService] Retrieved " << faces.size() << " faces";
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to get faces: " + std::string(e.what()), 500);
@@ -3078,9 +3131,9 @@ void APIService::handleDeleteFace(const std::string& request, std::string& respo
         // Try to delete the image file (optional - don't fail if it doesn't exist)
         if (!face.image_path.empty()) {
             if (remove(face.image_path.c_str()) == 0) {
-                std::cout << "[APIService] Deleted face image: " << face.image_path << std::endl;
+                LOG_INFO() << "[APIService] Deleted face image: " << face.image_path;
             } else {
-                std::cout << "[APIService] Warning: Could not delete face image: " << face.image_path << std::endl;
+                LOG_WARN() << "[APIService] Warning: Could not delete face image: " << face.image_path;
             }
         }
 
@@ -3095,8 +3148,8 @@ void APIService::handleDeleteFace(const std::string& request, std::string& respo
 
         response = createJsonResponse(json.str(), 204);
 
-        std::cout << "[APIService] Face deleted successfully: " << face.name
-                  << " (ID: " << id << ")" << std::endl;
+        LOG_INFO() << "[APIService] Face deleted successfully: " << face.name
+                  << " (ID: " << id << ")";
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to delete face: " + std::string(e.what()), 500);
@@ -3144,7 +3197,7 @@ void APIService::handlePostFaceVerify(const httplib::Request& request, std::stri
             }
         }
 
-        std::cout << "[APIService] Face verification request with threshold: " << threshold << std::endl;
+        LOG_INFO() << "[APIService] Face verification request with threshold: " << threshold;
 
         // Create database manager instance
         DatabaseManager db;
@@ -3160,7 +3213,7 @@ void APIService::handlePostFaceVerify(const httplib::Request& request, std::stri
             return;
         }
 
-        std::cout << "[APIService] Found " << registeredFaces.size() << " registered faces for verification" << std::endl;
+        LOG_INFO() << "[APIService] Found " << registeredFaces.size() << " registered faces for verification";
 
         // Convert image data to OpenCV Mat
         std::vector<uchar> imageData(imageFile.content.begin(), imageFile.content.end());
@@ -3171,7 +3224,7 @@ void APIService::handlePostFaceVerify(const httplib::Request& request, std::stri
             return;
         }
 
-        std::cout << "[APIService] Decoded input image: " << inputImage.cols << "x" << inputImage.rows << std::endl;
+        LOG_INFO() << "[APIService] Decoded input image: " << inputImage.cols << "x" << inputImage.rows;
 
         // Initialize face recognizer
         FaceRecognizer faceRecognizer;
@@ -3209,8 +3262,8 @@ void APIService::handlePostFaceVerify(const httplib::Request& request, std::stri
 
         response = createJsonResponse(json.str(), 200);
 
-        std::cout << "[APIService] Face verification completed: " << verificationResults.size()
-                  << " matches found above threshold " << threshold << std::endl;
+        LOG_INFO() << "[APIService] Face verification completed: " << verificationResults.size()
+                  << " matches found above threshold " << threshold;
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Face verification failed: " + std::string(e.what()), 500);
@@ -3401,8 +3454,8 @@ void APIService::handlePostAlarmConfig(const std::string& request, std::string& 
 
         response = createJsonResponse(json.str(), 201);
 
-        std::cout << "[APIService] Created alarm config: " << config.id
-                  << " (method: " << method << ")" << std::endl;
+        LOG_INFO() << "[APIService] Created alarm config: " << config.id
+                  << " (method: " << method << ")";
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to create alarm config: " + std::string(e.what()), 500);
@@ -3621,7 +3674,7 @@ void APIService::handlePutAlarmConfig(const std::string& request, std::string& r
 
         response = createJsonResponse(json.str());
 
-        std::cout << "[APIService] Updated alarm config: " << configId << std::endl;
+        LOG_INFO() << "[APIService] Updated alarm config: " << configId;
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to update alarm config: " + std::string(e.what()), 500);
@@ -3651,7 +3704,7 @@ void APIService::handleDeleteAlarmConfig(const std::string& request, std::string
 
         response = createJsonResponse(json.str(), 204);
 
-        std::cout << "[APIService] Deleted alarm config: " << configId << std::endl;
+        LOG_INFO() << "[APIService] Deleted alarm config: " << configId;
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to delete alarm config: " + std::string(e.what()), 500);
@@ -3693,8 +3746,8 @@ void APIService::handlePostTestAlarm(const std::string& request, std::string& re
 
         response = createJsonResponse(json.str());
 
-        std::cout << "[APIService] Test alarm triggered: " << eventType
-                  << " for camera: " << cameraId << std::endl;
+        LOG_INFO() << "[APIService] Test alarm triggered: " << eventType
+                  << " for camera: " << cameraId;
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to trigger test alarm: " + std::string(e.what()), 500);
@@ -3815,8 +3868,8 @@ void APIService::handlePostReIDConfig(const std::string& request, std::string& r
 
         response = createJsonResponse(json.str());
 
-        std::cout << "[APIService] ReID configuration updated: enabled=" << enabled
-                  << ", threshold=" << threshold << ", pipelines=" << updatedPipelines << std::endl;
+        LOG_INFO() << "[APIService] ReID configuration updated: enabled=" << enabled
+                  << ", threshold=" << threshold << ", pipelines=" << updatedPipelines;
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to update ReID config: " + std::string(e.what()), 500);
@@ -3915,8 +3968,8 @@ void APIService::handlePutReIDThreshold(const std::string& request, std::string&
 
         response = createJsonResponse(json.str());
 
-        std::cout << "[APIService] ReID similarity threshold updated to " << threshold
-                  << " for " << updatedPipelines << " pipelines" << std::endl;
+        LOG_INFO() << "[APIService] ReID similarity threshold updated to " << threshold
+                  << " for " << updatedPipelines << " pipelines";
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to update ReID threshold: " + std::string(e.what()), 500);
@@ -3992,6 +4045,149 @@ void APIService::handleGetReIDStatus(const std::string& request, std::string& re
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to get ReID status: " + std::string(e.what()), 500);
+    }
+}
+
+// Frontend compatibility handlers implementation
+void APIService::handleGetAlerts(const std::string& request, std::string& response) {
+    try {
+        // Return empty alerts list for now - can be extended later
+        std::ostringstream json;
+        json << "{"
+             << "\"alerts\":[],"
+             << "\"total\":0,"
+             << "\"page\":1,"
+             << "\"per_page\":20,"
+             << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+        LOG_INFO() << "[APIService] Returned alerts list (empty)";
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to get alerts: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handleGetSystemInfo(const std::string& request, std::string& response) {
+    try {
+        TaskManager& taskManager = TaskManager::getInstance();
+
+        std::ostringstream json;
+        json << "{"
+             << "\"system_name\":\"AI Security Vision System\","
+             << "\"version\":\"1.0.0\","
+             << "\"build_date\":\"" << __DATE__ << " " << __TIME__ << "\","
+             << "\"platform\":\"RK3588 Ubuntu\","
+             << "\"cpu_cores\":" << std::thread::hardware_concurrency() << ","
+             << "\"memory_total\":\"8GB\","
+             << "\"gpu_info\":\"" << taskManager.getGpuMemoryUsage() << "\","
+             << "\"uptime_seconds\":0,"
+             << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+        LOG_INFO() << "[APIService] Returned system info";
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to get system info: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handleGetCameras(const std::string& request, std::string& response) {
+    try {
+        TaskManager& taskManager = TaskManager::getInstance();
+        auto activePipelines = taskManager.getActivePipelines();
+
+        std::ostringstream json;
+        json << "{"
+             << "\"cameras\":[";
+
+        for (size_t i = 0; i < activePipelines.size(); ++i) {
+            if (i > 0) json << ",";
+
+            const auto& pipelineId = activePipelines[i];
+            auto pipeline = taskManager.getPipeline(pipelineId);
+
+            std::string status = "active";
+            std::string name = pipelineId;
+            std::string url = "unknown";
+
+            if (pipeline) {
+                auto source = pipeline->getSource();
+                name = source.name;
+                url = source.url;
+            }
+
+            json << "{"
+                 << "\"id\":\"" << pipelineId << "\","
+                 << "\"name\":\"" << name << "\","
+                 << "\"url\":\"" << url << "\","
+                 << "\"status\":\"" << status << "\","
+                 << "\"enabled\":true,"
+                 << "\"created_at\":\"" << getCurrentTimestamp() << "\""
+                 << "}";
+        }
+
+        json << "],"
+             << "\"total\":" << activePipelines.size() << ","
+             << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+        LOG_INFO() << "[APIService] Returned cameras list (" << activePipelines.size() << " cameras)";
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to get cameras: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handleGetRecordings(const std::string& request, std::string& response) {
+    try {
+        // Return empty recordings list for now - can be extended later
+        std::ostringstream json;
+        json << "{"
+             << "\"recordings\":[],"
+             << "\"total\":0,"
+             << "\"page\":1,"
+             << "\"per_page\":20,"
+             << "\"total_size\":0,"
+             << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+        LOG_INFO() << "[APIService] Returned recordings list (empty)";
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to get recordings: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handleGetDetectionConfig(const std::string& request, std::string& response) {
+    try {
+        TaskManager& taskManager = TaskManager::getInstance();
+
+        std::ostringstream json;
+        json << "{"
+             << "\"detection_enabled\":true,"
+             << "\"confidence_threshold\":0.5,"
+             << "\"nms_threshold\":0.4,"
+             << "\"max_detections\":100,"
+             << "\"classes_enabled\":[\"person\",\"car\",\"truck\",\"bicycle\",\"motorcycle\"],"
+             << "\"model_type\":\"yolov8n\","
+             << "\"model_format\":\"rknn\","
+             << "\"inference_device\":\"npu\","
+             << "\"batch_size\":1,"
+             << "\"input_size\":[640,640],"
+             << "\"active_pipelines\":" << taskManager.getActivePipelineCount() << ","
+             << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+        LOG_INFO() << "[APIService] Returned detection config";
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to get detection config: " + std::string(e.what()), 500);
     }
 }
 

@@ -124,3 +124,81 @@ gmon.out
 
 # Static analysis
 cppcheck-result.xml
+
+# Frontend (Vue.js/Node.js)
+web-ui/node_modules/
+web-ui/dist/
+web-ui/.nuxt/
+web-ui/.output/
+web-ui/.vite/
+web-ui/.env.local
+web-ui/.env.*.local
+web-ui/npm-debug.log*
+web-ui/yarn-debug.log*
+web-ui/yarn-error.log*
+web-ui/pnpm-debug.log*
+web-ui/lerna-debug.log*
+web-ui/.pnpm-debug.log*
+
+# Runtime data
+web-ui/pids
+web-ui/*.pid
+web-ui/*.seed
+web-ui/*.pid.lock
+
+# Coverage directory used by tools like istanbul
+web-ui/coverage/
+web-ui/*.lcov
+
+# nyc test coverage
+web-ui/.nyc_output
+
+# Dependency directories
+web-ui/jspm_packages/
+
+# TypeScript cache
+web-ui/*.tsbuildinfo
+
+# Optional npm cache directory
+web-ui/.npm
+
+# Optional eslint cache
+web-ui/.eslintcache
+
+# Optional stylelint cache
+web-ui/.stylelintcache
+
+# Microbundle cache
+web-ui/.rpt2_cache/
+web-ui/.rts2_cache_cjs/
+web-ui/.rts2_cache_es/
+web-ui/.rts2_cache_umd/
+
+# Optional REPL history
+web-ui/.node_repl_history
+
+# Output of 'npm pack'
+web-ui/*.tgz
+
+# Yarn Integrity file
+web-ui/.yarn-integrity
+
+# parcel-bundler cache (https://parceljs.org/)
+web-ui/.cache
+web-ui/.parcel-cache
+
+# Next.js build output
+web-ui/.next
+
+# Nuxt.js build / generate output
+web-ui/.nuxt
+web-ui/dist
+
+# Storybook build outputs
+web-ui/.out
+web-ui/.storybook-out
+web-ui/storybook-static
+
+# Temporary folders
+web-ui/tmp/
+web-ui/temp/

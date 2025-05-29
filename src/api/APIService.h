@@ -130,6 +130,13 @@ private:
     void handlePostTestAlarm(const std::string& request, std::string& response);
     void handleGetAlarmStatus(const std::string& request, std::string& response);
 
+    // Frontend compatibility handlers
+    void handleGetAlerts(const std::string& request, std::string& response);
+    void handleGetSystemInfo(const std::string& request, std::string& response);
+    void handleGetCameras(const std::string& request, std::string& response);
+    void handleGetRecordings(const std::string& request, std::string& response);
+    void handleGetDetectionConfig(const std::string& request, std::string& response);
+
     // Task 75: Cross-camera tracking handlers
     void handleGetCrossCameraTracks(const std::string& request, std::string& response);
     void handleGetCrossCameraConfig(const std::string& request, std::string& response);
