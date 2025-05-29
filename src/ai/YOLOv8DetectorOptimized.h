@@ -126,6 +126,17 @@ private:
      */
     std::vector<Detection> postprocessRKNNResultsOptimized(rknn_output* outputs, rknn_tensor_attr* output_attrs, uint32_t n_output, const cv::Size& originalSize);
 
+    /**
+     * @brief Optimized RKNN post-processing with letterbox correction
+     * @param outputs RKNN output data
+     * @param output_attrs Output attributes
+     * @param n_output Number of outputs
+     * @param originalSize Original image size
+     * @param letterbox Letterbox transformation info
+     * @return Detection results
+     */
+    std::vector<Detection> postprocessRKNNResultsOptimizedWithLetterbox(rknn_output* outputs, rknn_tensor_attr* output_attrs, uint32_t n_output, const cv::Size& originalSize, const LetterboxInfo& letterbox);
+
     // Thread pool management
     std::vector<std::thread> m_workers;
     std::queue<std::unique_ptr<InferenceTask>> m_taskQueue;

@@ -352,6 +352,12 @@ add_executable(${PROJECT_NAME}
     ${SOURCES}
 )
 
+# Ensure we create an executable, not a shared library
+set_target_properties(${PROJECT_NAME} PROPERTIES
+    POSITION_INDEPENDENT_CODE OFF
+    ENABLE_EXPORTS OFF
+)
+
 # Link libraries
 set(LINK_LIBRARIES ${OpenCV_LIBS} pthread dl)
 

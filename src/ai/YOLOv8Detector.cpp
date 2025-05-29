@@ -23,8 +23,8 @@ YOLOv8Detector::YOLOv8Detector()
     , m_stream(nullptr)
     , m_inputBuffer(nullptr)
     , m_outputBuffer(nullptr)
-    , m_confidenceThreshold(0.5f)
-    , m_nmsThreshold(0.4f)
+    , m_confidenceThreshold(0.8f)  // Increased to 0.8 to drastically reduce false positives
+    , m_nmsThreshold(0.2f)  // Reduced to 0.2 for very aggressive NMS filtering
     , m_initialized(false)
     , m_inputWidth(640)
     , m_inputHeight(640)
@@ -853,6 +853,8 @@ std::vector<YOLOv8Detector::Detection> YOLOv8Detector::postprocessRKNNResultsWit
     std::vector<int> classIds;
 
     // YOLOv8 RKNN output format: [84, 8400] (transposed)
+    // Add debugging for first few detections
+    int debugCount = 0;
     for (int i = 0; i < numBoxes; i++) {
         // Get bounding box coordinates (center_x, center_y, width, height)
         float centerX = output[i];                    // First row: center_x
@@ -869,6 +871,15 @@ std::vector<YOLOv8Detector::Detection> YOLOv8Detector::postprocessRKNNResultsWit
                 maxConf = conf;
                 maxClassId = c;
             }
+        }
+
+        // Debug first few high-confidence detections
+        if (maxConf > confThreshold && debugCount < 5) {
+            LOG_INFO() << "[YOLOv8Detector] Debug detection " << debugCount << ": "
+                      << "centerX=" << centerX << ", centerY=" << centerY
+                      << ", width=" << width << ", height=" << height
+                      << ", conf=" << maxConf << ", class=" << maxClassId;
+            debugCount++;
         }
 
         if (maxConf > confThreshold) {

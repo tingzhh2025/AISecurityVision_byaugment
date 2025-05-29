@@ -262,28 +262,13 @@ std::vector<YOLOv8DetectorOptimized::Detection> YOLOv8DetectorOptimized::detectW
     rknn_context ctx = m_rknnContexts[threadId];
     rknn_tensor_attr& inputAttrs = m_rknnInputAttrsVec[threadId];
 
-    // Preprocess image for RKNN (reuse thread-local buffer)
+    // Preprocess image for RKNN with letterbox (reuse thread-local buffer)
     cv::Mat& preprocessed = t_buffers.preprocessedFrame;
 
-    // Resize with proper aspect ratio handling (letterbox)
-    cv::resize(frame, preprocessed, cv::Size(m_inputWidth, m_inputHeight));
-
-    // Convert to RGB if needed (OpenCV uses BGR by default)
-    if (preprocessed.channels() == 3) {
-        cv::cvtColor(preprocessed, preprocessed, cv::COLOR_BGR2RGB);
-    }
-
-    // Convert based on model input type with proper normalization
-    if (inputAttrs.type == RKNN_TENSOR_FLOAT32) {
-        // Normalize to [0, 1] for float32 models
-        preprocessed.convertTo(preprocessed, CV_32F, 1.0/255.0);
-    } else if (inputAttrs.type == RKNN_TENSOR_FLOAT16) {
-        // Normalize to [0, 1] for float16 models (RKNN handles FP16 conversion)
-        preprocessed.convertTo(preprocessed, CV_32F, 1.0/255.0);
-    } else {
-        // Keep as uint8 for quantized models (no normalization needed)
-        preprocessed.convertTo(preprocessed, CV_8U);
-    }
+    // Use letterbox preprocessing for proper aspect ratio handling
+    // This already handles RGB conversion and normalization based on model type
+    LetterboxInfo letterbox;
+    preprocessed = preprocessImageForRKNNWithLetterbox(frame, letterbox);
 
     // Set input
     rknn_input inputs[1];
@@ -335,8 +320,8 @@ std::vector<YOLOv8DetectorOptimized::Detection> YOLOv8DetectorOptimized::detectW
         return detections;
     }
 
-    // Post-process results
-    detections = postprocessRKNNResultsOptimized(outputs.data(), output_attrs.data(), io_num.n_output, frame.size());
+    // Post-process results with letterbox correction
+    detections = postprocessRKNNResultsOptimizedWithLetterbox(outputs.data(), output_attrs.data(), io_num.n_output, frame.size(), letterbox);
 
     // Release outputs
     rknn_outputs_release(ctx, io_num.n_output, outputs.data());
@@ -353,6 +338,12 @@ std::vector<YOLOv8DetectorOptimized::Detection> YOLOv8DetectorOptimized::postpro
     // Use the official YOLOv8 RKNN post-processing from base class
     // This handles both single-output and multi-output formats correctly
     return YOLOv8Detector::postprocessRKNNResultsOfficial(outputs, output_attrs, n_output, originalSize);
+}
+
+std::vector<YOLOv8DetectorOptimized::Detection> YOLOv8DetectorOptimized::postprocessRKNNResultsOptimizedWithLetterbox(rknn_output* outputs, rknn_tensor_attr* output_attrs, uint32_t n_output, const cv::Size& originalSize, const LetterboxInfo& letterbox) {
+    // Use the official YOLOv8 RKNN post-processing with letterbox correction from base class
+    // This handles both single-output and multi-output formats correctly with proper aspect ratio handling
+    return YOLOv8Detector::postprocessRKNNResultsOfficialWithLetterbox(outputs, output_attrs, n_output, originalSize, letterbox);
 }
 
 YOLOv8DetectorOptimized::PerformanceStats YOLOv8DetectorOptimized::getPerformanceStats() const {
