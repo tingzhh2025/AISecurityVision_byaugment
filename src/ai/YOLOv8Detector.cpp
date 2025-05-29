@@ -496,8 +496,10 @@ std::vector<YOLOv8Detector::Detection> YOLOv8Detector::detectWithRKNN(const cv::
         return detections;
     }
 
-    // Preprocess image for RKNN
-    cv::Mat preprocessed = preprocessImageForRKNN(frame);
+    // Preprocess image for RKNN with letterbox
+    cv::Mat preprocessed;
+    LetterboxInfo letterbox;
+    preprocessed = preprocessImageForRKNNWithLetterbox(frame, letterbox);
 
     // Set input using stored attributes
     rknn_input inputs[1];
@@ -557,8 +559,8 @@ std::vector<YOLOv8Detector::Detection> YOLOv8Detector::detectWithRKNN(const cv::
         return detections;
     }
 
-    // Post-process results using official YOLOv8 algorithm
-    detections = postprocessRKNNResultsOfficial(outputs.data(), output_attrs.data(), io_num.n_output, frame.size());
+    // Post-process results using official YOLOv8 algorithm with letterbox correction
+    detections = postprocessRKNNResultsOfficialWithLetterbox(outputs.data(), output_attrs.data(), io_num.n_output, frame.size(), letterbox);
 
     // Release outputs
     rknn_outputs_release(m_rknnContext, io_num.n_output, outputs.data());
@@ -667,6 +669,47 @@ cv::Mat YOLOv8Detector::preprocessImageForRKNN(const cv::Mat& image) {
         LOG_INFO() << "[YOLOv8Detector] Preprocessed to UINT8 without normalization, size: "
                   << result.total() * result.elemSize() << " bytes";
     }
+
+    return result;
+}
+
+// RKNN preprocessing with letterbox (official method)
+cv::Mat YOLOv8Detector::preprocessImageForRKNNWithLetterbox(const cv::Mat& image, LetterboxInfo& letterbox) {
+    // Calculate letterbox parameters
+    float scale_x = static_cast<float>(m_inputWidth) / image.cols;
+    float scale_y = static_cast<float>(m_inputHeight) / image.rows;
+    letterbox.scale = std::min(scale_x, scale_y);
+
+    int new_width = static_cast<int>(image.cols * letterbox.scale);
+    int new_height = static_cast<int>(image.rows * letterbox.scale);
+
+    letterbox.x_pad = (m_inputWidth - new_width) / 2.0f;
+    letterbox.y_pad = (m_inputHeight - new_height) / 2.0f;
+
+    // Resize image maintaining aspect ratio
+    cv::Mat resized;
+    cv::resize(image, resized, cv::Size(new_width, new_height));
+
+    // Create letterbox image with padding (gray background)
+    cv::Mat letterboxed = cv::Mat::zeros(m_inputHeight, m_inputWidth, CV_8UC3);
+    letterboxed.setTo(cv::Scalar(114, 114, 114)); // Gray padding
+
+    // Copy resized image to center
+    cv::Rect roi(static_cast<int>(letterbox.x_pad), static_cast<int>(letterbox.y_pad), new_width, new_height);
+    resized.copyTo(letterboxed(roi));
+
+    // Convert to appropriate format based on model requirements
+    cv::Mat result;
+    if (m_rknnInputAttrs.type == RKNN_TENSOR_FLOAT32) {
+        letterboxed.convertTo(result, CV_32F, 1.0/255.0);
+    } else if (m_rknnInputAttrs.type == RKNN_TENSOR_FLOAT16) {
+        letterboxed.convertTo(result, CV_32F, 1.0/255.0);
+    } else {
+        letterboxed.convertTo(result, CV_8U);
+    }
+
+    LOG_INFO() << "[YOLOv8Detector] Letterbox preprocessing: scale=" << letterbox.scale
+              << ", x_pad=" << letterbox.x_pad << ", y_pad=" << letterbox.y_pad;
 
     return result;
 }
@@ -791,6 +834,136 @@ std::vector<YOLOv8Detector::Detection> YOLOv8Detector::postprocessRKNNResults(co
     }
 
     LOG_INFO() << "[YOLOv8Detector] RKNN post-processing: " << boxes.size()
+              << " raw detections -> " << detections.size() << " final detections";
+
+    return detections;
+}
+
+// RKNN post-processing with letterbox correction
+std::vector<YOLOv8Detector::Detection> YOLOv8Detector::postprocessRKNNResultsWithLetterbox(const float* output, const cv::Size& originalSize, const LetterboxInfo& letterbox) {
+    std::vector<Detection> detections;
+
+    // YOLOv8 output format: [1, 84, 8400] where 84 = 4 (bbox) + 80 (classes)
+    const int numClasses = 80;
+    const int numBoxes = 8400;
+    const float confThreshold = m_confidenceThreshold;
+
+    std::vector<cv::Rect> boxes;
+    std::vector<float> confidences;
+    std::vector<int> classIds;
+
+    // YOLOv8 RKNN output format: [84, 8400] (transposed)
+    for (int i = 0; i < numBoxes; i++) {
+        // Get bounding box coordinates (center_x, center_y, width, height)
+        float centerX = output[i];                    // First row: center_x
+        float centerY = output[numBoxes + i];         // Second row: center_y
+        float width = output[2 * numBoxes + i];       // Third row: width
+        float height = output[3 * numBoxes + i];      // Fourth row: height
+
+        // Find class with highest confidence
+        float maxConf = 0.0f;
+        int maxClassId = -1;
+        for (int c = 0; c < numClasses; c++) {
+            float conf = output[(4 + c) * numBoxes + i]; // Class confidence
+            if (conf > maxConf) {
+                maxConf = conf;
+                maxClassId = c;
+            }
+        }
+
+        if (maxConf > confThreshold) {
+            // Convert normalized coordinates to pixel coordinates in model space
+            centerX *= m_inputWidth;
+            centerY *= m_inputHeight;
+            width *= m_inputWidth;
+            height *= m_inputHeight;
+
+            // Apply letterbox correction to convert from model space to original image space
+            float x1 = centerX - width / 2 - letterbox.x_pad;
+            float y1 = centerY - height / 2 - letterbox.y_pad;
+            float x2 = centerX + width / 2 - letterbox.x_pad;
+            float y2 = centerY + height / 2 - letterbox.y_pad;
+
+            // Scale back to original image coordinates
+            x1 /= letterbox.scale;
+            y1 /= letterbox.scale;
+            x2 /= letterbox.scale;
+            y2 /= letterbox.scale;
+
+            // Convert to top-left corner format
+            int x = static_cast<int>(x1);
+            int y = static_cast<int>(y1);
+            int w = static_cast<int>(x2 - x1);
+            int h = static_cast<int>(y2 - y1);
+
+            // Clamp to original image boundaries
+            x = std::max(0, std::min(x, originalSize.width - 1));
+            y = std::max(0, std::min(y, originalSize.height - 1));
+            w = std::max(1, std::min(w, originalSize.width - x));
+            h = std::max(1, std::min(h, originalSize.height - y));
+
+            boxes.push_back(cv::Rect(x, y, w, h));
+            confidences.push_back(maxConf);
+            classIds.push_back(maxClassId);
+        }
+    }
+
+    // Apply Non-Maximum Suppression
+    std::vector<int> indices;
+#ifdef DISABLE_OPENCV_DNN
+    // Simple NMS implementation when DNN is disabled
+    indices.resize(boxes.size());
+    std::iota(indices.begin(), indices.end(), 0);
+
+    // Sort by confidence (highest first)
+    std::sort(indices.begin(), indices.end(), [&](int a, int b) {
+        return confidences[a] > confidences[b];
+    });
+
+    // Simple overlap-based filtering
+    std::vector<bool> suppressed(boxes.size(), false);
+    std::vector<int> finalIndices;
+
+    for (int i = 0; i < indices.size(); i++) {
+        int idx = indices[i];
+        if (suppressed[idx]) continue;
+
+        finalIndices.push_back(idx);
+
+        // Suppress overlapping boxes
+        for (int j = i + 1; j < indices.size(); j++) {
+            int jdx = indices[j];
+            if (suppressed[jdx]) continue;
+
+            cv::Rect intersection = boxes[idx] & boxes[jdx];
+            float iou = static_cast<float>(intersection.area()) /
+                       (boxes[idx].area() + boxes[jdx].area() - intersection.area());
+
+            if (iou > m_nmsThreshold) {
+                suppressed[jdx] = true;
+            }
+        }
+    }
+    indices = finalIndices;
+#else
+    cv::dnn::NMSBoxes(boxes, confidences, m_confidenceThreshold, m_nmsThreshold, indices);
+#endif
+
+    // Create final detections
+    for (int idx : indices) {
+        Detection detection;
+        detection.bbox = boxes[idx];
+        detection.confidence = confidences[idx];
+        detection.classId = classIds[idx];
+        if (detection.classId < static_cast<int>(m_classNames.size())) {
+            detection.className = m_classNames[detection.classId];
+        } else {
+            detection.className = "unknown";
+        }
+        detections.push_back(detection);
+    }
+
+    LOG_INFO() << "[YOLOv8Detector] RKNN letterbox post-processing: " << boxes.size()
               << " raw detections -> " << detections.size() << " final detections";
 
     return detections;
@@ -1229,4 +1402,101 @@ void YOLOv8Detector::quickSortIndiceInverse(std::vector<float>& input, int left,
     indices[low] = key_index;
     quickSortIndiceInverse(input, left, low - 1, indices);
     quickSortIndiceInverse(input, low + 1, right, indices);
+}
+
+// Official YOLOv8 RKNN post-processing with letterbox correction
+std::vector<YOLOv8Detector::Detection> YOLOv8Detector::postprocessRKNNResultsOfficialWithLetterbox(rknn_output* outputs, rknn_tensor_attr* output_attrs, uint32_t n_output, const cv::Size& originalSize, const LetterboxInfo& letterbox) {
+    std::vector<Detection> detections;
+
+    // Check if this is a single-output YOLOv8 model (common format)
+    if (n_output == 1) {
+        // Single output format: [1, 84, 8400] where 84 = 4(bbox) + 80(classes)
+        LOG_INFO() << "[YOLOv8Detector] Processing single-output YOLOv8 model with letterbox correction";
+
+        // Use the original working post-processing method but with letterbox correction
+        if (output_attrs[0].type == RKNN_TENSOR_INT8) {
+            // For quantized output, we need to convert to float first
+            LOG_INFO() << "[YOLOv8Detector] Converting quantized output to float";
+
+            // Get output size
+            size_t output_size = 1;
+            for (uint32_t i = 0; i < output_attrs[0].n_dims; i++) {
+                output_size *= output_attrs[0].dims[i];
+            }
+
+            // Convert quantized output to float
+            std::vector<float> float_output(output_size);
+            int8_t* int8_output = (int8_t*)outputs[0].buf;
+            float scale = output_attrs[0].scale;
+            int32_t zp = output_attrs[0].zp;
+
+            for (size_t i = 0; i < output_size; i++) {
+                float_output[i] = ((float)int8_output[i] - zp) * scale;
+            }
+
+            // Use letterbox-corrected post-processing
+            detections = postprocessRKNNResultsWithLetterbox(float_output.data(), originalSize, letterbox);
+        } else {
+            // Float output - use directly
+            LOG_INFO() << "[YOLOv8Detector] Output type: " << get_type_string(output_attrs[0].type);
+
+            // Safety check
+            if (outputs[0].buf == nullptr) {
+                LOG_ERROR() << "[YOLOv8Detector] Error: Output buffer is null!";
+                return detections;
+            }
+
+            // Handle different output types
+            if (output_attrs[0].type == RKNN_TENSOR_FLOAT16) {
+                // Convert FP16 to FP32 for processing
+                size_t num_elements = 1;
+                for (uint32_t i = 0; i < output_attrs[0].n_dims; i++) {
+                    num_elements *= output_attrs[0].dims[i];
+                }
+
+                std::vector<float> fp32_output(num_elements);
+                uint16_t* fp16_data = (uint16_t*)outputs[0].buf;
+
+                for (size_t i = 0; i < num_elements; i++) {
+                    uint16_t h = fp16_data[i];
+                    uint32_t sign = (h & 0x8000) << 16;
+                    uint32_t exp = (h & 0x7C00);
+                    uint32_t mant = (h & 0x03FF);
+
+                    if (exp == 0) {
+                        if (mant == 0) {
+                            fp32_output[i] = *reinterpret_cast<float*>(&sign);
+                        } else {
+                            exp = 0x38800000;
+                            while ((mant & 0x0400) == 0) {
+                                exp -= 0x00800000;
+                                mant <<= 1;
+                            }
+                            mant &= 0x03FF;
+                            uint32_t result = sign | exp | (mant << 13);
+                            fp32_output[i] = *reinterpret_cast<float*>(&result);
+                        }
+                    } else if (exp == 0x7C00) {
+                        uint32_t result = sign | 0x7F800000 | (mant << 13);
+                        fp32_output[i] = *reinterpret_cast<float*>(&result);
+                    } else {
+                        uint32_t result = sign | ((exp + 0x1C000) << 13) | (mant << 13);
+                        fp32_output[i] = *reinterpret_cast<float*>(&result);
+                    }
+                }
+
+                LOG_INFO() << "[YOLOv8Detector] Converted FP16 to FP32 with letterbox correction";
+                detections = postprocessRKNNResultsWithLetterbox(fp32_output.data(), originalSize, letterbox);
+            } else {
+                // Float32 output - use directly
+                detections = postprocessRKNNResultsWithLetterbox((float*)outputs[0].buf, originalSize, letterbox);
+            }
+        }
+
+        return detections;
+    }
+
+    // Multi-output format (3 branches with DFL) - use original method for now
+    // TODO: Add letterbox correction for multi-output format if needed
+    return postprocessRKNNResultsOfficial(outputs, output_attrs, n_output, originalSize);
 }

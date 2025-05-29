@@ -49,6 +49,13 @@ public:
         std::string className;
     };
 
+    // Letterbox information for coordinate transformation
+    struct LetterboxInfo {
+        float scale;
+        float x_pad;
+        float y_pad;
+    };
+
     YOLOv8Detector();
     ~YOLOv8Detector();
 
@@ -154,8 +161,11 @@ protected:
 
     // RKNN-specific helper methods
     cv::Mat preprocessImageForRKNN(const cv::Mat& image);
+    cv::Mat preprocessImageForRKNNWithLetterbox(const cv::Mat& image, LetterboxInfo& letterbox);
     std::vector<Detection> postprocessRKNNResults(const float* output, const cv::Size& originalSize);
+    std::vector<Detection> postprocessRKNNResultsWithLetterbox(const float* output, const cv::Size& originalSize, const LetterboxInfo& letterbox);
     std::vector<Detection> postprocessRKNNResultsOfficial(rknn_output* outputs, rknn_tensor_attr* output_attrs, uint32_t n_output, const cv::Size& originalSize);
+    std::vector<Detection> postprocessRKNNResultsOfficialWithLetterbox(rknn_output* outputs, rknn_tensor_attr* output_attrs, uint32_t n_output, const cv::Size& originalSize, const LetterboxInfo& letterbox);
 
 private:
 
