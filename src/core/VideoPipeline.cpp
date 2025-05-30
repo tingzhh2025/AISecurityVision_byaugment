@@ -50,13 +50,13 @@ bool VideoPipeline::initialize() {
         if (m_optimizedDetectionEnabled.load()) {
             LOG_INFO() << "[VideoPipeline] Initializing RKNN YOLOv8 detector...";
 
-            m_optimizedDetector = std::make_unique<YOLOv8RKNNDetector>();
+            m_optimizedDetector = std::make_unique<AISecurityVision::YOLOv8RKNNDetector>();
             if (!m_optimizedDetector->initialize("models/yolov8n.rknn")) {
                 LOG_ERROR() << "[VideoPipeline] Failed to initialize RKNN detector, falling back to standard detector";
                 m_optimizedDetectionEnabled.store(false);
 
-                // Fallback to standard detector using factory
-                m_detector = createYOLOv8Detector(InferenceBackend::AUTO);
+                // Fallback to standard detector - create RKNN detector directly
+                m_detector = std::make_unique<AISecurityVision::YOLOv8RKNNDetector>();
                 if (!m_detector || !m_detector->initialize("models/yolov8n.rknn")) {
                     handleError("Failed to initialize YOLOv8 detector");
                     return false;
@@ -64,12 +64,12 @@ bool VideoPipeline::initialize() {
             } else {
                 LOG_INFO() << "[VideoPipeline] RKNN YOLOv8 detector initialized successfully!";
                 // Enable multi-core NPU for better performance
-                auto rknnDetector = static_cast<YOLOv8RKNNDetector*>(m_optimizedDetector.get());
+                auto rknnDetector = static_cast<AISecurityVision::YOLOv8RKNNDetector*>(m_optimizedDetector.get());
                 rknnDetector->enableMultiCore(true);
                 rknnDetector->setZeroCopyMode(true);
             }
         } else {
-            m_detector = createYOLOv8Detector(InferenceBackend::AUTO);
+            m_detector = std::make_unique<AISecurityVision::YOLOv8RKNNDetector>();
             if (!m_detector || !m_detector->initialize("models/yolov8n.rknn")) {
                 handleError("Failed to initialize YOLOv8 detector");
                 return false;
@@ -267,7 +267,7 @@ void VideoPipeline::processFrame(const cv::Mat& frame, int64_t timestamp) {
 
     // Object detection - use optimized detector if available
     if (m_detectionEnabled.load()) {
-        std::vector<YOLOv8Detector::Detection> detectionResults;
+        std::vector<AISecurityVision::Detection> detectionResults;
 
         if (m_optimizedDetectionEnabled.load() && m_optimizedDetector) {
             // Use optimized RKNN detector
