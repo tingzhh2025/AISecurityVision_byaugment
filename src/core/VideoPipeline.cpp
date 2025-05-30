@@ -2,7 +2,7 @@
 #include "TaskManager.h"
 #include "../video/FFmpegDecoder.h"
 #include "../ai/YOLOv8Detector.h"
-#include "../ai/YOLOv8DetectorOptimized.h"
+#include "../ai/YOLOv8RKNNDetector.h"
 #include "../ai/ByteTracker.h"
 #include "../ai/ReIDExtractor.h"
 #include "../recognition/FaceRecognizer.h"
@@ -48,28 +48,29 @@ bool VideoPipeline::initialize() {
 
         // Initialize AI modules - choose between optimized and standard detector
         if (m_optimizedDetectionEnabled.load()) {
-            LOG_INFO() << "[VideoPipeline] Initializing optimized RKNN YOLOv8 detector with "
-                      << m_detectionThreads.load() << " threads...";
+            LOG_INFO() << "[VideoPipeline] Initializing RKNN YOLOv8 detector...";
 
-            m_optimizedDetector = std::make_unique<YOLOv8DetectorOptimized>(m_detectionThreads.load());
-            if (!m_optimizedDetector->initialize("models/yolov8n.rknn", InferenceBackend::RKNN)) {
-                LOG_ERROR() << "[VideoPipeline] Failed to initialize optimized detector, falling back to standard detector";
+            m_optimizedDetector = std::make_unique<YOLOv8RKNNDetector>();
+            if (!m_optimizedDetector->initialize("models/yolov8n.rknn")) {
+                LOG_ERROR() << "[VideoPipeline] Failed to initialize RKNN detector, falling back to standard detector";
                 m_optimizedDetectionEnabled.store(false);
 
-                // Fallback to standard detector
-                m_detector = std::make_unique<YOLOv8Detector>();
-                if (!m_detector->initialize()) {
+                // Fallback to standard detector using factory
+                m_detector = createYOLOv8Detector(InferenceBackend::AUTO);
+                if (!m_detector || !m_detector->initialize("models/yolov8n.rknn")) {
                     handleError("Failed to initialize YOLOv8 detector");
                     return false;
                 }
             } else {
-                LOG_INFO() << "[VideoPipeline] Optimized RKNN YOLOv8 detector initialized successfully!";
-                // Set optimized queue size for better performance
-                m_optimizedDetector->setMaxQueueSize(6);
+                LOG_INFO() << "[VideoPipeline] RKNN YOLOv8 detector initialized successfully!";
+                // Enable multi-core NPU for better performance
+                auto rknnDetector = static_cast<YOLOv8RKNNDetector*>(m_optimizedDetector.get());
+                rknnDetector->enableMultiCore(true);
+                rknnDetector->setZeroCopyMode(true);
             }
         } else {
-            m_detector = std::make_unique<YOLOv8Detector>();
-            if (!m_detector->initialize()) {
+            m_detector = createYOLOv8Detector(InferenceBackend::AUTO);
+            if (!m_detector || !m_detector->initialize("models/yolov8n.rknn")) {
                 handleError("Failed to initialize YOLOv8 detector");
                 return false;
             }
@@ -269,9 +270,8 @@ void VideoPipeline::processFrame(const cv::Mat& frame, int64_t timestamp) {
         std::vector<YOLOv8Detector::Detection> detectionResults;
 
         if (m_optimizedDetectionEnabled.load() && m_optimizedDetector) {
-            // Use optimized detector with async processing
-            auto future = m_optimizedDetector->detectAsync(frame);
-            detectionResults = future.get();
+            // Use optimized RKNN detector
+            detectionResults = m_optimizedDetector->detectObjects(frame);
         } else if (m_detector) {
             // Use standard detector
             detectionResults = m_detector->detectObjects(frame);

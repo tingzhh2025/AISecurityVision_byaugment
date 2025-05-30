@@ -1,190 +1,153 @@
-#pragma once
+/**
+ * @file YOLOv8Detector.h
+ * @brief YOLOv8 Object Detection Interface
+ *
+ * This file defines the base interface for YOLOv8 object detection.
+ * Based on the reference implementation from /userdata/source/source/yolov8_rknn
+ */
 
-#include <opencv2/opencv.hpp>
-#ifndef DISABLE_OPENCV_DNN
-#include <opencv2/dnn.hpp>
-#endif
+#ifndef YOLOV8_DETECTOR_H
+#define YOLOV8_DETECTOR_H
+
 #include <vector>
 #include <string>
 #include <memory>
+#include <opencv2/opencv.hpp>
 
-#ifdef HAVE_RKNN
-#include "rknn_api.h"
-#else
-// Forward declaration for RKNN when not available
-typedef void* rknn_context;
-#endif
+namespace AISecurityVision {
 
 /**
- * @brief YOLOv8 object detector with multiple backend support
- *
- * This class implements object detection using YOLOv8 model
- * with support for multiple inference backends:
- * - RKNN RKNPU2 (for RK3588 and other Rockchip NPUs)
- * - OpenCV DNN (CPU fallback)
- * - TensorRT (NVIDIA GPUs)
- *
- * Features:
- * - YOLOv8n/s/m/l/x model support
- * - RKNN NPU acceleration for RK3588
- * - TensorRT FP16/INT8 optimization
- * - Batch processing capability
- * - NMS post-processing
- * - COCO class detection
+ * @brief Inference backend types
  */
-
 enum class InferenceBackend {
-    AUTO,      // Automatically select best available backend
-    RKNN,      // RKNN NPU backend
-    OPENCV,    // OpenCV DNN backend
-    TENSORRT   // TensorRT backend
+    RKNN,
+    TENSORRT,
+    ONNX,
+    CPU
 };
+/**
+ * @brief Object detection result structure
+ */
+struct Detection {
+    cv::Rect bbox;          // Bounding box
+    float confidence;       // Detection confidence
+    int classId;           // Class ID
+    std::string className; // Class name
+
+    Detection() : confidence(0.0f), classId(-1) {}
+};
+
+/**
+ * @brief Letterbox information for maintaining aspect ratio
+ */
+struct LetterboxInfo {
+    float scale;    // Scale factor
+    float x_pad;    // X padding
+    float y_pad;    // Y padding
+
+    LetterboxInfo() : scale(1.0f), x_pad(0.0f), y_pad(0.0f) {}
+};
+
+/**
+ * @brief Base class for YOLOv8 object detection
+ *
+ * This class provides a common interface for different YOLOv8 implementations
+ * (RKNN, TensorRT, etc.) based on the reference implementation structure.
+ */
 class YOLOv8Detector {
 public:
-    // Detection result structure
-    struct Detection {
-        cv::Rect bbox;
-        float confidence;
-        int classId;
-        std::string className;
-    };
-
-    // Letterbox information for coordinate transformation
-    struct LetterboxInfo {
-        float scale;
-        float x_pad;
-        float y_pad;
-    };
-
     YOLOv8Detector();
-    ~YOLOv8Detector();
+    virtual ~YOLOv8Detector();
 
-    // Initialization
-    bool initialize(const std::string& modelPath = "../models/yolov8n.rknn",
-                   InferenceBackend backend = InferenceBackend::AUTO);
-    void cleanup();
-    bool isInitialized() const;
+    /**
+     * @brief Initialize the detector with a model file
+     * @param modelPath Path to the model file
+     * @return true if initialization successful, false otherwise
+     */
+    virtual bool initialize(const std::string& modelPath) = 0;
 
-    // Backend information
-    InferenceBackend getCurrentBackend() const;
-    std::string getBackendName() const;
+    /**
+     * @brief Detect objects in an image
+     * @param frame Input image
+     * @return Vector of detected objects
+     */
+    virtual std::vector<Detection> detectObjects(const cv::Mat& frame) = 0;
 
-    // Detection
-    std::vector<Detection> detectObjects(const cv::Mat& frame);
-    std::vector<cv::Rect> detect(const cv::Mat& frame); // Legacy interface
+    /**
+     * @brief Check if detector is initialized
+     * @return true if initialized, false otherwise
+     */
+    virtual bool isInitialized() const = 0;
 
-    // Batch processing
-    std::vector<std::vector<Detection>> detectBatch(const std::vector<cv::Mat>& frames);
+    /**
+     * @brief Get current inference backend
+     * @return Current backend type
+     */
+    virtual InferenceBackend getCurrentBackend() const = 0;
 
-    // Configuration
-    void setConfidenceThreshold(float threshold);
-    void setNMSThreshold(float threshold);
-    void setInputSize(int width, int height);
+    /**
+     * @brief Get backend name as string
+     * @return Backend name
+     */
+    virtual std::string getBackendName() const = 0;
+
+    /**
+     * @brief Cleanup resources
+     */
+    virtual void cleanup() = 0;
+
+    // Configuration methods
+    void setConfidenceThreshold(float threshold) { m_confidenceThreshold = threshold; }
+    void setNMSThreshold(float threshold) { m_nmsThreshold = threshold; }
+    void setClassNames(const std::vector<std::string>& classNames) { m_classNames = classNames; }
+
+    float getConfidenceThreshold() const { return m_confidenceThreshold; }
+    float getNMSThreshold() const { return m_nmsThreshold; }
+    const std::vector<std::string>& getClassNames() const { return m_classNames; }
+
+    // Performance metrics
+    double getLastInferenceTime() const { return m_inferenceTime; }
+    double getAverageInferenceTime() const;
+    size_t getDetectionCount() const { return m_detectionCount; }
 
     // Model information
-    std::vector<std::string> getClassNames() const;
-    cv::Size getInputSize() const;
-
-    // Statistics
-    double getInferenceTime() const;
-    size_t getDetectionCount() const;
-    float getAverageInferenceTime() const;
+    virtual std::vector<std::string> getModelInfo() const = 0;
 
 protected:
-    // Backend selection
-    InferenceBackend m_backend;
-    InferenceBackend m_requestedBackend;
-    InferenceBackend m_currentBackend;
-
-    // RKNN context and buffers
-    rknn_context m_rknnContext;
-    void* m_rknnInputBuffer;
-    void* m_rknnOutputBuffer;
-    rknn_tensor_attr m_rknnInputAttrs;
-
-    // OpenCV DNN network (only when DNN is enabled)
-#ifndef DISABLE_OPENCV_DNN
-    cv::dnn::Net m_dnnNet;
-#endif
-
-    // TensorRT engine and context
-    void* m_engine;
-    void* m_context;
-    void* m_stream;
-
-    // GPU memory buffers
-    void* m_inputBuffer;
-    void* m_outputBuffer;
-
-    // Configuration
-    float m_confidenceThreshold;
-    float m_nmsThreshold;
-    bool m_initialized;
-
     // Model parameters
-    int m_inputWidth;
-    int m_inputHeight;
-    int m_numClasses;
-    int m_maxDetections;
-    size_t m_inputSize;
-    size_t m_outputSize;
+    int m_inputWidth = 640;
+    int m_inputHeight = 640;
+    int m_numClasses = 80;
 
-    // Class names (COCO dataset)
+    // Detection parameters (matching reference implementation)
+    float m_confidenceThreshold = 0.25f;  // BOX_THRESH
+    float m_nmsThreshold = 0.45f;         // NMS_THRESH
+
+    // Class names (COCO dataset by default)
     std::vector<std::string> m_classNames;
 
-    // Statistics
-    mutable double m_inferenceTime;
-    mutable size_t m_detectionCount;
-    mutable std::vector<double> m_inferenceTimes;
+    // State
+    bool m_initialized = false;
+    InferenceBackend m_backend = InferenceBackend::CPU;
 
-    // Internal methods
-    bool loadModel(const std::string& modelPath);
-    bool setupTensorRT();
-    cv::Mat preprocessImage(const cv::Mat& image);
-    std::vector<Detection> postprocessResults(const float* output, const cv::Size& originalSize);
-    void initializeClassNames();
-    bool allocateBuffers();
-    void deallocateBuffers();
+    // Performance tracking
+    double m_inferenceTime = 0.0;
+    std::vector<double> m_inferenceTimes;
+    size_t m_detectionCount = 0;
 
-    // Backend-specific methods
-    bool initializeRKNN(const std::string& modelPath);
-    bool initializeOpenCV(const std::string& modelPath);
-    bool initializeTensorRT(const std::string& modelPath);
+    /**
+     * @brief Load COCO class names
+     * @param labelPath Path to label file
+     * @return true if successful, false otherwise
+     */
+    bool loadClassNames(const std::string& labelPath);
 
-    std::vector<Detection> detectWithRKNN(const cv::Mat& frame);
-    std::vector<Detection> detectWithOpenCV(const cv::Mat& frame);
-    std::vector<Detection> detectWithTensorRT(const cv::Mat& frame);
-
-    void cleanupRKNN();
-    void cleanupOpenCV();
-    void cleanupTensorRT();
-
-    // RKNN-specific helper methods
-    cv::Mat preprocessImageForRKNN(const cv::Mat& image);
-    cv::Mat preprocessImageForRKNNWithLetterbox(const cv::Mat& image, LetterboxInfo& letterbox);
-    std::vector<Detection> postprocessRKNNResults(const float* output, const cv::Size& originalSize);
-    std::vector<Detection> postprocessRKNNResultsWithLetterbox(const float* output, const cv::Size& originalSize, const LetterboxInfo& letterbox);
-    std::vector<Detection> postprocessRKNNResultsOfficial(rknn_output* outputs, rknn_tensor_attr* output_attrs, uint32_t n_output, const cv::Size& originalSize);
-    std::vector<Detection> postprocessRKNNResultsOfficialWithLetterbox(rknn_output* outputs, rknn_tensor_attr* output_attrs, uint32_t n_output, const cv::Size& originalSize, const LetterboxInfo& letterbox);
-
-private:
-
-    // Official YOLOv8 post-processing helper methods
-    int processRKNNOutput(int8_t* box_tensor, int32_t box_zp, float box_scale,
-                         int8_t* score_tensor, int32_t score_zp, float score_scale,
-                         int grid_h, int grid_w, int stride, int dfl_len,
-                         std::vector<float>& boxes, std::vector<float>& objProbs,
-                         std::vector<int>& classId, float threshold);
-    void computeDFL(float* tensor, int dfl_len, float* box);
-    float calculateOverlap(float xmin0, float ymin0, float xmax0, float ymax0,
-                          float xmin1, float ymin1, float xmax1, float ymax1);
-    void applyNMS(int validCount, std::vector<float>& outputLocations, std::vector<int>& classIds,
-                 std::vector<int>& order, int filterId, float threshold);
-    void quickSortIndiceInverse(std::vector<float>& input, int left, int right, std::vector<int>& indices);
-
-    // Simulation method for fallback
-    std::vector<Detection> simulateDetection(const cv::Mat& frame);
-
-    // Backend detection
-    InferenceBackend detectBestBackend() const;
+    /**
+     * @brief Initialize default COCO class names
+     */
+    void initializeDefaultClassNames();
 };
+
+} // namespace AISecurityVision
+
+#endif // YOLOV8_DETECTOR_H

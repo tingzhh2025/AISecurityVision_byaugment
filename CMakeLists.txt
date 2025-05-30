@@ -164,6 +164,54 @@ else()
     message(STATUS "RKNN API not found - NPU acceleration will not be available")
 endif()
 
+# Find TensorRT libraries for NVIDIA GPU support (optional)
+find_library(TENSORRT_LIBRARY nvinfer
+    PATHS
+    /usr/lib/x86_64-linux-gnu
+    /usr/lib/aarch64-linux-gnu
+    /usr/local/lib
+    /usr/local/cuda/lib64
+    /opt/tensorrt/lib
+    /usr/lib/tensorrt
+)
+
+find_library(TENSORRT_ONNX_LIBRARY nvonnxparser
+    PATHS
+    /usr/lib/x86_64-linux-gnu
+    /usr/lib/aarch64-linux-gnu
+    /usr/local/lib
+    /usr/local/cuda/lib64
+    /opt/tensorrt/lib
+    /usr/lib/tensorrt
+)
+
+find_path(TENSORRT_INCLUDE_DIR NvInfer.h
+    PATHS
+    /usr/include
+    /usr/local/include
+    /usr/local/cuda/include
+    /opt/tensorrt/include
+    /usr/include/tensorrt
+)
+
+if(TENSORRT_LIBRARY AND TENSORRT_ONNX_LIBRARY AND TENSORRT_INCLUDE_DIR)
+    set(TENSORRT_FOUND TRUE)
+    set(TENSORRT_LIBRARIES ${TENSORRT_LIBRARY} ${TENSORRT_ONNX_LIBRARY})
+    set(TENSORRT_INCLUDE_DIRS ${TENSORRT_INCLUDE_DIR})
+    message(STATUS "Found TensorRT: ${TENSORRT_LIBRARIES}")
+
+    # Also find CUDA runtime
+    find_package(CUDA QUIET)
+    if(CUDA_FOUND)
+        list(APPEND TENSORRT_LIBRARIES ${CUDA_LIBRARIES})
+        list(APPEND TENSORRT_INCLUDE_DIRS ${CUDA_INCLUDE_DIRS})
+        message(STATUS "Found CUDA: ${CUDA_LIBRARIES}")
+    endif()
+else()
+    set(TENSORRT_FOUND FALSE)
+    message(STATUS "TensorRT not found - GPU acceleration will not be available")
+endif()
+
 # Find libcurl for HTTP alarm delivery
 find_package(CURL REQUIRED)
 if(CURL_FOUND)
@@ -334,6 +382,9 @@ file(GLOB_RECURSE SOURCES
 # Remove LoggerExample.cpp from sources as it contains unimplemented features
 list(REMOVE_ITEM SOURCES "${CMAKE_SOURCE_DIR}/src/core/LoggerExample.cpp")
 
+# Remove YOLOv8DetectorExample.cpp from sources as it contains a main function
+list(REMOVE_ITEM SOURCES "${CMAKE_SOURCE_DIR}/src/ai/YOLOv8DetectorExample.cpp")
+
 # AI-only sources for simple tests
 file(GLOB AI_SOURCES
     "src/ai/YOLOv8Detector.cpp"
@@ -398,6 +449,13 @@ if(RKNN_FOUND)
     target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_RKNN)
 endif()
 
+# Add TensorRT if found
+if(TENSORRT_FOUND)
+    list(APPEND LINK_LIBRARIES ${TENSORRT_LIBRARIES})
+    include_directories(${TENSORRT_INCLUDE_DIRS})
+    target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_TENSORRT)
+endif()
+
 # Add libcurl
 if(CURL_FOUND)
     list(APPEND LINK_LIBRARIES ${CURL_LIBRARIES})
@@ -434,6 +492,28 @@ install(FILES scripts/convert_yolov8_to_rknn.py DESTINATION share/${PROJECT_NAME
         PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
 install(FILES docs/RKNN_SETUP_GUIDE.md DESTINATION share/${PROJECT_NAME}/docs)
 
+# Create YOLOv8 inference test program
+add_executable(yolov8_inference_test
+    tests/yolov8_inference_test.cpp
+    src/ai/YOLOv8Detector.cpp
+    src/ai/YOLOv8RKNNDetector.cpp
+    src/core/Logger.cpp
+)
+
+# Link libraries for test program
+target_link_libraries(yolov8_inference_test ${LINK_LIBRARIES})
+
+# Add compile definitions for test program
+if(RKNN_FOUND)
+    target_compile_definitions(yolov8_inference_test PRIVATE HAVE_RKNN)
+endif()
+
+if(TENSORRT_FOUND)
+    target_compile_definitions(yolov8_inference_test PRIVATE HAVE_TENSORRT)
+endif()
+
+target_compile_definitions(yolov8_inference_test PRIVATE DISABLE_OPENCV_DNN)
+
 # Print configuration summary
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
@@ -442,4 +522,17 @@ message(STATUS "SQLite3 found: ${SQLITE3_FOUND}")
 message(STATUS "FFmpeg found: ${LIBAV_FOUND}")
 message(STATUS "NVML found: ${NVML_FOUND}")
 message(STATUS "RKNN found: ${RKNN_FOUND}")
+message(STATUS "TensorRT found: ${TENSORRT_FOUND}")
 message(STATUS "libcurl found: ${CURL_FOUND}")
+message(STATUS "")
+message(STATUS "YOLOv8 Detector Backends Available:")
+if(RKNN_FOUND)
+    message(STATUS "  - RKNN NPU (RK3588): YES")
+else()
+    message(STATUS "  - RKNN NPU (RK3588): NO")
+endif()
+if(TENSORRT_FOUND)
+    message(STATUS "  - TensorRT GPU: YES")
+else()
+    message(STATUS "  - TensorRT GPU: NO")
+endif()

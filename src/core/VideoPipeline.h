@@ -11,7 +11,7 @@
 // Forward declarations
 class FFmpegDecoder;
 class YOLOv8Detector;
-class YOLOv8DetectorOptimized;
+class YOLOv8RKNNDetector;
 class ByteTracker;
 class ReIDExtractor;
 class FaceRecognizer;
@@ -137,7 +137,7 @@ private:
     // Processing modules
     std::unique_ptr<FFmpegDecoder> m_decoder;
     std::unique_ptr<YOLOv8Detector> m_detector;
-    std::unique_ptr<YOLOv8DetectorOptimized> m_optimizedDetector;
+    std::unique_ptr<YOLOv8RKNNDetector> m_optimizedDetector;
     std::unique_ptr<ByteTracker> m_tracker;
     std::unique_ptr<ReIDExtractor> m_reidExtractor;
     std::unique_ptr<FaceRecognizer> m_faceRecognizer;
