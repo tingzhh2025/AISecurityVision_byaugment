@@ -12,7 +12,7 @@ add_camera() {
 
     echo "Adding $name (ID: $id) on port $port..."
 
-    curl -X POST http://localhost:8080/api/sources \
+    curl --noproxy localhost,127.0.0.1 -X POST http://localhost:8080/api/cameras \
       -H "Content-Type: application/json" \
       -d "{
         \"id\": \"$id\",
@@ -31,18 +31,18 @@ add_camera() {
     sleep 1  # Small delay between requests
 }
 
-# Add 8 cameras - 4 from each IP address
-echo "=== Adding cameras from 192.168.1.3 ==="
+# Add 8 cameras - all using the working RTSP URL (192.168.1.3)
+echo "=== Adding cameras 1-4 (all using 192.168.1.3) ==="
 add_camera "camera_01" "RTSP Camera 1 (192.168.1.3)" "rtsp://admin:sharpi1688@192.168.1.3:554/1/1" 8161
 add_camera "camera_02" "RTSP Camera 2 (192.168.1.3)" "rtsp://admin:sharpi1688@192.168.1.3:554/1/1" 8162
 add_camera "camera_03" "RTSP Camera 3 (192.168.1.3)" "rtsp://admin:sharpi1688@192.168.1.3:554/1/1" 8163
 add_camera "camera_04" "RTSP Camera 4 (192.168.1.3)" "rtsp://admin:sharpi1688@192.168.1.3:554/1/1" 8164
 
-echo "=== Adding cameras from 192.168.1.2 ==="
-add_camera "camera_05" "RTSP Camera 5 (192.168.1.2)" "rtsp://admin:sharpi1688@192.168.1.2:554/1/1" 8165
-add_camera "camera_06" "RTSP Camera 6 (192.168.1.2)" "rtsp://admin:sharpi1688@192.168.1.2:554/1/1" 8166
-add_camera "camera_07" "RTSP Camera 7 (192.168.1.2)" "rtsp://admin:sharpi1688@192.168.1.2:554/1/1" 8167
-add_camera "camera_08" "RTSP Camera 8 (192.168.1.2)" "rtsp://admin:sharpi1688@192.168.1.2:554/1/1" 8168
+echo "=== Adding cameras 5-8 (all using 192.168.1.3) ==="
+add_camera "camera_05" "RTSP Camera 5 (192.168.1.3)" "rtsp://admin:sharpi1688@192.168.1.3:554/1/1" 8165
+add_camera "camera_06" "RTSP Camera 6 (192.168.1.3)" "rtsp://admin:sharpi1688@192.168.1.3:554/1/1" 8166
+add_camera "camera_07" "RTSP Camera 7 (192.168.1.3)" "rtsp://admin:sharpi1688@192.168.1.3:554/1/1" 8167
+add_camera "camera_08" "RTSP Camera 8 (192.168.1.3)" "rtsp://admin:sharpi1688@192.168.1.3:554/1/1" 8168
 
 echo ""
 echo "🎯 Stress Test Setup Complete!"
