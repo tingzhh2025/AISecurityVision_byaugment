@@ -41,21 +41,69 @@ export const useSystemStore = defineStore('system', () => {
       const response = await apiService.getCameras()
       let cameraList = response.data.cameras || []
 
-      // 临时修复：如果没有摄像头数据，添加测试摄像头
+      // 临时修复：如果没有摄像头数据，添加8路测试摄像头
       if (cameraList.length === 0) {
         cameraList = [
           {
             id: 'camera_01',
-            name: 'Real Camera 1',
-            url: 'rtsp://admin:sharpi1688@192.168.1.2:554/1/1',
+            name: 'RTSP Camera 1 (192.168.1.3)',
+            url: 'rtsp://admin:sharpi1688@192.168.1.3:554/1/1',
             status: 'online',
             enabled: true,
             created_at: new Date().toISOString()
           },
           {
             id: 'camera_02',
-            name: 'Real Camera 2',
+            name: 'RTSP Camera 2 (192.168.1.3)',
             url: 'rtsp://admin:sharpi1688@192.168.1.3:554/1/1',
+            status: 'online',
+            enabled: true,
+            created_at: new Date().toISOString()
+          },
+          {
+            id: 'camera_03',
+            name: 'RTSP Camera 3 (192.168.1.3)',
+            url: 'rtsp://admin:sharpi1688@192.168.1.3:554/1/1',
+            status: 'online',
+            enabled: true,
+            created_at: new Date().toISOString()
+          },
+          {
+            id: 'camera_04',
+            name: 'RTSP Camera 4 (192.168.1.3)',
+            url: 'rtsp://admin:sharpi1688@192.168.1.3:554/1/1',
+            status: 'online',
+            enabled: true,
+            created_at: new Date().toISOString()
+          },
+          {
+            id: 'camera_05',
+            name: 'RTSP Camera 5 (192.168.1.2)',
+            url: 'rtsp://admin:sharpi1688@192.168.1.2:554/1/1',
+            status: 'online',
+            enabled: true,
+            created_at: new Date().toISOString()
+          },
+          {
+            id: 'camera_06',
+            name: 'RTSP Camera 6 (192.168.1.2)',
+            url: 'rtsp://admin:sharpi1688@192.168.1.2:554/1/1',
+            status: 'online',
+            enabled: true,
+            created_at: new Date().toISOString()
+          },
+          {
+            id: 'camera_07',
+            name: 'RTSP Camera 7 (192.168.1.2)',
+            url: 'rtsp://admin:sharpi1688@192.168.1.2:554/1/1',
+            status: 'online',
+            enabled: true,
+            created_at: new Date().toISOString()
+          },
+          {
+            id: 'camera_08',
+            name: 'RTSP Camera 8 (192.168.1.2)',
+            url: 'rtsp://admin:sharpi1688@192.168.1.2:554/1/1',
             status: 'online',
             enabled: true,
             created_at: new Date().toISOString()
@@ -72,20 +120,68 @@ export const useSystemStore = defineStore('system', () => {
       cameras.value = cameraList
     } catch (error) {
       console.error('Failed to fetch cameras:', error)
-      // 如果API失败，使用默认摄像头数据
+      // 如果API失败，使用8路默认摄像头数据
       cameras.value = [
         {
           id: 'camera_01',
-          name: 'Real Camera 1',
-          url: 'rtsp://admin:sharpi1688@192.168.1.2:554/1/1',
+          name: 'RTSP Camera 1 (192.168.1.3)',
+          url: 'rtsp://admin:sharpi1688@192.168.1.3:554/1/1',
           status: 'online',
           enabled: true,
           created_at: new Date().toISOString()
         },
         {
           id: 'camera_02',
-          name: 'Real Camera 2',
+          name: 'RTSP Camera 2 (192.168.1.3)',
           url: 'rtsp://admin:sharpi1688@192.168.1.3:554/1/1',
+          status: 'online',
+          enabled: true,
+          created_at: new Date().toISOString()
+        },
+        {
+          id: 'camera_03',
+          name: 'RTSP Camera 3 (192.168.1.3)',
+          url: 'rtsp://admin:sharpi1688@192.168.1.3:554/1/1',
+          status: 'online',
+          enabled: true,
+          created_at: new Date().toISOString()
+        },
+        {
+          id: 'camera_04',
+          name: 'RTSP Camera 4 (192.168.1.3)',
+          url: 'rtsp://admin:sharpi1688@192.168.1.3:554/1/1',
+          status: 'online',
+          enabled: true,
+          created_at: new Date().toISOString()
+        },
+        {
+          id: 'camera_05',
+          name: 'RTSP Camera 5 (192.168.1.2)',
+          url: 'rtsp://admin:sharpi1688@192.168.1.2:554/1/1',
+          status: 'online',
+          enabled: true,
+          created_at: new Date().toISOString()
+        },
+        {
+          id: 'camera_06',
+          name: 'RTSP Camera 6 (192.168.1.2)',
+          url: 'rtsp://admin:sharpi1688@192.168.1.2:554/1/1',
+          status: 'online',
+          enabled: true,
+          created_at: new Date().toISOString()
+        },
+        {
+          id: 'camera_07',
+          name: 'RTSP Camera 7 (192.168.1.2)',
+          url: 'rtsp://admin:sharpi1688@192.168.1.2:554/1/1',
+          status: 'online',
+          enabled: true,
+          created_at: new Date().toISOString()
+        },
+        {
+          id: 'camera_08',
+          name: 'RTSP Camera 8 (192.168.1.2)',
+          url: 'rtsp://admin:sharpi1688@192.168.1.2:554/1/1',
           status: 'online',
           enabled: true,
           created_at: new Date().toISOString()

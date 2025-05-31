@@ -83,13 +83,18 @@ export const apiService = {
   // 实时视频流
   getStreamUrl: (cameraId) => {
     // 根据摄像头ID返回正确的MJPEG流地址
-    if (cameraId === 'camera_01') {
-      return 'http://localhost:8161/stream.mjpg'
-    } else if (cameraId === 'camera_02') {
-      return 'http://localhost:8162/stream.mjpg'
+    const streamMapping = {
+      'camera_01': 'http://localhost:8161/stream.mjpg',
+      'camera_02': 'http://localhost:8162/stream.mjpg',
+      'camera_03': 'http://localhost:8163/stream.mjpg',
+      'camera_04': 'http://localhost:8164/stream.mjpg',
+      'camera_05': 'http://localhost:8165/stream.mjpg',
+      'camera_06': 'http://localhost:8166/stream.mjpg',
+      'camera_07': 'http://localhost:8167/stream.mjpg',
+      'camera_08': 'http://localhost:8168/stream.mjpg'
     }
-    // 默认返回第一个摄像头的流
-    return 'http://localhost:8161/stream.mjpg'
+
+    return streamMapping[cameraId] || 'http://localhost:8161/stream.mjpg'
   },
 
   // 录像相关
