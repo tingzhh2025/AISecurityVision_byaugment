@@ -8,7 +8,10 @@ using namespace AISecurityVision;
 DatabaseManager::DatabaseManager()
     : m_db(nullptr), m_insertEventStmt(nullptr), m_insertFaceStmt(nullptr),
       m_insertPlateStmt(nullptr), m_insertROIStmt(nullptr), m_selectEventsStmt(nullptr),
-      m_selectFacesStmt(nullptr), m_selectPlatesStmt(nullptr), m_selectROIsStmt(nullptr) {
+      m_selectFacesStmt(nullptr), m_selectPlatesStmt(nullptr), m_selectROIsStmt(nullptr),
+      m_insertConfigStmt(nullptr), m_updateConfigStmt(nullptr), m_selectConfigStmt(nullptr),
+      m_deleteConfigStmt(nullptr), m_insertCameraConfigStmt(nullptr), m_updateCameraConfigStmt(nullptr),
+      m_selectCameraConfigStmt(nullptr), m_deleteCameraConfigStmt(nullptr) {
 }
 
 DatabaseManager::~DatabaseManager() {
@@ -113,6 +116,29 @@ bool DatabaseManager::createTables() {
         );
     )";
 
+    const char* createConfigTable = R"(
+        CREATE TABLE IF NOT EXISTS config (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category TEXT NOT NULL,
+            key TEXT NOT NULL,
+            value TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(category, key)
+        );
+    )";
+
+    const char* createCameraConfigTable = R"(
+        CREATE TABLE IF NOT EXISTS camera_config (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            camera_id TEXT NOT NULL UNIQUE,
+            config_json TEXT NOT NULL,
+            enabled BOOLEAN DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+    )";
+
     // Create indexes for better performance
     const char* createIndexes = R"(
         CREATE INDEX IF NOT EXISTS idx_events_camera_id ON events(camera_id);
@@ -124,6 +150,10 @@ bool DatabaseManager::createTables() {
         CREATE INDEX IF NOT EXISTS idx_rois_camera_id ON rois(camera_id);
         CREATE INDEX IF NOT EXISTS idx_rois_enabled ON rois(enabled);
         CREATE INDEX IF NOT EXISTS idx_rois_priority ON rois(priority);
+        CREATE INDEX IF NOT EXISTS idx_config_category ON config(category);
+        CREATE INDEX IF NOT EXISTS idx_config_key ON config(key);
+        CREATE INDEX IF NOT EXISTS idx_camera_config_camera_id ON camera_config(camera_id);
+        CREATE INDEX IF NOT EXISTS idx_camera_config_enabled ON camera_config(enabled);
     )";
 
     char* errMsg = nullptr;
@@ -149,6 +179,18 @@ bool DatabaseManager::createTables() {
 
     if (sqlite3_exec(m_db, createROIsTable, nullptr, nullptr, &errMsg) != SQLITE_OK) {
         m_lastError = "Failed to create rois table: " + std::string(errMsg);
+        sqlite3_free(errMsg);
+        return false;
+    }
+
+    if (sqlite3_exec(m_db, createConfigTable, nullptr, nullptr, &errMsg) != SQLITE_OK) {
+        m_lastError = "Failed to create config table: " + std::string(errMsg);
+        sqlite3_free(errMsg);
+        return false;
+    }
+
+    if (sqlite3_exec(m_db, createCameraConfigTable, nullptr, nullptr, &errMsg) != SQLITE_OK) {
+        m_lastError = "Failed to create camera_config table: " + std::string(errMsg);
         sqlite3_free(errMsg);
         return false;
     }
@@ -207,6 +249,64 @@ bool DatabaseManager::prepareStatements() {
         return false;
     }
 
+    // Prepare configuration statements
+    const char* insertConfigSql = R"(
+        INSERT OR REPLACE INTO config (category, key, value, updated_at)
+        VALUES (?, ?, ?, datetime('now'));
+    )";
+
+    if (sqlite3_prepare_v2(m_db, insertConfigSql, -1, &m_insertConfigStmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare insert config statement: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    const char* selectConfigSql = R"(
+        SELECT value FROM config WHERE category = ? AND key = ?;
+    )";
+
+    if (sqlite3_prepare_v2(m_db, selectConfigSql, -1, &m_selectConfigStmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare select config statement: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    const char* deleteConfigSql = R"(
+        DELETE FROM config WHERE category = ? AND (? = '' OR key = ?);
+    )";
+
+    if (sqlite3_prepare_v2(m_db, deleteConfigSql, -1, &m_deleteConfigStmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare delete config statement: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    // Prepare camera configuration statements
+    const char* insertCameraConfigSql = R"(
+        INSERT OR REPLACE INTO camera_config (camera_id, config_json, enabled, updated_at)
+        VALUES (?, ?, ?, datetime('now'));
+    )";
+
+    if (sqlite3_prepare_v2(m_db, insertCameraConfigSql, -1, &m_insertCameraConfigStmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare insert camera config statement: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    const char* selectCameraConfigSql = R"(
+        SELECT config_json FROM camera_config WHERE camera_id = ? AND enabled = 1;
+    )";
+
+    if (sqlite3_prepare_v2(m_db, selectCameraConfigSql, -1, &m_selectCameraConfigStmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare select camera config statement: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    const char* deleteCameraConfigSql = R"(
+        DELETE FROM camera_config WHERE camera_id = ?;
+    )";
+
+    if (sqlite3_prepare_v2(m_db, deleteCameraConfigSql, -1, &m_deleteCameraConfigStmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare delete camera config statement: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
     return true;
 }
 
@@ -242,6 +342,40 @@ void DatabaseManager::finalizeStatements() {
     if (m_selectROIsStmt) {
         sqlite3_finalize(m_selectROIsStmt);
         m_selectROIsStmt = nullptr;
+    }
+
+    // Finalize configuration statements
+    if (m_insertConfigStmt) {
+        sqlite3_finalize(m_insertConfigStmt);
+        m_insertConfigStmt = nullptr;
+    }
+    if (m_updateConfigStmt) {
+        sqlite3_finalize(m_updateConfigStmt);
+        m_updateConfigStmt = nullptr;
+    }
+    if (m_selectConfigStmt) {
+        sqlite3_finalize(m_selectConfigStmt);
+        m_selectConfigStmt = nullptr;
+    }
+    if (m_deleteConfigStmt) {
+        sqlite3_finalize(m_deleteConfigStmt);
+        m_deleteConfigStmt = nullptr;
+    }
+    if (m_insertCameraConfigStmt) {
+        sqlite3_finalize(m_insertCameraConfigStmt);
+        m_insertCameraConfigStmt = nullptr;
+    }
+    if (m_updateCameraConfigStmt) {
+        sqlite3_finalize(m_updateCameraConfigStmt);
+        m_updateCameraConfigStmt = nullptr;
+    }
+    if (m_selectCameraConfigStmt) {
+        sqlite3_finalize(m_selectCameraConfigStmt);
+        m_selectCameraConfigStmt = nullptr;
+    }
+    if (m_deleteCameraConfigStmt) {
+        sqlite3_finalize(m_deleteCameraConfigStmt);
+        m_deleteCameraConfigStmt = nullptr;
     }
 }
 
@@ -1021,6 +1155,213 @@ bool DatabaseManager::deleteROIsBulk(const std::vector<std::string>& roiIds) {
             // Error message is already set by deleteROI
             return false;
         }
+    }
+
+    return true;
+}
+
+// Configuration operations implementation
+bool DatabaseManager::saveConfig(const std::string& category, const std::string& key, const std::string& value) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_insertConfigStmt) {
+        m_lastError = "Insert config statement not prepared";
+        return false;
+    }
+
+    // Reset statement
+    sqlite3_reset(m_insertConfigStmt);
+
+    // Bind parameters
+    sqlite3_bind_text(m_insertConfigStmt, 1, category.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(m_insertConfigStmt, 2, key.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(m_insertConfigStmt, 3, value.c_str(), -1, SQLITE_STATIC);
+
+    // Execute
+    int rc = sqlite3_step(m_insertConfigStmt);
+    if (rc != SQLITE_DONE) {
+        m_lastError = "Failed to save config: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    return true;
+}
+
+std::string DatabaseManager::getConfig(const std::string& category, const std::string& key, const std::string& defaultValue) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_selectConfigStmt) {
+        m_lastError = "Select config statement not prepared";
+        return defaultValue;
+    }
+
+    // Reset statement
+    sqlite3_reset(m_selectConfigStmt);
+
+    // Bind parameters
+    sqlite3_bind_text(m_selectConfigStmt, 1, category.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(m_selectConfigStmt, 2, key.c_str(), -1, SQLITE_STATIC);
+
+    // Execute
+    if (sqlite3_step(m_selectConfigStmt) == SQLITE_ROW) {
+        const char* value = reinterpret_cast<const char*>(sqlite3_column_text(m_selectConfigStmt, 0));
+        if (value) {
+            return std::string(value);
+        }
+    }
+
+    return defaultValue;
+}
+
+bool DatabaseManager::deleteConfig(const std::string& category, const std::string& key) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_deleteConfigStmt) {
+        m_lastError = "Delete config statement not prepared";
+        return false;
+    }
+
+    // Reset statement
+    sqlite3_reset(m_deleteConfigStmt);
+
+    // Bind parameters
+    sqlite3_bind_text(m_deleteConfigStmt, 1, category.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(m_deleteConfigStmt, 2, key.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(m_deleteConfigStmt, 3, key.c_str(), -1, SQLITE_STATIC);
+
+    // Execute
+    int rc = sqlite3_step(m_deleteConfigStmt);
+    if (rc != SQLITE_DONE) {
+        m_lastError = "Failed to delete config: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    return true;
+}
+
+std::map<std::string, std::string> DatabaseManager::getAllConfigs(const std::string& category) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    std::map<std::string, std::string> configs;
+
+    std::string query = "SELECT key, value FROM config";
+    if (!category.empty()) {
+        query += " WHERE category = '" + category + "'";
+    }
+    query += " ORDER BY category, key";
+
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(m_db, query.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare select all configs query: " + std::string(sqlite3_errmsg(m_db));
+        return configs;
+    }
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        const char* key = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+        const char* value = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+
+        if (key && value) {
+            configs[std::string(key)] = std::string(value);
+        }
+    }
+
+    sqlite3_finalize(stmt);
+    return configs;
+}
+
+// Camera configuration operations implementation
+bool DatabaseManager::saveCameraConfig(const std::string& cameraId, const std::string& configJson) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_insertCameraConfigStmt) {
+        m_lastError = "Insert camera config statement not prepared";
+        return false;
+    }
+
+    // Reset statement
+    sqlite3_reset(m_insertCameraConfigStmt);
+
+    // Bind parameters
+    sqlite3_bind_text(m_insertCameraConfigStmt, 1, cameraId.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(m_insertCameraConfigStmt, 2, configJson.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int(m_insertCameraConfigStmt, 3, 1); // enabled = true
+
+    // Execute
+    int rc = sqlite3_step(m_insertCameraConfigStmt);
+    if (rc != SQLITE_DONE) {
+        m_lastError = "Failed to save camera config: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    return true;
+}
+
+std::string DatabaseManager::getCameraConfig(const std::string& cameraId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_selectCameraConfigStmt) {
+        m_lastError = "Select camera config statement not prepared";
+        return "";
+    }
+
+    // Reset statement
+    sqlite3_reset(m_selectCameraConfigStmt);
+
+    // Bind parameters
+    sqlite3_bind_text(m_selectCameraConfigStmt, 1, cameraId.c_str(), -1, SQLITE_STATIC);
+
+    // Execute
+    if (sqlite3_step(m_selectCameraConfigStmt) == SQLITE_ROW) {
+        const char* configJson = reinterpret_cast<const char*>(sqlite3_column_text(m_selectCameraConfigStmt, 0));
+        if (configJson) {
+            return std::string(configJson);
+        }
+    }
+
+    return "";
+}
+
+std::vector<std::string> DatabaseManager::getAllCameraIds() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    std::vector<std::string> cameraIds;
+
+    const char* query = "SELECT camera_id FROM camera_config WHERE enabled = 1 ORDER BY camera_id";
+
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(m_db, query, -1, &stmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare select camera ids query: " + std::string(sqlite3_errmsg(m_db));
+        return cameraIds;
+    }
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        const char* cameraId = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+        if (cameraId) {
+            cameraIds.push_back(std::string(cameraId));
+        }
+    }
+
+    sqlite3_finalize(stmt);
+    return cameraIds;
+}
+
+bool DatabaseManager::deleteCameraConfig(const std::string& cameraId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_deleteCameraConfigStmt) {
+        m_lastError = "Delete camera config statement not prepared";
+        return false;
+    }
+
+    // Reset statement
+    sqlite3_reset(m_deleteCameraConfigStmt);
+
+    // Bind parameters
+    sqlite3_bind_text(m_deleteCameraConfigStmt, 1, cameraId.c_str(), -1, SQLITE_STATIC);
+
+    // Execute
+    int rc = sqlite3_step(m_deleteCameraConfigStmt);
+    if (rc != SQLITE_DONE) {
+        m_lastError = "Failed to delete camera config: " + std::string(sqlite3_errmsg(m_db));
+        return false;
     }
 
     return true;

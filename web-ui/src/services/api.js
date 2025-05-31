@@ -71,6 +71,14 @@ export const apiService = {
   getSystemInfo: () => api.get('/system/info'),
   updateSystemConfig: (config) => api.put('/system/config', config),
 
+  // 配置管理相关
+  getSystemConfig: () => api.get('/system/config'),
+  saveSystemConfig: (config) => api.post('/system/config', config),
+  getCameraConfigs: () => api.get('/cameras/config'),
+  saveCameraConfig: (config) => api.post('/cameras/config', config),
+  deleteCameraConfig: (cameraId) => api.delete(`/cameras/config/${cameraId}`),
+  getConfigCategory: (category) => api.get(`/config/${category}`),
+
   // 摄像头相关
   getCameras: () => api.get('/cameras'),
   getCamera: (id) => api.get(`/cameras/${id}`),

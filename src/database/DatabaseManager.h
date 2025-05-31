@@ -6,6 +6,7 @@
 #include <memory>
 #include <mutex>
 #include <chrono>
+#include <map>
 
 /**
  * @brief Event record structure for database storage
@@ -163,6 +164,18 @@ public:
     bool updateROIsBulk(const std::vector<ROIRecord>& rois);
     bool deleteROIsBulk(const std::vector<std::string>& roiIds);
 
+    // Configuration operations
+    bool saveConfig(const std::string& category, const std::string& key, const std::string& value);
+    std::string getConfig(const std::string& category, const std::string& key, const std::string& defaultValue = "");
+    bool deleteConfig(const std::string& category, const std::string& key = "");
+    std::map<std::string, std::string> getAllConfigs(const std::string& category = "");
+
+    // Camera configuration operations
+    bool saveCameraConfig(const std::string& cameraId, const std::string& configJson);
+    std::string getCameraConfig(const std::string& cameraId);
+    std::vector<std::string> getAllCameraIds();
+    bool deleteCameraConfig(const std::string& cameraId);
+
     // Utility operations
     bool executeQuery(const std::string& query);
     int getLastInsertId();
@@ -198,4 +211,14 @@ private:
     sqlite3_stmt* m_selectFacesStmt;
     sqlite3_stmt* m_selectPlatesStmt;
     sqlite3_stmt* m_selectROIsStmt;
+
+    // Configuration prepared statements
+    sqlite3_stmt* m_insertConfigStmt;
+    sqlite3_stmt* m_updateConfigStmt;
+    sqlite3_stmt* m_selectConfigStmt;
+    sqlite3_stmt* m_deleteConfigStmt;
+    sqlite3_stmt* m_insertCameraConfigStmt;
+    sqlite3_stmt* m_updateCameraConfigStmt;
+    sqlite3_stmt* m_selectCameraConfigStmt;
+    sqlite3_stmt* m_deleteCameraConfigStmt;
 };

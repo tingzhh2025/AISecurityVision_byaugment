@@ -17,6 +17,9 @@
 #include <regex>
 #include <algorithm>
 #include <fstream>
+#include <thread>
+#include <map>
+#include <nlohmann/json.hpp>
 
 #include "../core/Logger.h"
 using namespace AISecurityVision;
@@ -500,6 +503,69 @@ void APIService::setupRoutes() {
         res.set_content(response, "application/json");
     });
 
+    // Configuration management endpoints
+    m_httpServer->Get("/api/system/config", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handleGetSystemConfig("", response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Post("/api/system/config", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handlePostSystemConfig(req.body, response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Get("/api/cameras/config", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handleGetCameraConfigs("", response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Post("/api/cameras/config", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handlePostCameraConfig(req.body, response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Delete(R"(/api/cameras/config/(.+))", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        std::string cameraId = req.matches[1].str();
+        handleDeleteCameraConfig(cameraId, response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Get(R"(/api/config/(.+))", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        std::string category = req.matches[1].str();
+        handleGetConfigCategory(category, response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
     // Web interface routes
     m_httpServer->Get("/", [this](const httplib::Request& req, httplib::Response& res) {
         std::string content = loadWebFile("web/templates/dashboard.html");
@@ -570,14 +636,22 @@ void APIService::handleGetStatus(const std::string& request, std::string& respon
 
 void APIService::handlePostVideoSource(const std::string& request, std::string& response) {
     try {
+        LOG_INFO() << "[APIService] POST /api/cameras request received";
+        LOG_INFO() << "[APIService] Request body: " << request;
+
         // Parse JSON request to extract video source parameters
         std::string id = parseJsonField(request, "id");
+        LOG_INFO() << "[APIService] Parsed id: '" << id << "'";
+
         std::string name = parseJsonField(request, "name");
         std::string url = parseJsonField(request, "url");
         std::string protocol = parseJsonField(request, "protocol");
+        std::string username = parseJsonField(request, "username");
+        std::string password = parseJsonField(request, "password");
         int width = parseJsonInt(request, "width", 1920);
         int height = parseJsonInt(request, "height", 1080);
         int fps = parseJsonInt(request, "fps", 25);
+        int mjpeg_port = parseJsonInt(request, "mjpeg_port", 8161);
         bool enabled = parseJsonBool(request, "enabled", true);
 
         // Validate required fields
@@ -600,39 +674,79 @@ void APIService::handlePostVideoSource(const std::string& request, std::string& 
             return;
         }
 
-        // Create VideoSource object
+        // Store camera configuration
+        CameraConfig cameraConfig;
+        cameraConfig.id = id;
+        cameraConfig.name = name.empty() ? id : name;
+        cameraConfig.url = url;
+        cameraConfig.protocol = protocol;
+        cameraConfig.username = username;
+        cameraConfig.password = password;
+        cameraConfig.width = width;
+        cameraConfig.height = height;
+        cameraConfig.fps = fps;
+        cameraConfig.mjpeg_port = mjpeg_port;
+        cameraConfig.enabled = enabled;
+
+        // Check if camera already exists
+        auto it = std::find_if(m_cameraConfigs.begin(), m_cameraConfigs.end(),
+                              [&id](const CameraConfig& config) { return config.id == id; });
+
+        if (it != m_cameraConfigs.end()) {
+            response = createErrorResponse("Camera with ID '" + id + "' already exists", 409);
+            return;
+        }
+
+        // Add to stored configurations
+        m_cameraConfigs.push_back(cameraConfig);
+
+        // Create VideoSource object for TaskManager
         VideoSource source;
         source.id = id;
-        source.name = name.empty() ? id : name;
+        source.name = cameraConfig.name;
         source.url = url;
         source.protocol = protocol;
+        source.username = username;
+        source.password = password;
         source.width = width;
         source.height = height;
         source.fps = fps;
+        source.mjpeg_port = mjpeg_port;
         source.enabled = enabled;
 
-        // Add to TaskManager
-        TaskManager& taskManager = TaskManager::getInstance();
-        if (taskManager.addVideoSource(source)) {
-            std::ostringstream json;
-            json << "{"
-                 << "\"status\":\"added\","
-                 << "\"id\":\"" << id << "\","
-                 << "\"name\":\"" << source.name << "\","
-                 << "\"url\":\"" << url << "\","
-                 << "\"protocol\":\"" << protocol << "\","
-                 << "\"width\":" << width << ","
-                 << "\"height\":" << height << ","
-                 << "\"fps\":" << fps << ","
-                 << "\"enabled\":" << (enabled ? "true" : "false") << ","
-                 << "\"added_at\":\"" << getCurrentTimestamp() << "\""
-                 << "}";
+        // Store configuration first, then try to start pipeline
+        bool taskManagerSuccess = false;
 
-            response = createJsonResponse(json.str(), 201);
-            LOG_INFO() << "[APIService] Added video source: " << id << " (" << protocol << ")";
-        } else {
-            response = createErrorResponse("Failed to add video source. Check if ID already exists or maximum limit reached.", 409);
-        }
+        // Try to add to TaskManager in a separate thread to avoid deadlock
+        std::thread([source]() {
+            try {
+                TaskManager& taskManager = TaskManager::getInstance();
+                taskManager.addVideoSource(source);
+                LOG_INFO() << "[APIService] Successfully started pipeline for: " << source.id;
+            } catch (const std::exception& e) {
+                LOG_ERROR() << "[APIService] Failed to start pipeline for " << source.id << ": " << e.what();
+            }
+        }).detach();
+
+        std::ostringstream json;
+        json << "{"
+             << "\"status\":\"" << (taskManagerSuccess ? "added" : "configured") << "\","
+             << "\"id\":\"" << id << "\","
+             << "\"name\":\"" << cameraConfig.name << "\","
+             << "\"url\":\"" << url << "\","
+             << "\"protocol\":\"" << protocol << "\","
+             << "\"username\":\"" << username << "\","
+             << "\"password\":\"" << password << "\","
+             << "\"width\":" << width << ","
+             << "\"height\":" << height << ","
+             << "\"fps\":" << fps << ","
+             << "\"mjpeg_port\":" << mjpeg_port << ","
+             << "\"enabled\":" << (enabled ? "true" : "false") << ","
+             << "\"added_at\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str(), 201);
+        LOG_INFO() << "[APIService] Added camera configuration: " << id << " (" << protocol << ")";
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to parse video source request: " + std::string(e.what()), 400);
@@ -966,22 +1080,37 @@ void APIService::handleGetSystemStats(const std::string& request, std::string& r
 
 // Utility functions
 std::string APIService::parseJsonField(const std::string& json, const std::string& field) {
-    // Simple JSON field extraction (not a full parser)
-    std::string searchStr = "\"" + field + "\":\"";
-    size_t start = json.find(searchStr);
+    // Simple JSON field extraction (handles multiline JSON)
+    std::string searchStr = "\"" + field + "\"";
+    size_t fieldPos = json.find(searchStr);
 
-    if (start == std::string::npos) {
+    if (fieldPos == std::string::npos) {
         return "";
     }
 
-    start += searchStr.length();
-    size_t end = json.find("\"", start);
-
-    if (end == std::string::npos) {
+    // Find the colon after the field name
+    size_t colonPos = json.find(":", fieldPos);
+    if (colonPos == std::string::npos) {
         return "";
     }
 
-    return json.substr(start, end - start);
+    // Skip whitespace after colon
+    size_t start = colonPos + 1;
+    while (start < json.length() && std::isspace(json[start])) {
+        start++;
+    }
+
+    // Check if value is quoted string
+    if (start < json.length() && json[start] == '"') {
+        start++; // Skip opening quote
+        size_t end = json.find("\"", start);
+        if (end == std::string::npos) {
+            return "";
+        }
+        return json.substr(start, end - start);
+    }
+
+    return "";
 }
 
 int APIService::parseJsonInt(const std::string& json, const std::string& field, int defaultValue) {
@@ -4123,51 +4252,40 @@ void APIService::handleGetSystemInfo(const std::string& request, std::string& re
 
 void APIService::handleGetCameras(const std::string& request, std::string& response) {
     try {
-        TaskManager& taskManager = TaskManager::getInstance();
-        auto activePipelines = taskManager.getActivePipelines();
-
+        // Return stored camera configurations to avoid deadlock
         std::ostringstream json;
         json << "{"
              << "\"cameras\":[";
 
-        for (size_t i = 0; i < activePipelines.size(); ++i) {
+        // Add stored cameras from configuration
+        for (size_t i = 0; i < m_cameraConfigs.size(); ++i) {
             if (i > 0) json << ",";
 
-            const auto& pipelineId = activePipelines[i];
-            auto pipeline = taskManager.getPipeline(pipelineId);
-
-            std::string status = "online";  // Changed from "active" to "online" for frontend compatibility
-            std::string name = pipelineId;
-            std::string url = "unknown";
-
-            if (pipeline) {
-                auto source = pipeline->getSource();
-                name = source.name;
-                url = source.url;
-
-                // Check if pipeline is running and processing frames to determine status
-                if (!pipeline->isRunning() || pipeline->getFrameRate() < 0.1) {
-                    status = "offline";
-                }
-            }
-
+            const auto& camera = m_cameraConfigs[i];
             json << "{"
-                 << "\"id\":\"" << pipelineId << "\","
-                 << "\"name\":\"" << name << "\","
-                 << "\"url\":\"" << url << "\","
-                 << "\"status\":\"" << status << "\","
-                 << "\"enabled\":true,"
+                 << "\"id\":\"" << camera.id << "\","
+                 << "\"name\":\"" << camera.name << "\","
+                 << "\"url\":\"" << camera.url << "\","
+                 << "\"protocol\":\"" << camera.protocol << "\","
+                 << "\"username\":\"" << camera.username << "\","
+                 << "\"password\":\"" << camera.password << "\","
+                 << "\"width\":" << camera.width << ","
+                 << "\"height\":" << camera.height << ","
+                 << "\"fps\":" << camera.fps << ","
+                 << "\"mjpeg_port\":" << camera.mjpeg_port << ","
+                 << "\"enabled\":" << (camera.enabled ? "true" : "false") << ","
+                 << "\"status\":\"configured\","
                  << "\"created_at\":\"" << getCurrentTimestamp() << "\""
                  << "}";
         }
 
         json << "],"
-             << "\"total\":" << activePipelines.size() << ","
+             << "\"total\":" << m_cameraConfigs.size() << ","
              << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
              << "}";
 
         response = createJsonResponse(json.str());
-        LOG_INFO() << "[APIService] Returned cameras list (" << activePipelines.size() << " cameras)";
+        LOG_INFO() << "[APIService] Returned cameras list (" << m_cameraConfigs.size() << " cameras)";
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to get cameras: " + std::string(e.what()), 500);
@@ -4400,3 +4518,354 @@ void APIService::handleStreamProxy(const std::string& cameraId, const httplib::R
     }
 }
 
+// Configuration management handlers implementation
+void APIService::handleGetSystemConfig(const std::string& request, std::string& response) {
+    try {
+        DatabaseManager dbManager;
+        if (!dbManager.initialize()) {
+            response = createErrorResponse("Database not available", 503);
+            return;
+        }
+
+        // Get all system configurations
+        auto systemConfigs = dbManager.getAllConfigs("system");
+        auto aiConfigs = dbManager.getAllConfigs("ai");
+        auto recordingConfigs = dbManager.getAllConfigs("recording");
+        auto alertConfigs = dbManager.getAllConfigs("alert");
+        auto networkConfigs = dbManager.getAllConfigs("network");
+
+        std::ostringstream json;
+        json << "{"
+             << "\"system\":{";
+
+        bool first = true;
+        for (const auto& config : systemConfigs) {
+            if (!first) json << ",";
+            json << "\"" << config.first << "\":\"" << config.second << "\"";
+            first = false;
+        }
+
+        json << "},\"ai\":{";
+        first = true;
+        for (const auto& config : aiConfigs) {
+            if (!first) json << ",";
+            json << "\"" << config.first << "\":\"" << config.second << "\"";
+            first = false;
+        }
+
+        json << "},\"recording\":{";
+        first = true;
+        for (const auto& config : recordingConfigs) {
+            if (!first) json << ",";
+            json << "\"" << config.first << "\":\"" << config.second << "\"";
+            first = false;
+        }
+
+        json << "},\"alert\":{";
+        first = true;
+        for (const auto& config : alertConfigs) {
+            if (!first) json << ",";
+            json << "\"" << config.first << "\":\"" << config.second << "\"";
+            first = false;
+        }
+
+        json << "},\"network\":{";
+        first = true;
+        for (const auto& config : networkConfigs) {
+            if (!first) json << ",";
+            json << "\"" << config.first << "\":\"" << config.second << "\"";
+            first = false;
+        }
+
+        json << "},\"timestamp\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+        LOG_INFO() << "[APIService] Retrieved system configuration";
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to get system config: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handlePostSystemConfig(const std::string& request, std::string& response) {
+    try {
+        DatabaseManager dbManager;
+        if (!dbManager.initialize()) {
+            response = createErrorResponse("Database not available", 503);
+            return;
+        }
+
+        // Parse JSON request to extract configuration categories
+        nlohmann::json configJson = nlohmann::json::parse(request);
+
+        int savedConfigs = 0;
+        std::vector<std::string> errors;
+
+        // Save system configurations
+        if (configJson.contains("system")) {
+            for (const auto& item : configJson["system"].items()) {
+                std::string value = item.value().is_string() ? item.value().get<std::string>() : item.value().dump();
+                if (dbManager.saveConfig("system", item.key(), value)) {
+                    savedConfigs++;
+                } else {
+                    errors.push_back("Failed to save system." + item.key());
+                }
+            }
+        }
+
+        // Save AI configurations
+        if (configJson.contains("ai")) {
+            for (const auto& item : configJson["ai"].items()) {
+                std::string value = item.value().is_string() ? item.value().get<std::string>() : item.value().dump();
+                if (dbManager.saveConfig("ai", item.key(), value)) {
+                    savedConfigs++;
+                } else {
+                    errors.push_back("Failed to save ai." + item.key());
+                }
+            }
+        }
+
+        // Save recording configurations
+        if (configJson.contains("recording")) {
+            for (const auto& item : configJson["recording"].items()) {
+                std::string value = item.value().is_string() ? item.value().get<std::string>() : item.value().dump();
+                if (dbManager.saveConfig("recording", item.key(), value)) {
+                    savedConfigs++;
+                } else {
+                    errors.push_back("Failed to save recording." + item.key());
+                }
+            }
+        }
+
+        // Save alert configurations
+        if (configJson.contains("alert")) {
+            for (const auto& item : configJson["alert"].items()) {
+                std::string value = item.value().is_string() ? item.value().get<std::string>() : item.value().dump();
+                if (dbManager.saveConfig("alert", item.key(), value)) {
+                    savedConfigs++;
+                } else {
+                    errors.push_back("Failed to save alert." + item.key());
+                }
+            }
+        }
+
+        // Save network configurations
+        if (configJson.contains("network")) {
+            for (const auto& item : configJson["network"].items()) {
+                std::string value = item.value().is_string() ? item.value().get<std::string>() : item.value().dump();
+                if (dbManager.saveConfig("network", item.key(), value)) {
+                    savedConfigs++;
+                } else {
+                    errors.push_back("Failed to save network." + item.key());
+                }
+            }
+        }
+
+        std::ostringstream json;
+        json << "{"
+             << "\"status\":\"" << (errors.empty() ? "success" : "partial_success") << "\","
+             << "\"saved_configs\":" << savedConfigs << ","
+             << "\"errors\":[";
+
+        for (size_t i = 0; i < errors.size(); ++i) {
+            if (i > 0) json << ",";
+            json << "\"" << errors[i] << "\"";
+        }
+
+        json << "],"
+             << "\"updated_at\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+        LOG_INFO() << "[APIService] Saved " << savedConfigs << " system configurations";
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to save system config: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handleGetCameraConfigs(const std::string& request, std::string& response) {
+    try {
+        DatabaseManager dbManager;
+        if (!dbManager.initialize()) {
+            response = createErrorResponse("Database not available", 503);
+            return;
+        }
+
+        // Get all camera IDs and their configurations
+        auto cameraIds = dbManager.getAllCameraIds();
+
+        std::ostringstream json;
+        json << "{\"cameras\":[";
+
+        for (size_t i = 0; i < cameraIds.size(); ++i) {
+            if (i > 0) json << ",";
+
+            const std::string& cameraId = cameraIds[i];
+            std::string configJson = dbManager.getCameraConfig(cameraId);
+
+            json << "{"
+                 << "\"camera_id\":\"" << cameraId << "\","
+                 << "\"config\":" << (configJson.empty() ? "{}" : configJson)
+                 << "}";
+        }
+
+        json << "],"
+             << "\"total_cameras\":" << cameraIds.size() << ","
+             << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+        LOG_INFO() << "[APIService] Retrieved " << cameraIds.size() << " camera configurations";
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to get camera configs: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handlePostCameraConfig(const std::string& request, std::string& response) {
+    try {
+        DatabaseManager dbManager;
+        if (!dbManager.initialize()) {
+            response = createErrorResponse("Database not available", 503);
+            return;
+        }
+
+        // Parse JSON request
+        nlohmann::json configJson = nlohmann::json::parse(request);
+
+        if (!configJson.contains("camera_id")) {
+            response = createErrorResponse("camera_id is required", 400);
+            return;
+        }
+
+        std::string cameraId = configJson["camera_id"].get<std::string>();
+
+        // Remove camera_id from config before storing
+        configJson.erase("camera_id");
+        std::string configData = configJson.dump();
+
+        // Save camera configuration to database
+        if (!dbManager.saveCameraConfig(cameraId, configData)) {
+            response = createErrorResponse("Failed to save camera configuration: " + dbManager.getErrorMessage(), 500);
+            return;
+        }
+
+        // Also update in-memory camera configs if it exists
+        auto it = std::find_if(m_cameraConfigs.begin(), m_cameraConfigs.end(),
+                              [&cameraId](const CameraConfig& config) { return config.id == cameraId; });
+
+        if (it != m_cameraConfigs.end()) {
+            // Update existing configuration
+            if (configJson.contains("name")) it->name = configJson["name"].get<std::string>();
+            if (configJson.contains("url")) it->url = configJson["url"].get<std::string>();
+            if (configJson.contains("protocol")) it->protocol = configJson["protocol"].get<std::string>();
+            if (configJson.contains("username")) it->username = configJson["username"].get<std::string>();
+            if (configJson.contains("password")) it->password = configJson["password"].get<std::string>();
+            if (configJson.contains("width")) it->width = configJson["width"].get<int>();
+            if (configJson.contains("height")) it->height = configJson["height"].get<int>();
+            if (configJson.contains("fps")) it->fps = configJson["fps"].get<int>();
+            if (configJson.contains("mjpeg_port")) it->mjpeg_port = configJson["mjpeg_port"].get<int>();
+            if (configJson.contains("enabled")) it->enabled = configJson["enabled"].get<bool>();
+        }
+
+        std::ostringstream json;
+        json << "{"
+             << "\"status\":\"success\","
+             << "\"camera_id\":\"" << cameraId << "\","
+             << "\"config_saved\":true,"
+             << "\"updated_at\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+        LOG_INFO() << "[APIService] Saved camera configuration for: " << cameraId;
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to save camera config: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handleDeleteCameraConfig(const std::string& cameraId, std::string& response) {
+    try {
+        if (cameraId.empty()) {
+            response = createErrorResponse("camera_id is required", 400);
+            return;
+        }
+
+        DatabaseManager dbManager;
+        if (!dbManager.initialize()) {
+            response = createErrorResponse("Database not available", 503);
+            return;
+        }
+
+        // Delete from database
+        if (!dbManager.deleteCameraConfig(cameraId)) {
+            response = createErrorResponse("Failed to delete camera configuration: " + dbManager.getErrorMessage(), 500);
+            return;
+        }
+
+        // Also remove from in-memory configs
+        auto it = std::find_if(m_cameraConfigs.begin(), m_cameraConfigs.end(),
+                              [&cameraId](const CameraConfig& config) { return config.id == cameraId; });
+
+        if (it != m_cameraConfigs.end()) {
+            m_cameraConfigs.erase(it);
+        }
+
+        std::ostringstream json;
+        json << "{"
+             << "\"status\":\"success\","
+             << "\"camera_id\":\"" << cameraId << "\","
+             << "\"config_deleted\":true,"
+             << "\"deleted_at\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+        LOG_INFO() << "[APIService] Deleted camera configuration for: " << cameraId;
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to delete camera config: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handleGetConfigCategory(const std::string& category, std::string& response) {
+    try {
+        if (category.empty()) {
+            response = createErrorResponse("category is required", 400);
+            return;
+        }
+
+        DatabaseManager dbManager;
+        if (!dbManager.initialize()) {
+            response = createErrorResponse("Database not available", 503);
+            return;
+        }
+
+        // Get all configurations for the specified category
+        auto configs = dbManager.getAllConfigs(category);
+
+        std::ostringstream json;
+        json << "{"
+             << "\"category\":\"" << category << "\","
+             << "\"configs\":{";
+
+        bool first = true;
+        for (const auto& config : configs) {
+            if (!first) json << ",";
+            json << "\"" << config.first << "\":\"" << config.second << "\"";
+            first = false;
+        }
+
+        json << "},"
+             << "\"total_configs\":" << configs.size() << ","
+             << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+        LOG_INFO() << "[APIService] Retrieved " << configs.size() << " configurations for category: " << category;
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to get config category: " + std::string(e.what()), 500);
+    }
+}

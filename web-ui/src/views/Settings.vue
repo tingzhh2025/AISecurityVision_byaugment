@@ -416,58 +416,81 @@ const networkConfig = reactive({
 // 方法
 const loadConfigs = async () => {
   try {
-    // 这里应该从API加载配置
-    // const response = await apiService.getSystemConfig()
-    // Object.assign(systemConfig, response.data.system)
-    // Object.assign(aiConfig, response.data.ai)
-    // 等等...
+    // 从API加载系统配置
+    const response = await apiService.getSystemConfig()
+    const data = response.data
+
+    // 更新各个配置对象
+    if (data.system) {
+      Object.assign(systemConfig, data.system)
+    }
+    if (data.ai) {
+      Object.assign(aiConfig, data.ai)
+    }
+    if (data.recording) {
+      Object.assign(recordingConfig, data.recording)
+    }
+    if (data.alert) {
+      Object.assign(alertConfig, data.alert)
+    }
+    if (data.network) {
+      Object.assign(networkConfig, data.network)
+    }
+
+    console.log('Configs loaded successfully:', data)
   } catch (error) {
     console.error('Failed to load configs:', error)
+    ElMessage.warning('配置加载失败，使用默认配置')
   }
 }
 
 const saveSystemConfig = async () => {
   try {
-    await apiService.updateSystemConfig({ system: systemConfig })
+    await apiService.saveSystemConfig({ system: systemConfig })
     ElMessage.success('系统配置保存成功')
   } catch (error) {
-    ElMessage.error('保存失败')
+    console.error('Failed to save system config:', error)
+    ElMessage.error('保存失败: ' + (error.response?.data?.message || error.message))
   }
 }
 
 const saveAiConfig = async () => {
   try {
-    await apiService.updateSystemConfig({ ai: aiConfig })
+    await apiService.saveSystemConfig({ ai: aiConfig })
     ElMessage.success('AI配置保存成功')
   } catch (error) {
-    ElMessage.error('保存失败')
+    console.error('Failed to save AI config:', error)
+    ElMessage.error('保存失败: ' + (error.response?.data?.message || error.message))
   }
 }
 
 const saveRecordingConfig = async () => {
   try {
-    await apiService.updateSystemConfig({ recording: recordingConfig })
+    await apiService.saveSystemConfig({ recording: recordingConfig })
     ElMessage.success('录像配置保存成功')
   } catch (error) {
-    ElMessage.error('保存失败')
+    console.error('Failed to save recording config:', error)
+    ElMessage.error('保存失败: ' + (error.response?.data?.message || error.message))
   }
 }
 
 const saveAlertConfig = async () => {
   try {
-    await apiService.updateSystemConfig({ alert: alertConfig })
+    await apiService.saveSystemConfig({ alert: alertConfig })
     ElMessage.success('报警配置保存成功')
   } catch (error) {
-    ElMessage.error('保存失败')
+    console.error('Failed to save alert config:', error)
+    ElMessage.error('保存失败: ' + (error.response?.data?.message || error.message))
   }
 }
 
 const saveNetworkConfig = async () => {
   try {
-    await apiService.updateSystemConfig({ network: networkConfig })
+    await apiService.saveSystemConfig({ network: networkConfig })
     ElMessage.success('网络配置保存成功，重启后生效')
   } catch (error) {
-    ElMessage.error('保存失败')
+    console.error('Failed to save network config:', error)
+    ElMessage.error('保存失败: ' + (error.response?.data?.message || error.message))
   }
 }
 

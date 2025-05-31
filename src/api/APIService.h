@@ -138,6 +138,14 @@ private:
     void handleGetDetectionConfig(const std::string& request, std::string& response);
     void handleTestCameraConnection(const std::string& request, std::string& response);
 
+    // Configuration management handlers
+    void handleGetSystemConfig(const std::string& request, std::string& response);
+    void handlePostSystemConfig(const std::string& request, std::string& response);
+    void handleGetCameraConfigs(const std::string& request, std::string& response);
+    void handlePostCameraConfig(const std::string& request, std::string& response);
+    void handleDeleteCameraConfig(const std::string& cameraId, std::string& response);
+    void handleGetConfigCategory(const std::string& category, std::string& response);
+
     // Video stream proxy handler
     void handleStreamProxy(const std::string& cameraId, const httplib::Request& req, httplib::Response& res);
 
@@ -189,9 +197,25 @@ private:
     // Web interface utilities
     std::string loadWebFile(const std::string& filePath);
 
+    // Camera configuration structure
+    struct CameraConfig {
+        std::string id;
+        std::string name;
+        std::string url;
+        std::string protocol;
+        std::string username;
+        std::string password;
+        int width;
+        int height;
+        int fps;
+        int mjpeg_port;
+        bool enabled;
+    };
+
     // Member variables
     int m_port;
     std::atomic<bool> m_running{false};
+    std::vector<CameraConfig> m_cameraConfigs;
 
     // ONVIF discovery manager
     std::unique_ptr<class ONVIFManager> m_onvifManager;

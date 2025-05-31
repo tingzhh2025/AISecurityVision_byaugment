@@ -8,6 +8,7 @@
 #include "core/TaskManager.h"
 #include "core/VideoPipeline.h"
 #include "api/APIService.h"
+#include "database/DatabaseManager.h"
 #include "nlohmann/json.hpp"
 
 #include "core/Logger.h"
@@ -96,6 +97,88 @@ std::vector<CameraConfig> loadCameraConfig(const std::string& configPath) {
 
     } catch (const std::exception& e) {
         LOG_ERROR() << "[Config] Error parsing config file: " << e.what();
+    }
+
+    return cameras;
+}
+
+std::vector<CameraConfig> loadCameraConfigFromDatabase() {
+    std::vector<CameraConfig> cameras;
+
+    try {
+        DatabaseManager dbManager;
+        if (!dbManager.initialize()) {
+            LOG_ERROR() << "[Config] Failed to initialize database for config loading";
+            return cameras;
+        }
+
+        // Get all camera IDs from database
+        auto cameraIds = dbManager.getAllCameraIds();
+        LOG_INFO() << "[Config] Found " << cameraIds.size() << " cameras in database";
+
+        for (const std::string& cameraId : cameraIds) {
+            std::string configJson = dbManager.getCameraConfig(cameraId);
+            if (configJson.empty()) {
+                LOG_WARN() << "[Config] No configuration found for camera: " << cameraId;
+                continue;
+            }
+
+            try {
+                json config = json::parse(configJson);
+                CameraConfig camera;
+
+                camera.id = cameraId;
+                camera.name = config.value("name", cameraId);
+                camera.rtsp_url = config.value("url", "");
+                camera.mjpeg_port = config.value("mjpeg_port", 8000);
+                camera.enabled = config.value("enabled", true);
+                camera.detection_enabled = config.value("detection_enabled", true);
+                camera.recording_enabled = config.value("recording_enabled", false);
+
+                if (config.contains("detection_config")) {
+                    const auto& det = config["detection_config"];
+                    camera.detection_config.confidence_threshold = det.value("confidence_threshold", 0.5f);
+                    camera.detection_config.nms_threshold = det.value("nms_threshold", 0.4f);
+                    camera.detection_config.backend = det.value("backend", "RKNN");
+                    camera.detection_config.model_path = det.value("model_path", "models/yolov8n.rknn");
+                } else {
+                    // Set default detection config
+                    camera.detection_config.confidence_threshold = 0.5f;
+                    camera.detection_config.nms_threshold = 0.4f;
+                    camera.detection_config.backend = "RKNN";
+                    camera.detection_config.model_path = "models/yolov8n.rknn";
+                }
+
+                if (config.contains("stream_config")) {
+                    const auto& stream = config["stream_config"];
+                    camera.stream_config.fps = stream.value("fps", 25);
+                    camera.stream_config.quality = stream.value("quality", 80);
+                    camera.stream_config.max_width = stream.value("max_width", 1280);
+                    camera.stream_config.max_height = stream.value("max_height", 720);
+                } else {
+                    // Set default stream config
+                    camera.stream_config.fps = 25;
+                    camera.stream_config.quality = 80;
+                    camera.stream_config.max_width = 1280;
+                    camera.stream_config.max_height = 720;
+                }
+
+                if (!camera.rtsp_url.empty()) {
+                    cameras.push_back(camera);
+                    LOG_INFO() << "[Config] Loaded camera from database: " << camera.id << " (" << camera.name << ")";
+                } else {
+                    LOG_WARN() << "[Config] Camera " << cameraId << " has no RTSP URL, skipping";
+                }
+
+            } catch (const std::exception& e) {
+                LOG_ERROR() << "[Config] Failed to parse camera config for " << cameraId << ": " << e.what();
+            }
+        }
+
+        LOG_INFO() << "[Config] Loaded " << cameras.size() << " cameras from database";
+
+    } catch (const std::exception& e) {
+        LOG_ERROR() << "[Config] Failed to load camera configs from database: " << e.what();
     }
 
     return cameras;
@@ -193,44 +276,75 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
-        // Load cameras from config file or use defaults
-        if (testMode || useRealCameras || !configFile.empty()) {
-            std::vector<VideoSource> cameras;
+        // Load cameras from database first, then config file, or use defaults
+        std::vector<VideoSource> cameras;
 
-            if (!configFile.empty()) {
-                LOG_INFO() << "[Main] Loading cameras from config file: " << configFile;
-                auto cameraConfigs = loadCameraConfig(configFile);
+        // Always try to load from database first
+        LOG_INFO() << "[Main] Attempting to load cameras from database...";
+        auto databaseCameras = loadCameraConfigFromDatabase();
 
-                if (cameraConfigs.empty()) {
-                    LOG_ERROR() << "[Main] No cameras loaded from config file";
-                    return 1;
+        if (!databaseCameras.empty()) {
+            LOG_INFO() << "[Main] Found " << databaseCameras.size() << " cameras in database";
+
+            // Convert CameraConfig to VideoSource
+            for (const auto& camConfig : databaseCameras) {
+                if (!camConfig.enabled) {
+                    LOG_INFO() << "[Main] Skipping disabled camera: " << camConfig.id;
+                    continue;
                 }
 
-                // Convert CameraConfig to VideoSource
-                for (const auto& camConfig : cameraConfigs) {
-                    if (!camConfig.enabled) {
-                        LOG_INFO() << "[Main] Skipping disabled camera: " << camConfig.id;
-                        continue;
-                    }
+                VideoSource camera;
+                camera.id = camConfig.id;
+                camera.name = camConfig.name;
+                camera.url = camConfig.rtsp_url;
+                camera.protocol = "rtsp";
+                camera.width = camConfig.stream_config.max_width;
+                camera.height = camConfig.stream_config.max_height;
+                camera.fps = camConfig.stream_config.fps;
+                camera.mjpeg_port = camConfig.mjpeg_port;
+                camera.enabled = camConfig.enabled;
 
-                    VideoSource camera;
-                    camera.id = camConfig.id;
-                    camera.name = camConfig.name;
-                    camera.url = camConfig.rtsp_url;
-                    camera.protocol = "rtsp";
-                    camera.width = camConfig.stream_config.max_width;
-                    camera.height = camConfig.stream_config.max_height;
-                    camera.fps = camConfig.stream_config.fps;
-                    camera.mjpeg_port = camConfig.mjpeg_port; // Set MJPEG port from config
-                    camera.enabled = camConfig.enabled;
+                cameras.push_back(camera);
 
-                    cameras.push_back(camera);
+                LOG_INFO() << "[Main] Configured camera from database: " << camera.id
+                          << " -> MJPEG port: " << camConfig.mjpeg_port;
+            }
 
-                    LOG_INFO() << "[Main] Configured camera: " << camera.id
-                              << " -> MJPEG port: " << camConfig.mjpeg_port;
+        } else if (!configFile.empty()) {
+            LOG_INFO() << "[Main] No cameras in database, loading from config file: " << configFile;
+            auto cameraConfigs = loadCameraConfig(configFile);
+
+            if (cameraConfigs.empty()) {
+                LOG_ERROR() << "[Main] No cameras loaded from config file";
+                return 1;
+            }
+
+            // Convert CameraConfig to VideoSource
+            for (const auto& camConfig : cameraConfigs) {
+                if (!camConfig.enabled) {
+                    LOG_INFO() << "[Main] Skipping disabled camera: " << camConfig.id;
+                    continue;
                 }
 
-            } else if (useRealCameras) {
+                VideoSource camera;
+                camera.id = camConfig.id;
+                camera.name = camConfig.name;
+                camera.url = camConfig.rtsp_url;
+                camera.protocol = "rtsp";
+                camera.width = camConfig.stream_config.max_width;
+                camera.height = camConfig.stream_config.max_height;
+                camera.fps = camConfig.stream_config.fps;
+                camera.mjpeg_port = camConfig.mjpeg_port;
+                camera.enabled = camConfig.enabled;
+
+                cameras.push_back(camera);
+
+                LOG_INFO() << "[Main] Configured camera from file: " << camera.id
+                          << " -> MJPEG port: " << camConfig.mjpeg_port;
+            }
+
+        } else if (testMode || useRealCameras) {
+            if (useRealCameras) {
                 LOG_INFO() << "[Main] Running with real RTSP cameras (hardcoded)...";
                 if (optimizedMode) {
                     LOG_INFO() << "[Main] Using optimized multi-threaded RKNN detection with "
@@ -275,8 +389,10 @@ int main(int argc, char* argv[]) {
 
                 cameras.push_back(testSource);
             }
+        }
 
-            // Add cameras to TaskManager
+        // Add cameras to TaskManager
+        if (!cameras.empty()) {
             for (const auto& camera : cameras) {
                 LOG_INFO() << "[Main] Adding camera: " << camera.id << " (" << camera.url << ")";
 
@@ -297,6 +413,8 @@ int main(int argc, char* argv[]) {
                     LOG_ERROR() << "[Main] Failed to add camera: " << camera.id;
                 }
             }
+        } else {
+            LOG_INFO() << "[Main] No cameras configured. System running in API-only mode.";
         }
 
         LOG_INFO() << "[Main] System started successfully!";

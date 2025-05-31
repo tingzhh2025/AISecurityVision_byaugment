@@ -357,23 +357,59 @@ const editCamera = (camera) => {
 
 const saveCamera = async () => {
   if (!formRef.value) return
-  
+
   try {
     await formRef.value.validate()
     saving.value = true
-    
+
+    // 构建摄像头配置对象
+    const cameraConfig = {
+      camera_id: cameraForm.id || `camera_${Date.now()}`,
+      name: cameraForm.name,
+      url: cameraForm.rtspUrl,
+      protocol: 'rtsp',
+      username: cameraForm.username,
+      password: cameraForm.password,
+      width: parseInt(cameraForm.resolution.split('x')[0]),
+      height: parseInt(cameraForm.resolution.split('x')[1]),
+      fps: cameraForm.fps,
+      mjpeg_port: 8161 + (systemStore.cameras.length), // 自动分配端口
+      enabled: true,
+      detection_enabled: cameraForm.aiEnabled,
+      recording_enabled: false,
+      detection_config: {
+        confidence_threshold: 0.5,
+        nms_threshold: 0.4,
+        backend: 'RKNN',
+        model_path: 'models/yolov8n.rknn'
+      },
+      stream_config: {
+        fps: cameraForm.fps,
+        quality: 80,
+        max_width: parseInt(cameraForm.resolution.split('x')[0]),
+        max_height: parseInt(cameraForm.resolution.split('x')[1])
+      }
+    }
+
     if (isEditing.value) {
+      // 更新摄像头
       await apiService.updateCamera(cameraForm.id, cameraForm)
+      // 同时保存到配置数据库
+      await apiService.saveCameraConfig(cameraConfig)
       ElMessage.success('摄像头更新成功')
     } else {
+      // 添加摄像头
       await apiService.addCamera(cameraForm)
+      // 同时保存到配置数据库
+      await apiService.saveCameraConfig(cameraConfig)
       ElMessage.success('摄像头添加成功')
     }
-    
+
     dialogVisible.value = false
     await systemStore.fetchCameras()
   } catch (error) {
     if (error !== false) { // 不是表单验证错误
+      console.error('Failed to save camera:', error)
       ElMessage.error(isEditing.value ? '更新失败' : '添加失败')
     }
   } finally {
@@ -392,12 +428,17 @@ const deleteCamera = async (camera) => {
         type: 'warning'
       }
     )
-    
+
+    // 从API删除摄像头
     await apiService.deleteCamera(camera.id)
+    // 同时从配置数据库删除
+    await apiService.deleteCameraConfig(camera.id)
+
     ElMessage.success('删除成功')
     await systemStore.fetchCameras()
   } catch (error) {
     if (error !== 'cancel') {
+      console.error('Failed to delete camera:', error)
       ElMessage.error('删除失败')
     }
   }
