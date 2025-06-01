@@ -202,3 +202,4 @@ web-ui/storybook-static
 # Temporary folders
 web-ui/tmp/
 web-ui/temp/
+tests/playwright/node_modules/

@@ -98,6 +98,42 @@
           </div>
         </div>
 
+        <!-- 种族统计 -->
+        <div class="race-stats">
+          <h4>种族分布</h4>
+          <div class="race-grid">
+            <div class="race-item" v-for="(count, race) in raceStats" :key="race">
+              <div class="race-value">{{ count || 0 }}</div>
+              <div class="race-label">{{ getRaceLabel(race) }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 质量与口罩统计 -->
+        <div class="quality-stats">
+          <h4>检测质量</h4>
+          <div class="quality-row">
+            <div class="quality-item">
+              <div class="quality-icon">
+                <el-icon><Star /></el-icon>
+              </div>
+              <div class="quality-info">
+                <div class="quality-value">{{ averageQuality }}%</div>
+                <div class="quality-label">平均质量</div>
+              </div>
+            </div>
+            <div class="mask-item">
+              <div class="mask-icon">
+                <el-icon><View /></el-icon>
+              </div>
+              <div class="mask-info">
+                <div class="mask-value">{{ stats.mask_count || 0 }}</div>
+                <div class="mask-label">戴口罩</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- 最后更新时间 -->
         <div class="update-time">
           <el-text size="small" type="info">
@@ -192,7 +228,17 @@ const stats = reactive({
   child_count: 0,
   young_count: 0,
   middle_count: 0,
-  senior_count: 0
+  senior_count: 0,
+  // 新增 InsightFace 功能
+  black_count: 0,
+  asian_count: 0,
+  latino_count: 0,
+  middle_eastern_count: 0,
+  white_count: 0,
+  mask_count: 0,
+  no_mask_count: 0,
+  average_quality: 0,
+  total_quality_score: 0
 })
 
 const config = reactive({
@@ -208,6 +254,18 @@ let refreshTimer = null
 // 计算属性
 const lastUpdateTime = computed(() => {
   return lastUpdate.value ? dayjs(lastUpdate.value).format('HH:mm:ss') : '--'
+})
+
+const raceStats = computed(() => ({
+  black: stats.black_count,
+  asian: stats.asian_count,
+  latino: stats.latino_count,
+  middle_eastern: stats.middle_eastern_count,
+  white: stats.white_count
+}))
+
+const averageQuality = computed(() => {
+  return stats.average_quality ? Math.round(stats.average_quality * 100) : 0
 })
 
 // 方法
@@ -247,7 +305,16 @@ const togglePersonStats = async (value) => {
         child_count: 0,
         young_count: 0,
         middle_count: 0,
-        senior_count: 0
+        senior_count: 0,
+        black_count: 0,
+        asian_count: 0,
+        latino_count: 0,
+        middle_eastern_count: 0,
+        white_count: 0,
+        mask_count: 0,
+        no_mask_count: 0,
+        average_quality: 0,
+        total_quality_score: 0
       })
     }
   } catch (error) {
@@ -300,6 +367,17 @@ const stopAutoRefresh = () => {
     clearInterval(refreshTimer)
     refreshTimer = null
   }
+}
+
+const getRaceLabel = (race) => {
+  const raceLabels = {
+    black: '黑人',
+    asian: '亚洲人',
+    latino: '拉丁裔',
+    middle_eastern: '中东人',
+    white: '白人'
+  }
+  return raceLabels[race] || race
 }
 
 // 生命周期
@@ -453,5 +531,109 @@ onUnmounted(() => {
   margin-top: 16px;
   padding-top: 16px;
   border-top: 1px solid #f0f0f0;
+}
+
+/* 种族统计样式 */
+.race-stats {
+  margin-bottom: 20px;
+}
+
+.race-stats h4 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  color: #303133;
+}
+
+.race-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.race-item {
+  background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+  border-radius: 6px;
+  padding: 8px;
+  text-align: center;
+  color: #333;
+}
+
+.race-value {
+  font-size: 16px;
+  font-weight: bold;
+  color: #495057;
+}
+
+.race-label {
+  font-size: 11px;
+  color: #6c757d;
+  margin-top: 2px;
+}
+
+/* 质量统计样式 */
+.quality-stats {
+  margin-bottom: 20px;
+}
+
+.quality-stats h4 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  color: #303133;
+}
+
+.quality-row {
+  display: flex;
+  gap: 12px;
+}
+
+.quality-item,
+.mask-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  border-radius: 8px;
+}
+
+.quality-item {
+  background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+  color: #8b4513;
+}
+
+.mask-item {
+  background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+  color: #2c3e50;
+}
+
+.quality-icon,
+.mask-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 10px;
+  font-size: 16px;
+}
+
+.quality-info,
+.mask-info {
+  flex: 1;
+}
+
+.quality-value,
+.mask-value {
+  font-size: 18px;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.quality-label,
+.mask-label {
+  font-size: 12px;
+  opacity: 0.8;
+  margin-top: 2px;
 }
 </style>

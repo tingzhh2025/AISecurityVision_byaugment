@@ -96,21 +96,51 @@
 
       <!-- 历史统计图表 -->
       <el-row :gutter="20" class="charts-row">
-        <el-col :span="12">
+        <el-col :span="8">
           <el-card class="chart-card">
             <template #header>
-              <span>性别分布趋势</span>
+              <span>性别分布</span>
             </template>
             <div id="genderChart" class="chart-container"></div>
           </el-card>
         </el-col>
-        
+
+        <el-col :span="8">
+          <el-card class="chart-card">
+            <template #header>
+              <span>年龄分布</span>
+            </template>
+            <div id="ageChart" class="chart-container"></div>
+          </el-card>
+        </el-col>
+
+        <el-col :span="8">
+          <el-card class="chart-card">
+            <template #header>
+              <span>种族分布</span>
+            </template>
+            <div id="raceChart" class="chart-container"></div>
+          </el-card>
+        </el-col>
+      </el-row>
+
+      <!-- 质量与口罩统计图表 -->
+      <el-row :gutter="20" class="charts-row">
         <el-col :span="12">
           <el-card class="chart-card">
             <template #header>
-              <span>年龄分布趋势</span>
+              <span>检测质量趋势</span>
             </template>
-            <div id="ageChart" class="chart-container"></div>
+            <div id="qualityChart" class="chart-container"></div>
+          </el-card>
+        </el-col>
+
+        <el-col :span="12">
+          <el-card class="chart-card">
+            <template #header>
+              <span>口罩佩戴统计</span>
+            </template>
+            <div id="maskChart" class="chart-container"></div>
           </el-card>
         </el-col>
       </el-row>
@@ -128,18 +158,27 @@
         </template>
         
         <el-table :data="historyData" stripe>
-          <el-table-column prop="timestamp" label="时间" width="180">
+          <el-table-column prop="timestamp" label="时间" width="160">
             <template #default="{ row }">
               {{ formatTime(row.timestamp) }}
             </template>
           </el-table-column>
-          <el-table-column prop="total_persons" label="总人数" width="100" />
-          <el-table-column prop="male_count" label="男性" width="80" />
-          <el-table-column prop="female_count" label="女性" width="80" />
-          <el-table-column prop="child_count" label="儿童" width="80" />
-          <el-table-column prop="young_count" label="青年" width="80" />
-          <el-table-column prop="middle_count" label="中年" width="80" />
-          <el-table-column prop="senior_count" label="老年" width="80" />
+          <el-table-column prop="total_persons" label="总人数" width="80" />
+          <el-table-column prop="male_count" label="男性" width="60" />
+          <el-table-column prop="female_count" label="女性" width="60" />
+          <el-table-column prop="child_count" label="儿童" width="60" />
+          <el-table-column prop="young_count" label="青年" width="60" />
+          <el-table-column prop="middle_count" label="中年" width="60" />
+          <el-table-column prop="senior_count" label="老年" width="60" />
+          <el-table-column prop="asian_count" label="亚洲人" width="70" />
+          <el-table-column prop="white_count" label="白人" width="60" />
+          <el-table-column prop="black_count" label="黑人" width="60" />
+          <el-table-column prop="mask_count" label="戴口罩" width="70" />
+          <el-table-column prop="average_quality" label="平均质量" width="80">
+            <template #default="{ row }">
+              {{ Math.round((row.average_quality || 0) * 100) }}%
+            </template>
+          </el-table-column>
         </el-table>
         
         <div class="pagination">
@@ -194,6 +233,9 @@ const totalRecords = ref(0)
 const historyData = ref([])
 let genderChart = null
 let ageChart = null
+let raceChart = null
+let qualityChart = null
+let maskChart = null
 let refreshTimer = null
 
 // 计算属性
@@ -278,15 +320,30 @@ const initCharts = () => {
   setTimeout(() => {
     const genderEl = document.getElementById('genderChart')
     const ageEl = document.getElementById('ageChart')
-    
+    const raceEl = document.getElementById('raceChart')
+    const qualityEl = document.getElementById('qualityChart')
+    const maskEl = document.getElementById('maskChart')
+
     if (genderEl && !genderChart) {
       genderChart = echarts.init(genderEl)
     }
-    
+
     if (ageEl && !ageChart) {
       ageChart = echarts.init(ageEl)
     }
-    
+
+    if (raceEl && !raceChart) {
+      raceChart = echarts.init(raceEl)
+    }
+
+    if (qualityEl && !qualityChart) {
+      qualityChart = echarts.init(qualityEl)
+    }
+
+    if (maskEl && !maskChart) {
+      maskChart = echarts.init(maskEl)
+    }
+
     updateCharts()
   }, 100)
 }
@@ -320,14 +377,81 @@ const updateCharts = () => {
         type: 'pie',
         radius: '60%',
         data: [
-          { value: historyData.value[0]?.child_count || 0, name: '儿童' },
-          { value: historyData.value[0]?.young_count || 0, name: '青年' },
-          { value: historyData.value[0]?.middle_count || 0, name: '中年' },
-          { value: historyData.value[0]?.senior_count || 0, name: '老年' }
+          { value: historyData.value[0]?.child_count || 0, name: '儿童', itemStyle: { color: '#67C23A' } },
+          { value: historyData.value[0]?.young_count || 0, name: '青年', itemStyle: { color: '#409EFF' } },
+          { value: historyData.value[0]?.middle_count || 0, name: '中年', itemStyle: { color: '#E6A23C' } },
+          { value: historyData.value[0]?.senior_count || 0, name: '老年', itemStyle: { color: '#F56C6C' } }
         ]
       }]
     }
     ageChart.setOption(ageOption)
+  }
+
+  // 种族分布图表
+  if (raceChart) {
+    const latestData = historyData.value[0] || {}
+    const raceOption = {
+      title: { text: '种族分布', left: 'center' },
+      tooltip: { trigger: 'item' },
+      series: [{
+        type: 'pie',
+        radius: '60%',
+        data: [
+          { value: latestData.asian_count || 0, name: '亚洲人', itemStyle: { color: '#FF6B6B' } },
+          { value: latestData.white_count || 0, name: '白人', itemStyle: { color: '#4ECDC4' } },
+          { value: latestData.black_count || 0, name: '黑人', itemStyle: { color: '#45B7D1' } },
+          { value: latestData.latino_count || 0, name: '拉丁裔', itemStyle: { color: '#96CEB4' } },
+          { value: latestData.middle_eastern_count || 0, name: '中东人', itemStyle: { color: '#FFEAA7' } }
+        ]
+      }]
+    }
+    raceChart.setOption(raceOption)
+  }
+
+  // 质量趋势图表
+  if (qualityChart) {
+    const times = historyData.value.map(item => formatTime(item.timestamp))
+    const qualityOption = {
+      title: { text: '检测质量趋势', left: 'center' },
+      tooltip: { trigger: 'axis', formatter: '{b}<br/>{a}: {c}%' },
+      xAxis: { type: 'category', data: times.slice(-10) },
+      yAxis: { type: 'value', min: 0, max: 100, axisLabel: { formatter: '{value}%' } },
+      series: [{
+        name: '平均质量',
+        type: 'line',
+        data: historyData.value.slice(-10).map(item => Math.round((item.average_quality || 0) * 100)),
+        smooth: true,
+        itemStyle: { color: '#E6A23C' },
+        areaStyle: { opacity: 0.3 }
+      }]
+    }
+    qualityChart.setOption(qualityOption)
+  }
+
+  // 口罩统计图表
+  if (maskChart) {
+    const latestData = historyData.value[0] || {}
+    const maskOption = {
+      title: { text: '口罩佩戴统计', left: 'center' },
+      tooltip: { trigger: 'item' },
+      series: [{
+        type: 'pie',
+        radius: '60%',
+        data: [
+          {
+            value: latestData.mask_count || 0,
+            name: '戴口罩',
+            itemStyle: { color: '#67C23A' }
+          },
+          {
+            value: latestData.no_mask_count || 0,
+            name: '未戴口罩',
+            itemStyle: { color: '#F56C6C' }
+          }
+        ]
+      }]
+    }
+    maskChart.setOption(maskOption)
   }
 }
 

@@ -34,9 +34,21 @@ public:
         int young_count = 0;
         int middle_count = 0;
         int senior_count = 0;
+        // InsightFace enhanced attributes
+        int black_count = 0;
+        int asian_count = 0;
+        int latino_count = 0;
+        int middle_eastern_count = 0;
+        int white_count = 0;
+        int mask_count = 0;
+        int no_mask_count = 0;
+        float average_quality = 0.0f;
         std::vector<cv::Rect> person_boxes;
         std::vector<std::string> person_genders;
         std::vector<std::string> person_ages;
+        std::vector<std::string> person_races;
+        std::vector<float> person_qualities;
+        std::vector<bool> person_masks;
     };
 
     // Person statistics configuration structure (optional extension)

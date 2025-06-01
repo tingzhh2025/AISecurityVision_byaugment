@@ -355,7 +355,7 @@ int main(int argc, char* argv[]) {
                 VideoSource camera1;
                 camera1.id = "camera_01";
                 camera1.name = "Security Camera 1";
-                camera1.url = "rtsp://admin:sharpi1688@192.168.1.2:554/1/1";
+                camera1.url = "rtsp://admin:sharpi1688@192.168.1.3:554/1/1";
                 camera1.protocol = "rtsp";
                 camera1.width = 1920;
                 camera1.height = 1080;

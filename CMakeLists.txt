@@ -602,11 +602,11 @@ else()
 endif()
 
 # InsightFace Integration (Optional)
-set(INSIGHTFACE_ROOT "/userdata/source/source/insightface/cpp-package/inspireface")
-set(INSIGHTFACE_INCLUDE_DIR "${INSIGHTFACE_ROOT}/cpp/inspireface/c_api")
-set(INSIGHTFACE_INCLUDE_DIR2 "${INSIGHTFACE_ROOT}/cpp")
-set(INSIGHTFACE_INCLUDE_DIR3 "${INSIGHTFACE_ROOT}/cpp/inspireface/include/inspireface")
-set(INSIGHTFACE_LIB_DIR "${INSIGHTFACE_ROOT}/build/lib")
+# Use local third_party installation
+set(INSIGHTFACE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/insightface")
+set(INSIGHTFACE_INCLUDE_DIR "${INSIGHTFACE_ROOT}/include")
+set(INSIGHTFACE_LIB_DIR "${INSIGHTFACE_ROOT}/lib")
+set(INSIGHTFACE_MODEL_DIR "${INSIGHTFACE_ROOT}/models")
 
 # Try to find InsightFace library
 find_library(INSIGHTFACE_LIB
@@ -615,12 +615,17 @@ find_library(INSIGHTFACE_LIB
     NO_DEFAULT_PATH
 )
 
-if(INSIGHTFACE_LIB)
+if(INSIGHTFACE_LIB AND EXISTS "${INSIGHTFACE_INCLUDE_DIR}/inspireface.h")
     message(STATUS "Found InsightFace library: ${INSIGHTFACE_LIB}")
-    target_include_directories(${PROJECT_NAME} PRIVATE ${INSIGHTFACE_INCLUDE_DIR} ${INSIGHTFACE_INCLUDE_DIR2} ${INSIGHTFACE_INCLUDE_DIR3})
+    message(STATUS "InsightFace include dir: ${INSIGHTFACE_INCLUDE_DIR}")
+    message(STATUS "InsightFace model dir: ${INSIGHTFACE_MODEL_DIR}")
+    target_include_directories(${PROJECT_NAME} PRIVATE ${INSIGHTFACE_INCLUDE_DIR})
     target_link_libraries(${PROJECT_NAME} ${INSIGHTFACE_LIB})
     target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_INSIGHTFACE=1)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE INSIGHTFACE_MODEL_PATH="${INSIGHTFACE_MODEL_DIR}/Pikachu.pack")
     message(STATUS "InsightFace integration enabled")
 else()
-    message(STATUS "InsightFace library not found. Using RKNN fallback.")
+    message(STATUS "InsightFace library not found in third_party. Using RKNN fallback.")
+    message(STATUS "  - Library path: ${INSIGHTFACE_LIB}")
+    message(STATUS "  - Header path: ${INSIGHTFACE_INCLUDE_DIR}/inspireface.h")
 endif()

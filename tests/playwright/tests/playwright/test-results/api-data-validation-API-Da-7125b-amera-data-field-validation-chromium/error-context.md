@@ -1,0 +1,299 @@
+# Test info
+
+- Name: API Data Validation Tests >> Camera Data Validation >> Camera data field validation
+- Location: /userdata/source/source/AISecurityVision_byaugment/tests/playwright/api-data-validation.spec.js:99:5
+
+# Error details
+
+```
+Error: expect(received).toBe(expected) // Object.is equality
+
+Expected: 400
+Received: 200
+    at /userdata/source/source/AISecurityVision_byaugment/tests/playwright/api-data-validation.spec.js:153:42
+```
+
+# Page snapshot
+
+```yaml
+- complementary:
+  - img
+  - text: AI安防监控
+  - menubar:
+    - menuitem "仪表盘":
+      - img
+      - text: 仪表盘
+    - menuitem "实时监控":
+      - img
+      - text: 实时监控
+    - menuitem "录像回放":
+      - img
+      - text: 录像回放
+    - menuitem "报警管理":
+      - img
+      - text: 报警管理
+    - menuitem "摄像头管理":
+      - img
+      - text: 摄像头管理
+    - menuitem "系统设置":
+      - img
+      - text: 系统设置
+- button:
+  - img
+- navigation "面包屑":
+  - link "摄像头管理"
+- text: 离线 2025-06-01 14:12:39
+- button:
+  - img
+- main:
+  - button "添加摄像头":
+    - img
+    - text: 添加摄像头
+  - button "刷新":
+    - img
+    - text: 刷新
+  - img
+  - textbox "搜索摄像头名称或IP"
+  - img "Validation Test Camera"
+  - text: 在线
+  - heading "Validation Test Camera" [level=3]
+  - text: "IP地址: 分辨率: 帧率: 25fps AI检测: 禁用"
+  - button "实时查看":
+    - img
+    - text: 实时查看
+  - button "测试连接":
+    - img
+    - text: 测试连接
+  - button "编辑":
+    - img
+    - text: 编辑
+  - button "删除":
+    - img
+    - text: 删除
+  - img "Playwright Test Camera"
+  - text: 在线
+  - heading "Playwright Test Camera" [level=3]
+  - text: "IP地址: 分辨率: 帧率: 25fps AI检测: 禁用"
+  - button "实时查看":
+    - img
+    - text: 实时查看
+  - button "测试连接":
+    - img
+    - text: 测试连接
+  - button "编辑":
+    - img
+    - text: 编辑
+  - button "删除":
+    - img
+    - text: 删除
+- alert:
+  - img
+  - paragraph: 摄像头列表已刷新
+```
+
+# Test source
+
+```ts
+   53 |         url: 'rtsp://test:test@192.168.1.100:554/stream',
+   54 |         protocol: 'rtsp',
+   55 |         username: 'test',
+   56 |         password: 'test',
+   57 |         width: 1920,
+   58 |         height: 1080,
+   59 |         fps: 25,
+   60 |         mjpeg_port: 8199,
+   61 |         enabled: true
+   62 |       };
+   63 |       
+   64 |       // Test backend validation
+   65 |       const backendResponse = await request.post(`${API_BASE_URL}/cameras`, {
+   66 |         data: validCameraData
+   67 |       });
+   68 |       
+   69 |       // Test frontend validation
+   70 |       await page.goto(`${FRONTEND_URL}/cameras`);
+   71 |       
+   72 |       const frontendResponse = await page.evaluate(async (data) => {
+   73 |         const response = await fetch('/api/cameras', {
+   74 |           method: 'POST',
+   75 |           headers: {
+   76 |             'Content-Type': 'application/json'
+   77 |           },
+   78 |           body: JSON.stringify(data)
+   79 |         });
+   80 |         
+   81 |         return {
+   82 |           status: response.status,
+   83 |           data: await response.json()
+   84 |         };
+   85 |       }, validCameraData);
+   86 |       
+   87 |       // Both should accept valid data
+   88 |       expect([200, 201, 409].includes(backendResponse.status())).toBeTruthy();
+   89 |       expect([200, 201, 409].includes(frontendResponse.status)).toBeTruthy();
+   90 |       
+   91 |       // Clean up
+   92 |       try {
+   93 |         await request.delete(`${API_BASE_URL}/cameras/${validCameraData.id}`);
+   94 |       } catch (error) {
+   95 |         // Ignore cleanup errors
+   96 |       }
+   97 |     });
+   98 |
+   99 |     test('Camera data field validation', async ({ request, page }) => {
+  100 |       const invalidDataTests = [
+  101 |         {
+  102 |           name: 'Missing required ID',
+  103 |           data: {
+  104 |             name: 'Test Camera',
+  105 |             url: 'rtsp://test:test@192.168.1.100:554/stream',
+  106 |             protocol: 'rtsp'
+  107 |           },
+  108 |           expectedStatus: 400
+  109 |         },
+  110 |         {
+  111 |           name: 'Missing required URL',
+  112 |           data: {
+  113 |             id: 'test_camera_no_url',
+  114 |             name: 'Test Camera',
+  115 |             protocol: 'rtsp'
+  116 |           },
+  117 |           expectedStatus: 400
+  118 |         },
+  119 |         {
+  120 |           name: 'Invalid protocol',
+  121 |           data: {
+  122 |             id: 'test_camera_invalid_protocol',
+  123 |             name: 'Test Camera',
+  124 |             url: 'rtsp://test:test@192.168.1.100:554/stream',
+  125 |             protocol: 'invalid_protocol'
+  126 |           },
+  127 |           expectedStatus: 400
+  128 |         }
+  129 |       ];
+  130 |       
+  131 |       for (const testCase of invalidDataTests) {
+  132 |         // Test backend validation
+  133 |         const backendResponse = await request.post(`${API_BASE_URL}/cameras`, {
+  134 |           data: testCase.data
+  135 |         });
+  136 |         
+  137 |         // Test frontend validation
+  138 |         await page.goto(`${FRONTEND_URL}/cameras`);
+  139 |         
+  140 |         const frontendResponse = await page.evaluate(async (data) => {
+  141 |           const response = await fetch('/api/cameras', {
+  142 |             method: 'POST',
+  143 |             headers: {
+  144 |               'Content-Type': 'application/json'
+  145 |             },
+  146 |             body: JSON.stringify(data)
+  147 |           });
+  148 |           
+  149 |           return response.status;
+  150 |         }, testCase.data);
+  151 |         
+  152 |         // Both should reject invalid data with same status
+> 153 |         expect(backendResponse.status()).toBe(testCase.expectedStatus);
+      |                                          ^ Error: expect(received).toBe(expected) // Object.is equality
+  154 |         expect(frontendResponse).toBe(testCase.expectedStatus);
+  155 |         
+  156 |         console.log(`✅ ${testCase.name}: Backend ${backendResponse.status()}, Frontend ${frontendResponse}`);
+  157 |       }
+  158 |     });
+  159 |   });
+  160 |
+  161 |   test.describe('System Status Data Validation', () => {
+  162 |     test('System status response structure', async ({ request, page }) => {
+  163 |       // Backend test
+  164 |       const backendResponse = await request.get(`${API_BASE_URL}/system/status`);
+  165 |       expect(backendResponse.ok()).toBeTruthy();
+  166 |       
+  167 |       const backendData = await backendResponse.json();
+  168 |       
+  169 |       // Frontend test
+  170 |       await page.goto(FRONTEND_URL);
+  171 |       
+  172 |       const frontendData = await page.evaluate(async () => {
+  173 |         const response = await fetch('/api/system/status');
+  174 |         return await response.json();
+  175 |       });
+  176 |       
+  177 |       // Validate required fields
+  178 |       const requiredFields = ['status', 'active_pipelines', 'cpu_usage'];
+  179 |       
+  180 |       for (const field of requiredFields) {
+  181 |         expect(backendData).toHaveProperty(field);
+  182 |         expect(frontendData).toHaveProperty(field);
+  183 |         
+  184 |         // Validate data types
+  185 |         if (field === 'status') {
+  186 |           expect(typeof backendData[field]).toBe('string');
+  187 |           expect(typeof frontendData[field]).toBe('string');
+  188 |         } else {
+  189 |           expect(typeof backendData[field]).toBe('number');
+  190 |           expect(typeof frontendData[field]).toBe('number');
+  191 |         }
+  192 |       }
+  193 |       
+  194 |       // Validate value ranges
+  195 |       expect(backendData.cpu_usage).toBeGreaterThanOrEqual(0);
+  196 |       expect(backendData.cpu_usage).toBeLessThanOrEqual(100);
+  197 |       expect(frontendData.cpu_usage).toBeGreaterThanOrEqual(0);
+  198 |       expect(frontendData.cpu_usage).toBeLessThanOrEqual(100);
+  199 |       
+  200 |       expect(backendData.active_pipelines).toBeGreaterThanOrEqual(0);
+  201 |       expect(frontendData.active_pipelines).toBeGreaterThanOrEqual(0);
+  202 |     });
+  203 |   });
+  204 |
+  205 |   test.describe('Alert Data Validation', () => {
+  206 |     test('Alert object structure consistency', async ({ request, page }) => {
+  207 |       // Backend test
+  208 |       const backendResponse = await request.get(`${API_BASE_URL}/alerts`);
+  209 |       expect(backendResponse.ok()).toBeTruthy();
+  210 |       
+  211 |       const backendData = await backendResponse.json();
+  212 |       
+  213 |       // Frontend test
+  214 |       await page.goto(`${FRONTEND_URL}/alerts`);
+  215 |       
+  216 |       const frontendData = await page.evaluate(async () => {
+  217 |         const response = await fetch('/api/alerts');
+  218 |         return await response.json();
+  219 |       });
+  220 |       
+  221 |       // Validate structure
+  222 |       expect(backendData).toHaveProperty('alerts');
+  223 |       expect(frontendData).toHaveProperty('alerts');
+  224 |       
+  225 |       expect(Array.isArray(backendData.alerts)).toBeTruthy();
+  226 |       expect(Array.isArray(frontendData.alerts)).toBeTruthy();
+  227 |       
+  228 |       // If alerts exist, validate structure
+  229 |       if (backendData.alerts.length > 0 && frontendData.alerts.length > 0) {
+  230 |         const backendAlert = backendData.alerts[0];
+  231 |         const frontendAlert = frontendData.alerts[0];
+  232 |         
+  233 |         const expectedFields = ['id', 'title', 'level', 'timestamp'];
+  234 |         
+  235 |         for (const field of expectedFields) {
+  236 |           if (backendAlert.hasOwnProperty(field)) {
+  237 |             expect(frontendAlert).toHaveProperty(field);
+  238 |             expect(typeof backendAlert[field]).toBe(typeof frontendAlert[field]);
+  239 |           }
+  240 |         }
+  241 |       }
+  242 |     });
+  243 |   });
+  244 |
+  245 |   test.describe('Person Statistics Data Validation', () => {
+  246 |     test('Person stats response structure', async ({ request, page }) => {
+  247 |       const cameraId = 'camera_01';
+  248 |       
+  249 |       // Backend test
+  250 |       const backendResponse = await request.get(`${API_BASE_URL}/cameras/${cameraId}/person-stats`);
+  251 |       
+  252 |       // Frontend test
+  253 |       await page.goto(`${FRONTEND_URL}/person-statistics`);
+```

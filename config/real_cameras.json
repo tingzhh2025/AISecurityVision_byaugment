@@ -12,7 +12,7 @@
         "confidence_threshold": 0.5,
         "nms_threshold": 0.4,
         "backend": "RKNN",
-        "model_path": "models/yolov8n.rknn"
+        "model_path": "../models/yolov8n.rknn"
       },
       "stream_config": {
         "fps": 25,
@@ -33,7 +33,7 @@
         "confidence_threshold": 0.5,
         "nms_threshold": 0.4,
         "backend": "RKNN",
-        "model_path": "models/yolov8n.rknn"
+        "model_path": "../models/yolov8n.rknn"
       },
       "stream_config": {
         "fps": 25,
