@@ -15,6 +15,7 @@ class FFmpegDecoder;
 namespace AISecurityVision {
     class YOLOv8Detector;
     class YOLOv8RKNNDetector;
+    class AgeGenderAnalyzer;  // Person statistics extension
 }
 
 class ByteTracker;
@@ -35,6 +36,7 @@ struct IntrusionRule;
 
 // Forward declarations for streaming types
 struct StreamConfig;
+struct FrameResult;
 
 // VideoSource definition (moved from TaskManager.h to avoid circular dependency)
 struct VideoSource {
@@ -106,6 +108,10 @@ public:
     bool removeROI(const std::string& roiId);
     std::vector<ROI> getROIs() const;
 
+    // Person statistics configuration (optional extension)
+    void setPersonStatsEnabled(bool enabled);
+    bool isPersonStatsEnabled() const;
+
     // Statistics
     double getFrameRate() const;
     size_t getProcessedFrames() const;
@@ -124,6 +130,9 @@ private:
     // Processing thread
     void processingThread();
     void processFrame(const cv::Mat& frame, int64_t timestamp);
+
+    // Person statistics processing (optional extension)
+    void processPersonStatistics(FrameResult& result);
 
     // Error handling and health monitoring
     void handleError(const std::string& error);
@@ -154,12 +163,17 @@ private:
     std::unique_ptr<Streamer> m_streamer;
     std::unique_ptr<AlarmTrigger> m_alarmTrigger;
 
+    // Person statistics modules (optional extension)
+    std::unique_ptr<AISecurityVision::AgeGenderAnalyzer> m_ageGenderAnalyzer;
+    // Note: PersonFilter is a static utility class, no member needed
+
     // Configuration flags
     std::atomic<bool> m_detectionEnabled{true};
     std::atomic<bool> m_recordingEnabled{false};
     std::atomic<bool> m_streamingEnabled{false};
     std::atomic<bool> m_optimizedDetectionEnabled{true};
     std::atomic<int> m_detectionThreads{3};
+    std::atomic<bool> m_personStatsEnabled{false};  // Person statistics (optional extension)
 
     // Statistics
     mutable std::atomic<double> m_frameRate{0.0};
@@ -203,4 +217,18 @@ struct FrameResult {
     std::vector<BehaviorEvent> events;  // Changed from std::string to BehaviorEvent
     std::vector<ROI> activeROIs;  // Task 73: Active ROIs for visualization
     bool hasAlarm = false;
+
+    // Person statistics extension (optional, backward compatible)
+    struct PersonStats {
+        int total_persons = 0;
+        int male_count = 0;
+        int female_count = 0;
+        int child_count = 0;
+        int young_count = 0;
+        int middle_count = 0;
+        int senior_count = 0;
+        std::vector<cv::Rect> person_boxes;
+        std::vector<std::string> person_genders;
+        std::vector<std::string> person_ages;
+    } personStats;  // 默认为空，不影响现有功能
 };

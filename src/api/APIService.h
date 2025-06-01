@@ -25,6 +25,30 @@ struct AlarmConfig;
  */
 class APIService {
 public:
+    // Person statistics data structure (optional extension)
+    struct PersonStats {
+        int total_persons = 0;
+        int male_count = 0;
+        int female_count = 0;
+        int child_count = 0;
+        int young_count = 0;
+        int middle_count = 0;
+        int senior_count = 0;
+        std::vector<cv::Rect> person_boxes;
+        std::vector<std::string> person_genders;
+        std::vector<std::string> person_ages;
+    };
+
+    // Person statistics configuration structure (optional extension)
+    struct PersonStatsConfig {
+        bool enabled = false;
+        float gender_threshold = 0.7f;
+        float age_threshold = 0.6f;
+        int batch_size = 4;
+        bool enable_caching = true;
+        std::string model_path = "models/age_gender_mobilenet.rknn";
+    };
+
     explicit APIService(int port = 8080);
     ~APIService();
 
@@ -156,6 +180,13 @@ private:
     void handleGetCrossCameraStats(const std::string& request, std::string& response);
     void handlePostCrossCameraReset(const std::string& request, std::string& response);
 
+    // Person statistics handlers (optional extension)
+    void handleGetPersonStats(const std::string& request, std::string& response, const std::string& cameraId);
+    void handlePostPersonStatsEnable(const std::string& request, std::string& response, const std::string& cameraId);
+    void handlePostPersonStatsDisable(const std::string& request, std::string& response, const std::string& cameraId);
+    void handleGetPersonStatsConfig(const std::string& request, std::string& response, const std::string& cameraId);
+    void handlePostPersonStatsConfig(const std::string& request, std::string& response, const std::string& cameraId);
+
     // Utility methods
     std::string createJsonResponse(const std::string& data, int statusCode = 200);
     std::string createErrorResponse(const std::string& error, int statusCode = 400);
@@ -194,6 +225,10 @@ private:
     std::string serializeReIDMatch(const struct ReIDMatch& match);
     std::string serializeReIDMatchList(const std::vector<struct ReIDMatch>& matches);
 
+    // Person statistics serialization (optional extension)
+    std::string serializePersonStats(const PersonStats& stats);
+    std::string serializePersonStatsConfig(const PersonStatsConfig& config);
+
     // Web interface utilities
     std::string loadWebFile(const std::string& filePath);
 
@@ -211,6 +246,8 @@ private:
         int mjpeg_port;
         bool enabled;
     };
+
+
 
     // Member variables
     int m_port;

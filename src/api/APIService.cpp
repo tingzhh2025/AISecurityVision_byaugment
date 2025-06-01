@@ -614,6 +614,62 @@ void APIService::setupRoutes() {
         handleStreamProxy(cameraId, req, res);
     });
 
+    // Person statistics endpoints (optional extension)
+    m_httpServer->Get(R"(/api/cameras/([^/]+)/person-stats)", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        std::string cameraId = req.matches[1].str();
+        handleGetPersonStats("", response, cameraId);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Post(R"(/api/cameras/([^/]+)/person-stats/enable)", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        std::string cameraId = req.matches[1].str();
+        handlePostPersonStatsEnable(req.body, response, cameraId);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Post(R"(/api/cameras/([^/]+)/person-stats/disable)", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        std::string cameraId = req.matches[1].str();
+        handlePostPersonStatsDisable(req.body, response, cameraId);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Get(R"(/api/cameras/([^/]+)/person-stats/config)", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        std::string cameraId = req.matches[1].str();
+        handleGetPersonStatsConfig("", response, cameraId);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Post(R"(/api/cameras/([^/]+)/person-stats/config)", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        std::string cameraId = req.matches[1].str();
+        handlePostPersonStatsConfig(req.body, response, cameraId);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
     LOG_INFO() << "[APIService] HTTP routes configured successfully";
 }
 
@@ -4868,4 +4924,263 @@ void APIService::handleGetConfigCategory(const std::string& category, std::strin
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to get config category: " + std::string(e.what()), 500);
     }
+}
+
+// Person statistics API handlers (optional extension)
+void APIService::handleGetPersonStats(const std::string& request, std::string& response, const std::string& cameraId) {
+    try {
+        if (cameraId.empty()) {
+            response = createErrorResponse("camera_id is required", 400);
+            return;
+        }
+
+        TaskManager& taskManager = TaskManager::getInstance();
+        auto pipeline = taskManager.getPipeline(cameraId);
+
+        if (!pipeline) {
+            response = createErrorResponse("Camera not found: " + cameraId, 404);
+            return;
+        }
+
+        // Check if person statistics is enabled
+        bool enabled = pipeline->isPersonStatsEnabled();
+
+        if (!enabled) {
+            std::ostringstream json;
+            json << "{"
+                 << "\"camera_id\":\"" << cameraId << "\","
+                 << "\"enabled\":false,"
+                 << "\"message\":\"Person statistics is disabled for this camera\","
+                 << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
+                 << "}";
+            response = createJsonResponse(json.str());
+            return;
+        }
+
+        // Get latest frame result with person statistics
+        // Note: This would need to be implemented in VideoPipeline to get latest stats
+        // For now, return a placeholder response
+        std::ostringstream json;
+        json << "{"
+             << "\"camera_id\":\"" << cameraId << "\","
+             << "\"enabled\":true,"
+             << "\"current_stats\":{"
+             << "\"total_persons\":0,"
+             << "\"male_count\":0,"
+             << "\"female_count\":0,"
+             << "\"child_count\":0,"
+             << "\"young_count\":0,"
+             << "\"middle_count\":0,"
+             << "\"senior_count\":0"
+             << "},"
+             << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+        LOG_DEBUG() << "[APIService] Retrieved person statistics for camera: " << cameraId;
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to get person statistics: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handlePostPersonStatsEnable(const std::string& request, std::string& response, const std::string& cameraId) {
+    try {
+        if (cameraId.empty()) {
+            response = createErrorResponse("camera_id is required", 400);
+            return;
+        }
+
+        TaskManager& taskManager = TaskManager::getInstance();
+        auto pipeline = taskManager.getPipeline(cameraId);
+
+        if (!pipeline) {
+            response = createErrorResponse("Camera not found: " + cameraId, 404);
+            return;
+        }
+
+        // Enable person statistics
+        pipeline->setPersonStatsEnabled(true);
+
+        std::ostringstream json;
+        json << "{"
+             << "\"status\":\"success\","
+             << "\"camera_id\":\"" << cameraId << "\","
+             << "\"person_stats_enabled\":true,"
+             << "\"message\":\"Person statistics enabled successfully\","
+             << "\"enabled_at\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+        LOG_INFO() << "[APIService] Person statistics enabled for camera: " << cameraId;
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to enable person statistics: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handlePostPersonStatsDisable(const std::string& request, std::string& response, const std::string& cameraId) {
+    try {
+        if (cameraId.empty()) {
+            response = createErrorResponse("camera_id is required", 400);
+            return;
+        }
+
+        TaskManager& taskManager = TaskManager::getInstance();
+        auto pipeline = taskManager.getPipeline(cameraId);
+
+        if (!pipeline) {
+            response = createErrorResponse("Camera not found: " + cameraId, 404);
+            return;
+        }
+
+        // Disable person statistics
+        pipeline->setPersonStatsEnabled(false);
+
+        std::ostringstream json;
+        json << "{"
+             << "\"status\":\"success\","
+             << "\"camera_id\":\"" << cameraId << "\","
+             << "\"person_stats_enabled\":false,"
+             << "\"message\":\"Person statistics disabled successfully\","
+             << "\"disabled_at\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+        LOG_INFO() << "[APIService] Person statistics disabled for camera: " << cameraId;
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to disable person statistics: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handleGetPersonStatsConfig(const std::string& request, std::string& response, const std::string& cameraId) {
+    try {
+        if (cameraId.empty()) {
+            response = createErrorResponse("camera_id is required", 400);
+            return;
+        }
+
+        TaskManager& taskManager = TaskManager::getInstance();
+        auto pipeline = taskManager.getPipeline(cameraId);
+
+        if (!pipeline) {
+            response = createErrorResponse("Camera not found: " + cameraId, 404);
+            return;
+        }
+
+        // Get current configuration
+        bool enabled = pipeline->isPersonStatsEnabled();
+
+        std::ostringstream json;
+        json << "{"
+             << "\"camera_id\":\"" << cameraId << "\","
+             << "\"config\":{"
+             << "\"enabled\":" << (enabled ? "true" : "false") << ","
+             << "\"gender_threshold\":0.7,"
+             << "\"age_threshold\":0.6,"
+             << "\"batch_size\":4,"
+             << "\"enable_caching\":true,"
+             << "\"model_path\":\"models/age_gender_mobilenet.rknn\""
+             << "},"
+             << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+        LOG_DEBUG() << "[APIService] Retrieved person statistics config for camera: " << cameraId;
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to get person statistics config: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handlePostPersonStatsConfig(const std::string& request, std::string& response, const std::string& cameraId) {
+    try {
+        if (cameraId.empty()) {
+            response = createErrorResponse("camera_id is required", 400);
+            return;
+        }
+
+        TaskManager& taskManager = TaskManager::getInstance();
+        auto pipeline = taskManager.getPipeline(cameraId);
+
+        if (!pipeline) {
+            response = createErrorResponse("Camera not found: " + cameraId, 404);
+            return;
+        }
+
+        // Parse configuration from request
+        nlohmann::json configJson = nlohmann::json::parse(request);
+
+        // Update configuration (for now, just enable/disable)
+        if (configJson.contains("enabled")) {
+            bool enabled = configJson["enabled"].get<bool>();
+            pipeline->setPersonStatsEnabled(enabled);
+        }
+
+        // TODO: Add support for other configuration parameters like thresholds
+
+        std::ostringstream json;
+        json << "{"
+             << "\"status\":\"success\","
+             << "\"camera_id\":\"" << cameraId << "\","
+             << "\"message\":\"Person statistics configuration updated successfully\","
+             << "\"updated_at\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+        LOG_INFO() << "[APIService] Updated person statistics config for camera: " << cameraId;
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to update person statistics config: " + std::string(e.what()), 500);
+    }
+}
+
+// Person statistics serialization methods (optional extension)
+std::string APIService::serializePersonStats(const PersonStats& stats) {
+    std::ostringstream json;
+    json << "{"
+         << "\"total_persons\":" << stats.total_persons << ","
+         << "\"male_count\":" << stats.male_count << ","
+         << "\"female_count\":" << stats.female_count << ","
+         << "\"child_count\":" << stats.child_count << ","
+         << "\"young_count\":" << stats.young_count << ","
+         << "\"middle_count\":" << stats.middle_count << ","
+         << "\"senior_count\":" << stats.senior_count << ","
+         << "\"person_boxes\":[";
+
+    for (size_t i = 0; i < stats.person_boxes.size(); ++i) {
+        if (i > 0) json << ",";
+        const auto& box = stats.person_boxes[i];
+        json << "{\"x\":" << box.x << ",\"y\":" << box.y
+             << ",\"width\":" << box.width << ",\"height\":" << box.height << "}";
+    }
+
+    json << "],\"person_genders\":[";
+    for (size_t i = 0; i < stats.person_genders.size(); ++i) {
+        if (i > 0) json << ",";
+        json << "\"" << stats.person_genders[i] << "\"";
+    }
+
+    json << "],\"person_ages\":[";
+    for (size_t i = 0; i < stats.person_ages.size(); ++i) {
+        if (i > 0) json << ",";
+        json << "\"" << stats.person_ages[i] << "\"";
+    }
+
+    json << "]}";
+    return json.str();
+}
+
+std::string APIService::serializePersonStatsConfig(const PersonStatsConfig& config) {
+    std::ostringstream json;
+    json << "{"
+         << "\"enabled\":" << (config.enabled ? "true" : "false") << ","
+         << "\"gender_threshold\":" << config.gender_threshold << ","
+         << "\"age_threshold\":" << config.age_threshold << ","
+         << "\"batch_size\":" << config.batch_size << ","
+         << "\"enable_caching\":" << (config.enable_caching ? "true" : "false") << ","
+         << "\"model_path\":\"" << config.model_path << "\""
+         << "}";
+    return json.str();
 }

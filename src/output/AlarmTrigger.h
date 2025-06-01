@@ -250,7 +250,9 @@ private:
     std::atomic<size_t> m_failedCount{0};
 
     // WebSocket server
+#ifdef HAVE_WEBSOCKETPP
     std::unique_ptr<class WebSocketServer> m_webSocketServer;
+#endif
     std::thread m_webSocketThread;
     std::atomic<bool> m_webSocketRunning{false};
 

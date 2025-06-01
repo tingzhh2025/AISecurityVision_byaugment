@@ -38,6 +38,12 @@ const routes = [
         meta: { title: '摄像头管理', icon: 'Camera' }
       },
       {
+        path: '/person-statistics',
+        name: 'PersonStatistics',
+        component: () => import('@/views/PersonStatistics.vue'),
+        meta: { title: '人员统计', icon: 'User' }
+      },
+      {
         path: '/settings',
         name: 'Settings',
         component: () => import('@/views/Settings.vue'),

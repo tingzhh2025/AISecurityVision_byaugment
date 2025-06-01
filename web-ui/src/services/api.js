@@ -131,7 +131,14 @@ export const apiService = {
   getLogs: (params) => api.get('/logs', { params }),
 
   // 统计相关
-  getStatistics: (params) => api.get('/statistics', { params })
+  getStatistics: (params) => api.get('/statistics', { params }),
+
+  // 人员统计相关 (Person Statistics Extension)
+  getPersonStats: (cameraId) => api.get(`/cameras/${cameraId}/person-stats`),
+  enablePersonStats: (cameraId) => api.post(`/cameras/${cameraId}/person-stats/enable`),
+  disablePersonStats: (cameraId) => api.post(`/cameras/${cameraId}/person-stats/disable`),
+  getPersonStatsConfig: (cameraId) => api.get(`/cameras/${cameraId}/person-stats/config`),
+  updatePersonStatsConfig: (cameraId, config) => api.post(`/cameras/${cameraId}/person-stats/config`, config)
 }
 
 export default api

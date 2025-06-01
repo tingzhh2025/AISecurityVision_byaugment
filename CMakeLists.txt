@@ -514,6 +514,70 @@ endif()
 
 target_compile_definitions(yolov8_inference_test PRIVATE DISABLE_OPENCV_DNN)
 
+# Create Person Statistics test program (optional extension)
+add_executable(person_stats_test
+    tests/person_stats_test.cpp
+    src/ai/PersonFilter.cpp
+    src/ai/AgeGenderAnalyzer.cpp
+    src/ai/YOLOv8Detector.cpp
+    src/ai/YOLOv8RKNNDetector.cpp
+    src/core/Logger.cpp
+    src/core/VideoPipeline.cpp
+    src/video/FFmpegDecoder.cpp
+    src/ai/ByteTracker.cpp
+    src/ai/ReIDExtractor.cpp
+    src/recognition/FaceRecognizer.cpp
+    src/recognition/LicensePlateRecognizer.cpp
+    src/ai/BehaviorAnalyzer.cpp
+    src/database/DatabaseManager.cpp
+    src/output/Recorder.cpp
+    src/output/Streamer.cpp
+    src/output/AlarmTrigger.cpp
+    src/core/TaskManager.cpp
+    third_party/mqtt/simple_mqtt.cpp
+)
+
+# Link libraries for person stats test program
+target_link_libraries(person_stats_test ${LINK_LIBRARIES})
+
+# Add compile definitions for person stats test program
+if(RKNN_FOUND)
+    target_compile_definitions(person_stats_test PRIVATE HAVE_RKNN)
+endif()
+
+if(TENSORRT_FOUND)
+    target_compile_definitions(person_stats_test PRIVATE HAVE_TENSORRT)
+endif()
+
+if(SQLITE3_FOUND)
+    target_compile_definitions(person_stats_test PRIVATE HAVE_SQLITE3)
+endif()
+
+if(LIBAV_FOUND)
+    target_compile_definitions(person_stats_test PRIVATE HAVE_FFMPEG)
+endif()
+
+target_compile_definitions(person_stats_test PRIVATE DISABLE_OPENCV_DNN)
+
+# Create Simple Person Statistics test program (minimal dependencies)
+add_executable(simple_person_stats_test
+    tests/simple_person_stats_test.cpp
+    src/ai/PersonFilter.cpp
+    src/ai/AgeGenderAnalyzer.cpp
+    src/core/Logger.cpp
+)
+
+# Link libraries for simple test program
+target_link_libraries(simple_person_stats_test ${OpenCV_LIBS})
+
+# Add compile definitions for simple test program
+if(RKNN_FOUND)
+    target_link_libraries(simple_person_stats_test ${RKNN_LIBRARIES})
+    target_compile_definitions(simple_person_stats_test PRIVATE HAVE_RKNN)
+endif()
+
+target_compile_definitions(simple_person_stats_test PRIVATE DISABLE_OPENCV_DNN)
+
 # Print configuration summary
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
@@ -535,4 +599,28 @@ if(TENSORRT_FOUND)
     message(STATUS "  - TensorRT GPU: YES")
 else()
     message(STATUS "  - TensorRT GPU: NO")
+endif()
+
+# InsightFace Integration (Optional)
+set(INSIGHTFACE_ROOT "/userdata/source/source/insightface/cpp-package/inspireface")
+set(INSIGHTFACE_INCLUDE_DIR "${INSIGHTFACE_ROOT}/cpp/inspireface/c_api")
+set(INSIGHTFACE_INCLUDE_DIR2 "${INSIGHTFACE_ROOT}/cpp")
+set(INSIGHTFACE_INCLUDE_DIR3 "${INSIGHTFACE_ROOT}/cpp/inspireface/include/inspireface")
+set(INSIGHTFACE_LIB_DIR "${INSIGHTFACE_ROOT}/build/lib")
+
+# Try to find InsightFace library
+find_library(INSIGHTFACE_LIB
+    NAMES InspireFace
+    PATHS ${INSIGHTFACE_LIB_DIR}
+    NO_DEFAULT_PATH
+)
+
+if(INSIGHTFACE_LIB)
+    message(STATUS "Found InsightFace library: ${INSIGHTFACE_LIB}")
+    target_include_directories(${PROJECT_NAME} PRIVATE ${INSIGHTFACE_INCLUDE_DIR} ${INSIGHTFACE_INCLUDE_DIR2} ${INSIGHTFACE_INCLUDE_DIR3})
+    target_link_libraries(${PROJECT_NAME} ${INSIGHTFACE_LIB})
+    target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_INSIGHTFACE=1)
+    message(STATUS "InsightFace integration enabled")
+else()
+    message(STATUS "InsightFace library not found. Using RKNN fallback.")
 endif()

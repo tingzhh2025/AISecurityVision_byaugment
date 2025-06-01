@@ -11,6 +11,9 @@
 #include "../output/Recorder.h"
 #include "../output/Streamer.h"
 #include "../output/AlarmTrigger.h"
+// Person statistics extensions (optional)
+#include "../ai/PersonFilter.h"
+#include "../ai/AgeGenderAnalyzer.h"
 #include <iostream>
 #include <chrono>
 #include <sstream>
@@ -371,6 +374,116 @@ void VideoPipeline::processFrame(const cv::Mat& frame, int64_t timestamp) {
 
     if (result.hasAlarm && m_alarmTrigger) {
         m_alarmTrigger->triggerAlarm(result);
+    }
+
+    // Person statistics processing (optional, backward compatible)
+    if (m_personStatsEnabled.load() && !result.detections.empty()) {
+        processPersonStatistics(result);
+    }
+}
+
+void VideoPipeline::processPersonStatistics(FrameResult& result) {
+    try {
+        // PersonFilter is a static utility class, no initialization needed
+
+        if (!m_ageGenderAnalyzer) {
+            m_ageGenderAnalyzer = std::make_unique<AISecurityVision::AgeGenderAnalyzer>();
+            if (!m_ageGenderAnalyzer->initialize()) {
+                LOG_WARN() << "[VideoPipeline] Failed to initialize AgeGenderAnalyzer, disabling person statistics";
+                m_personStatsEnabled.store(false);
+                return;
+            }
+        }
+
+        // Convert YOLOv8 detections to Detection format for PersonFilter
+        std::vector<AISecurityVision::Detection> detections;
+        for (size_t i = 0; i < result.detections.size() && i < result.labels.size(); ++i) {
+            AISecurityVision::Detection detection;
+            detection.bbox = result.detections[i];
+            detection.confidence = 0.8f;  // Default confidence if not available
+            detection.className = result.labels[i];
+
+            // Map class name to class ID (person = 0 in COCO)
+            if (result.labels[i] == "person") {
+                detection.classId = 0;
+            } else {
+                detection.classId = -1;  // Non-person class
+            }
+
+            detections.push_back(detection);
+        }
+
+        // Filter person detections
+        auto persons = AISecurityVision::PersonFilter::filterPersons(
+            detections, result.frame, result.trackIds, result.timestamp
+        );
+
+        if (persons.empty()) {
+            // No persons detected, reset statistics
+            result.personStats = FrameResult::PersonStats();
+            return;
+        }
+
+        // Analyze age and gender
+        auto attributes = m_ageGenderAnalyzer->analyze(persons);
+
+        // Update person statistics
+        result.personStats.total_persons = static_cast<int>(persons.size());
+        result.personStats.male_count = 0;
+        result.personStats.female_count = 0;
+        result.personStats.child_count = 0;
+        result.personStats.young_count = 0;
+        result.personStats.middle_count = 0;
+        result.personStats.senior_count = 0;
+
+        // Clear previous data
+        result.personStats.person_boxes.clear();
+        result.personStats.person_genders.clear();
+        result.personStats.person_ages.clear();
+
+        // Process each person
+        for (size_t i = 0; i < persons.size(); ++i) {
+            const auto& person = persons[i];
+            result.personStats.person_boxes.push_back(person.bbox);
+
+            // Add attributes if available
+            if (i < attributes.size() && attributes[i].isValid()) {
+                const auto& attr = attributes[i];
+
+                // Count by gender
+                if (attr.gender == "male") {
+                    result.personStats.male_count++;
+                } else if (attr.gender == "female") {
+                    result.personStats.female_count++;
+                }
+
+                // Count by age group
+                if (attr.age_group == "child") {
+                    result.personStats.child_count++;
+                } else if (attr.age_group == "young") {
+                    result.personStats.young_count++;
+                } else if (attr.age_group == "middle") {
+                    result.personStats.middle_count++;
+                } else if (attr.age_group == "senior") {
+                    result.personStats.senior_count++;
+                }
+
+                result.personStats.person_genders.push_back(attr.gender);
+                result.personStats.person_ages.push_back(attr.age_group);
+            } else {
+                result.personStats.person_genders.push_back("unknown");
+                result.personStats.person_ages.push_back("unknown");
+            }
+        }
+
+        LOG_DEBUG() << "[VideoPipeline] Person statistics: "
+                   << result.personStats.total_persons << " total, "
+                   << result.personStats.male_count << " male, "
+                   << result.personStats.female_count << " female";
+
+    } catch (const std::exception& e) {
+        LOG_ERROR() << "[VideoPipeline] Error in person statistics processing: " << e.what();
+        result.personStats = FrameResult::PersonStats();  // Reset to default
     }
 }
 
@@ -827,4 +940,16 @@ void VideoPipeline::checkStreamHealth() {
 
 bool VideoPipeline::isStreamStable() const {
     return m_streamStable.load();
+}
+
+// Person statistics configuration methods
+void VideoPipeline::setPersonStatsEnabled(bool enabled) {
+    m_personStatsEnabled.store(enabled);
+    LOG_INFO() << "[VideoPipeline] Person statistics "
+               << (enabled ? "enabled" : "disabled")
+               << " for pipeline: " << m_source.id;
+}
+
+bool VideoPipeline::isPersonStatsEnabled() const {
+    return m_personStatsEnabled.load();
 }

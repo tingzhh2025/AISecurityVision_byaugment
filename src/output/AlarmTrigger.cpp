@@ -1,5 +1,7 @@
 #include "AlarmTrigger.h"
+#ifdef HAVE_WEBSOCKETPP
 #include "WebSocketServer.h"
+#endif
 #include "../core/VideoPipeline.h"
 #include "../ai/BehaviorAnalyzer.h"
 #include "../core/Logger.h"

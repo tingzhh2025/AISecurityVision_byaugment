@@ -126,14 +126,69 @@
             </el-form-item>
             
             <el-form-item label="检测间隔(秒)" v-if="aiConfig.enabled">
-              <el-input-number 
-                v-model="aiConfig.detectionInterval" 
-                :min="0.1" 
-                :max="10" 
+              <el-input-number
+                v-model="aiConfig.detectionInterval"
+                :min="0.1"
+                :max="10"
                 :step="0.1"
               />
             </el-form-item>
-            
+
+            <!-- 人员统计配置 -->
+            <el-divider content-position="left">人员统计配置</el-divider>
+
+            <el-form-item label="启用人员统计" v-if="aiConfig.enabled">
+              <el-switch v-model="personStatsConfig.enabled" />
+              <el-text size="small" type="info" style="margin-left: 8px;">
+                基于AI检测结果进行年龄性别识别和统计
+              </el-text>
+            </el-form-item>
+
+            <el-form-item label="性别识别阈值" v-if="aiConfig.enabled && personStatsConfig.enabled">
+              <el-slider
+                v-model="personStatsConfig.genderThreshold"
+                :min="0.1"
+                :max="1"
+                :step="0.05"
+                show-input
+              />
+            </el-form-item>
+
+            <el-form-item label="年龄识别阈值" v-if="aiConfig.enabled && personStatsConfig.enabled">
+              <el-slider
+                v-model="personStatsConfig.ageThreshold"
+                :min="0.1"
+                :max="1"
+                :step="0.05"
+                show-input
+              />
+            </el-form-item>
+
+            <el-form-item label="批处理大小" v-if="aiConfig.enabled && personStatsConfig.enabled">
+              <el-input-number
+                v-model="personStatsConfig.batchSize"
+                :min="1"
+                :max="16"
+              />
+              <el-text size="small" type="info" style="margin-left: 8px;">
+                同时处理的人员数量，影响性能和内存使用
+              </el-text>
+            </el-form-item>
+
+            <el-form-item label="启用缓存" v-if="aiConfig.enabled && personStatsConfig.enabled">
+              <el-switch v-model="personStatsConfig.enableCaching" />
+              <el-text size="small" type="info" style="margin-left: 8px;">
+                缓存分析结果以提高性能
+              </el-text>
+            </el-form-item>
+
+            <el-form-item label="模型文件路径" v-if="aiConfig.enabled && personStatsConfig.enabled">
+              <el-input
+                v-model="personStatsConfig.modelPath"
+                placeholder="models/age_gender_mobilenet.rknn"
+              />
+            </el-form-item>
+
             <el-form-item>
               <el-button type="primary" @click="saveAiConfig">保存配置</el-button>
               <el-button @click="resetAiConfig">重置</el-button>
@@ -378,6 +433,15 @@ const aiConfig = reactive({
   detectionInterval: 1.0
 })
 
+const personStatsConfig = reactive({
+  enabled: false,
+  genderThreshold: 0.7,
+  ageThreshold: 0.6,
+  batchSize: 4,
+  enableCaching: true,
+  modelPath: 'models/age_gender_mobilenet.rknn'
+})
+
 const recordingConfig = reactive({
   enabled: true,
   storagePath: '/data/recordings',
@@ -427,6 +491,9 @@ const loadConfigs = async () => {
     if (data.ai) {
       Object.assign(aiConfig, data.ai)
     }
+    if (data.personStats) {
+      Object.assign(personStatsConfig, data.personStats)
+    }
     if (data.recording) {
       Object.assign(recordingConfig, data.recording)
     }
@@ -456,7 +523,10 @@ const saveSystemConfig = async () => {
 
 const saveAiConfig = async () => {
   try {
-    await apiService.saveSystemConfig({ ai: aiConfig })
+    await apiService.saveSystemConfig({
+      ai: aiConfig,
+      personStats: personStatsConfig
+    })
     ElMessage.success('AI配置保存成功')
   } catch (error) {
     console.error('Failed to save AI config:', error)

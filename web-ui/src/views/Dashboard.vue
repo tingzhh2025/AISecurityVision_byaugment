@@ -154,6 +154,43 @@
       </el-col>
     </el-row>
 
+    <!-- 人员统计 -->
+    <el-row :gutter="20" class="person-stats-row" v-if="systemStore.cameras.length > 0">
+      <el-col :span="24">
+        <el-card class="person-stats-card">
+          <template #header>
+            <div class="card-header">
+              <span>人员统计</span>
+              <el-select
+                v-model="selectedCameraForStats"
+                placeholder="选择摄像头"
+                style="width: 200px"
+                @change="onCameraChange"
+              >
+                <el-option
+                  v-for="camera in systemStore.cameras"
+                  :key="camera.id"
+                  :label="camera.name"
+                  :value="camera.id"
+                />
+              </el-select>
+            </div>
+          </template>
+
+          <PersonStats
+            v-if="selectedCameraForStats"
+            :camera-id="selectedCameraForStats"
+            :auto-refresh="true"
+            :refresh-interval="5000"
+          />
+
+          <div v-else class="no-camera-selected">
+            <el-empty description="请选择摄像头查看人员统计" />
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
+
     <!-- 摄像头状态 -->
     <el-row :gutter="20" class="cameras-row">
       <el-col :span="24">
@@ -205,14 +242,18 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSystemStore } from '@/stores/system'
 import { apiService } from '@/services/api'
+import PersonStats from '@/components/PersonStats.vue'
 import dayjs from 'dayjs'
 
 const router = useRouter()
 const systemStore = useSystemStore()
+
+// 响应式数据
+const selectedCameraForStats = ref('')
 
 // 计算属性
 const systemUptime = computed(() => {
@@ -278,9 +319,18 @@ const viewCamera = (camera) => {
   router.push(`/live?camera=${camera.id}`)
 }
 
+const onCameraChange = (cameraId) => {
+  selectedCameraForStats.value = cameraId
+}
+
 onMounted(() => {
   // 组件挂载时刷新数据
   refreshSystemInfo()
+
+  // 如果有摄像头，默认选择第一个
+  if (systemStore.cameras.length > 0) {
+    selectedCameraForStats.value = systemStore.cameras[0].id
+  }
 })
 </script>
 
@@ -442,6 +492,19 @@ onMounted(() => {
   font-size: 48px;
   margin-bottom: 12px;
   color: #67c23a;
+}
+
+.person-stats-row {
+  margin-bottom: 20px;
+}
+
+.person-stats-card {
+  min-height: 350px;
+}
+
+.no-camera-selected {
+  padding: 40px 20px;
+  text-align: center;
 }
 
 .cameras-card {
