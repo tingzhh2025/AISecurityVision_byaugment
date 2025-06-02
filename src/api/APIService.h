@@ -102,6 +102,11 @@ private:
     void handleDeleteVideoSource(const std::string& request, std::string& response);
     void handleGetVideoSources(const std::string& request, std::string& response);
 
+    // Detection category filtering endpoints
+    void handleGetDetectionCategories(const std::string& request, std::string& response);
+    void handlePostDetectionCategories(const std::string& request, std::string& response);
+    void handleGetAvailableCategories(const std::string& request, std::string& response);
+
     // ONVIF discovery handlers
     void handleGetDiscoverDevices(const std::string& request, std::string& response);
     void handlePostAddDiscoveredDevice(const std::string& request, std::string& response);

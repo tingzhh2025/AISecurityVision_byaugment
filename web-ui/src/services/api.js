@@ -89,20 +89,36 @@ export const apiService = {
   testCameraConnection: (connectionData) => api.post('/cameras/test-connection', connectionData),
 
   // 实时视频流
-  getStreamUrl: (cameraId) => {
-    // 根据摄像头ID返回正确的MJPEG流地址
-    const streamMapping = {
-      'camera_01': 'http://localhost:8161/stream.mjpg',
-      'camera_02': 'http://localhost:8162/stream.mjpg',
-      'camera_03': 'http://localhost:8163/stream.mjpg',
-      'camera_04': 'http://localhost:8164/stream.mjpg',
-      'camera_05': 'http://localhost:8165/stream.mjpg',
-      'camera_06': 'http://localhost:8166/stream.mjpg',
-      'camera_07': 'http://localhost:8167/stream.mjpg',
-      'camera_08': 'http://localhost:8168/stream.mjpg'
-    }
+  getStreamUrl: async (cameraId) => {
+    try {
+      // 首先尝试从API获取摄像头信息
+      const response = await api.get('/cameras')
+      const cameras = response.data.cameras || []
+      const camera = cameras.find(cam => cam.id === cameraId)
 
-    return streamMapping[cameraId] || 'http://localhost:8161/stream.mjpg'
+      if (camera && camera.mjpeg_port) {
+        // 直接访问MJPEG流，不通过Vite代理
+        return `http://192.168.1.199:${camera.mjpeg_port}/stream.mjpg`
+      }
+
+      // 如果API调用失败，回退到静态映射
+      const streamMapping = {
+        'camera_01': 'http://192.168.1.199:8161/stream.mjpg',
+        'camera_02': 'http://192.168.1.199:8162/stream.mjpg',
+        'camera_03': 'http://192.168.1.199:8163/stream.mjpg',
+        'camera_04': 'http://192.168.1.199:8164/stream.mjpg',
+        'camera_05': 'http://192.168.1.199:8165/stream.mjpg',
+        'camera_06': 'http://192.168.1.199:8166/stream.mjpg',
+        'camera_07': 'http://192.168.1.199:8167/stream.mjpg',
+        'camera_08': 'http://192.168.1.199:8168/stream.mjpg',
+        'test_camera': 'http://192.168.1.199:8161/stream.mjpg'
+      }
+
+      return streamMapping[cameraId] || 'http://192.168.1.199:8161/stream.mjpg'
+    } catch (error) {
+      console.error('Failed to get camera info for stream URL:', error)
+      return 'http://192.168.1.199:8161/stream.mjpg'
+    }
   },
 
   // 录像相关
@@ -121,6 +137,11 @@ export const apiService = {
   getDetectionConfig: () => api.get('/detection/config'),
   updateDetectionConfig: (config) => api.put('/detection/config', config),
   getDetectionStats: () => api.get('/detection/stats'),
+
+  // 检测类别过滤相关
+  getDetectionCategories: () => api.get('/detection/categories'),
+  updateDetectionCategories: (categories) => api.post('/detection/categories', categories),
+  getAvailableCategories: () => api.get('/detection/categories/available'),
 
   // 用户相关
   login: (credentials) => api.post('/auth/login', credentials),

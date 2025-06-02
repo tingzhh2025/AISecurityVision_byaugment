@@ -951,3 +951,23 @@ void TaskManager::updateCrossCameraTrackingStats() {
     size_t activeCount = getActiveCrossCameraTrackCount();
     m_activeCrossCameraTracks.store(activeCount);
 }
+
+// Detection category filtering implementation
+void TaskManager::updateDetectionCategories(const std::vector<std::string>& enabledCategories) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    LOG_INFO() << "[TaskManager] Updating detection categories for " << m_pipelines.size() << " pipelines";
+
+    int updatedPipelines = 0;
+    for (const auto& [id, pipeline] : m_pipelines) {
+        if (pipeline) {
+            // Update detection categories for this pipeline
+            if (pipeline->updateDetectionCategories(enabledCategories)) {
+                updatedPipelines++;
+            }
+        }
+    }
+
+    LOG_INFO() << "[TaskManager] Updated detection categories for " << updatedPipelines
+               << " out of " << m_pipelines.size() << " pipelines";
+}

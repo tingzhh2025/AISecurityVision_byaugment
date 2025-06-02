@@ -105,6 +105,13 @@ public:
     float getNMSThreshold() const { return m_nmsThreshold; }
     const std::vector<std::string>& getClassNames() const { return m_classNames; }
 
+    // Category filtering methods
+    void setEnabledCategories(const std::vector<std::string>& categories);
+    const std::vector<std::string>& getEnabledCategories() const { return m_enabledCategories; }
+    const std::vector<std::string>& getAvailableCategories() const { return m_classNames; }
+    bool isCategoryEnabled(const std::string& category) const;
+    bool isCategoryEnabled(int classId) const;
+
     // Performance metrics
     double getLastInferenceTime() const { return m_inferenceTime; }
     double getAverageInferenceTime() const;
@@ -126,6 +133,9 @@ protected:
     // Class names (COCO dataset by default)
     std::vector<std::string> m_classNames;
 
+    // Category filtering
+    std::vector<std::string> m_enabledCategories;
+
     // State
     bool m_initialized = false;
     InferenceBackend m_backend = InferenceBackend::CPU;
@@ -141,6 +151,13 @@ protected:
      * @return true if successful, false otherwise
      */
     bool loadClassNames(const std::string& labelPath);
+
+    /**
+     * @brief Filter detections based on enabled categories
+     * @param detections Input detections to filter
+     * @return Filtered detections containing only enabled categories
+     */
+    std::vector<Detection> filterDetectionsByCategory(const std::vector<Detection>& detections) const;
 
     /**
      * @brief Initialize default COCO class names

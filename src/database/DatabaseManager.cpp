@@ -2,6 +2,7 @@
 #include <iostream>
 #include <sstream>
 #include <cstring>
+#include <nlohmann/json.hpp>
 
 #include "../core/Logger.h"
 using namespace AISecurityVision;
@@ -1365,4 +1366,76 @@ bool DatabaseManager::deleteCameraConfig(const std::string& cameraId) {
     }
 
     return true;
+}
+
+// Detection category configuration operations implementation
+bool DatabaseManager::saveDetectionCategories(const std::vector<std::string>& enabledCategories) {
+    try {
+        // Convert vector to JSON array
+        nlohmann::json categoriesJson = enabledCategories;
+        std::string categoriesStr = categoriesJson.dump();
+
+        // Save to config table
+        bool result = saveConfig("detection_categories", "enabled_classes", categoriesStr);
+
+        if (result) {
+            LOG_INFO() << "[DatabaseManager] Saved " << enabledCategories.size()
+                       << " enabled detection categories";
+        } else {
+            LOG_ERROR() << "[DatabaseManager] Failed to save detection categories";
+        }
+
+        return result;
+    } catch (const std::exception& e) {
+        LOG_ERROR() << "[DatabaseManager] Exception saving detection categories: " << e.what();
+        return false;
+    }
+}
+
+std::vector<std::string> DatabaseManager::getDetectionCategories() {
+    std::vector<std::string> categories;
+
+    try {
+        // Get from config table
+        std::string categoriesStr = getConfig("detection_categories", "enabled_classes", "");
+
+        if (categoriesStr.empty()) {
+            // Return default categories if none saved
+            LOG_INFO() << "[DatabaseManager] No saved detection categories, returning defaults";
+            return {"person", "car", "truck", "bicycle", "motorcycle", "bus"};
+        }
+
+        // Parse JSON array
+        nlohmann::json categoriesJson = nlohmann::json::parse(categoriesStr);
+
+        if (categoriesJson.is_array()) {
+            for (const auto& category : categoriesJson) {
+                if (category.is_string()) {
+                    categories.push_back(category.get<std::string>());
+                }
+            }
+        }
+
+        LOG_INFO() << "[DatabaseManager] Loaded " << categories.size()
+                   << " enabled detection categories";
+
+    } catch (const std::exception& e) {
+        LOG_ERROR() << "[DatabaseManager] Exception loading detection categories: " << e.what();
+        // Return default categories on error
+        return {"person", "car", "truck", "bicycle", "motorcycle", "bus"};
+    }
+
+    return categories;
+}
+
+bool DatabaseManager::resetDetectionCategories() {
+    bool result = deleteConfig("detection_categories", "enabled_classes");
+
+    if (result) {
+        LOG_INFO() << "[DatabaseManager] Reset detection categories to defaults";
+    } else {
+        LOG_ERROR() << "[DatabaseManager] Failed to reset detection categories";
+    }
+
+    return result;
 }

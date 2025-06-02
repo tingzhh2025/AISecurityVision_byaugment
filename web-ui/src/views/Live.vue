@@ -48,8 +48,8 @@
           <!-- 视频流 -->
           <div class="video-stream">
             <img
-              v-if="camera.status === 'online'"
-              :src="getStreamUrl(camera.id)"
+              v-if="(camera.status === 'online' || camera.status === 'configured') && streamUrls[camera.id]"
+              :src="streamUrls[camera.id]"
               :alt="camera.name"
               @error="handleStreamError(camera.id)"
               @load="handleStreamLoad(camera.id)"
@@ -278,6 +278,7 @@ const detections = ref({})
 const cameraDialogVisible = ref(false)
 const selectedCameraData = ref(null)
 const videoContainer = ref(null)
+const streamUrls = ref({})
 
 // 添加摄像头相关
 const addCameraDialogVisible = ref(false)
@@ -356,7 +357,21 @@ const selectCamera = (camera) => {
 }
 
 const getStreamUrl = (cameraId) => {
-  return apiService.getStreamUrl(cameraId)
+  // 如果已经缓存了URL，直接返回
+  if (streamUrls.value[cameraId]) {
+    return streamUrls.value[cameraId]
+  }
+
+  // 异步获取URL并缓存
+  apiService.getStreamUrl(cameraId).then(url => {
+    streamUrls.value[cameraId] = url
+  }).catch(error => {
+    console.error('Failed to get stream URL for camera:', cameraId, error)
+    streamUrls.value[cameraId] = 'http://192.168.1.199:8161/stream.mjpg' // 默认URL
+  })
+
+  // 返回默认URL作为占位符
+  return 'http://192.168.1.199:8161/stream.mjpg'
 }
 
 const handleStreamError = (cameraId) => {
@@ -374,10 +389,17 @@ const handleStreamLoad = (cameraId) => {
   }
 }
 
-const refreshStreams = () => {
+const refreshStreams = async () => {
   loadingStreams.value = systemStore.cameras
-    .filter(camera => camera.status === 'online')
+    .filter(camera => camera.status === 'online' || camera.status === 'configured')
     .map(camera => camera.id)
+
+  // 预加载所有摄像头的流URL
+  for (const camera of systemStore.cameras) {
+    if (camera.status === 'online' || camera.status === 'configured') {
+      getStreamUrl(camera.id)
+    }
+  }
 
   // 重新加载所有图片
   nextTick(() => {

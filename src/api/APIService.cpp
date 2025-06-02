@@ -396,6 +396,37 @@ void APIService::setupRoutes() {
         res.set_content(response, "application/json");
     });
 
+    // Detection category filtering endpoints
+    m_httpServer->Get("/api/detection/categories", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handleGetDetectionCategories("", response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Post("/api/detection/categories", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handlePostDetectionCategories(req.body, response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
+    m_httpServer->Get("/api/detection/categories/available", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        handleGetAvailableCategories("", response);
+        size_t contentStart = response.find("\r\n\r\n");
+        if (contentStart != std::string::npos) {
+            response = response.substr(contentStart + 4);
+        }
+        res.set_content(response, "application/json");
+    });
+
     // ROI management endpoints - Task 68
     m_httpServer->Post("/api/rois", [this](const httplib::Request& req, httplib::Response& res) {
         std::string response;
@@ -4308,16 +4339,61 @@ void APIService::handleGetSystemInfo(const std::string& request, std::string& re
 
 void APIService::handleGetCameras(const std::string& request, std::string& response) {
     try {
-        // Return stored camera configurations to avoid deadlock
+        // Get cameras from both in-memory config and database to ensure completeness
+        std::vector<CameraConfig> allCameras = m_cameraConfigs;
+
+        // Also load cameras from database that might not be in memory
+        DatabaseManager dbManager;
+        if (dbManager.initialize()) {
+            auto cameraIds = dbManager.getAllCameraIds();
+
+            for (const std::string& cameraId : cameraIds) {
+                // Check if this camera is already in m_cameraConfigs
+                bool found = false;
+                for (const auto& existingCamera : m_cameraConfigs) {
+                    if (existingCamera.id == cameraId) {
+                        found = true;
+                        break;
+                    }
+                }
+
+                // If not found in memory, load from database
+                if (!found) {
+                    std::string configJson = dbManager.getCameraConfig(cameraId);
+                    if (!configJson.empty()) {
+                        try {
+                            nlohmann::json config = nlohmann::json::parse(configJson);
+                            CameraConfig camera;
+                            camera.id = cameraId;
+                            camera.name = config.value("name", cameraId);
+                            camera.url = config.value("url", "");
+                            camera.protocol = config.value("protocol", "rtsp");
+                            camera.username = config.value("username", "");
+                            camera.password = config.value("password", "");
+                            camera.width = config.value("width", 1280);
+                            camera.height = config.value("height", 720);
+                            camera.fps = config.value("fps", 25);
+                            camera.mjpeg_port = config.value("mjpeg_port", 8000);
+                            camera.enabled = config.value("enabled", true);
+
+                            allCameras.push_back(camera);
+                        } catch (const std::exception& e) {
+                            LOG_WARN() << "[APIService] Failed to parse camera config for " << cameraId << ": " << e.what();
+                        }
+                    }
+                }
+            }
+        }
+
         std::ostringstream json;
         json << "{"
              << "\"cameras\":[";
 
-        // Add stored cameras from configuration
-        for (size_t i = 0; i < m_cameraConfigs.size(); ++i) {
+        // Add all cameras (both in-memory and database-loaded)
+        for (size_t i = 0; i < allCameras.size(); ++i) {
             if (i > 0) json << ",";
 
-            const auto& camera = m_cameraConfigs[i];
+            const auto& camera = allCameras[i];
             json << "{"
                  << "\"id\":\"" << camera.id << "\","
                  << "\"name\":\"" << camera.name << "\","
@@ -4336,12 +4412,12 @@ void APIService::handleGetCameras(const std::string& request, std::string& respo
         }
 
         json << "],"
-             << "\"total\":" << m_cameraConfigs.size() << ","
+             << "\"total\":" << allCameras.size() << ","
              << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
              << "}";
 
         response = createJsonResponse(json.str());
-        LOG_INFO() << "[APIService] Returned cameras list (" << m_cameraConfigs.size() << " cameras)";
+        LOG_INFO() << "[APIService] Returned cameras list (" << allCameras.size() << " cameras)";
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to get cameras: " + std::string(e.what()), 500);
@@ -5191,4 +5267,138 @@ std::string APIService::serializePersonStatsConfig(const PersonStatsConfig& conf
          << "\"model_path\":\"" << config.model_path << "\""
          << "}";
     return json.str();
+}
+
+// Detection category filtering handlers implementation
+void APIService::handleGetDetectionCategories(const std::string& request, std::string& response) {
+    try {
+        DatabaseManager dbManager;
+        if (!dbManager.initialize()) {
+            response = createErrorResponse("Database not available", 503);
+            return;
+        }
+
+        // Get enabled categories from database
+        std::vector<std::string> enabledCategories = dbManager.getDetectionCategories();
+
+        std::ostringstream json;
+        json << "{"
+             << "\"enabled_categories\":[";
+
+        for (size_t i = 0; i < enabledCategories.size(); ++i) {
+            if (i > 0) json << ",";
+            json << "\"" << enabledCategories[i] << "\"";
+        }
+
+        json << "],"
+             << "\"total_enabled\":" << enabledCategories.size() << ","
+             << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+        LOG_INFO() << "[APIService] Retrieved " << enabledCategories.size() << " enabled detection categories";
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to get detection categories: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handlePostDetectionCategories(const std::string& request, std::string& response) {
+    try {
+        DatabaseManager dbManager;
+        if (!dbManager.initialize()) {
+            response = createErrorResponse("Database not available", 503);
+            return;
+        }
+
+        // Parse JSON request
+        nlohmann::json requestJson = nlohmann::json::parse(request);
+
+        if (!requestJson.contains("enabled_categories") || !requestJson["enabled_categories"].is_array()) {
+            response = createErrorResponse("enabled_categories array is required", 400);
+            return;
+        }
+
+        // Extract enabled categories
+        std::vector<std::string> enabledCategories;
+        for (const auto& category : requestJson["enabled_categories"]) {
+            if (category.is_string()) {
+                enabledCategories.push_back(category.get<std::string>());
+            }
+        }
+
+        // Save to database
+        if (!dbManager.saveDetectionCategories(enabledCategories)) {
+            response = createErrorResponse("Failed to save detection categories: " + dbManager.getErrorMessage(), 500);
+            return;
+        }
+
+        // Update all active detectors with new categories
+        TaskManager& taskManager = TaskManager::getInstance();
+        taskManager.updateDetectionCategories(enabledCategories);
+
+        std::ostringstream json;
+        json << "{"
+             << "\"status\":\"success\","
+             << "\"enabled_categories\":[";
+
+        for (size_t i = 0; i < enabledCategories.size(); ++i) {
+            if (i > 0) json << ",";
+            json << "\"" << enabledCategories[i] << "\"";
+        }
+
+        json << "],"
+             << "\"total_enabled\":" << enabledCategories.size() << ","
+             << "\"updated_at\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+        LOG_INFO() << "[APIService] Updated detection categories: " << enabledCategories.size() << " categories enabled";
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to update detection categories: " + std::string(e.what()), 500);
+    }
+}
+
+void APIService::handleGetAvailableCategories(const std::string& request, std::string& response) {
+    try {
+        // Get available categories from YOLOv8 detector (COCO classes)
+        // This could be enhanced to dynamically read from the model file
+        std::vector<std::string> availableCategories = {
+            "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck",
+            "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench",
+            "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra",
+            "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee",
+            "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove",
+            "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup",
+            "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange",
+            "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch",
+            "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse",
+            "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink",
+            "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier",
+            "toothbrush"
+        };
+
+        std::ostringstream json;
+        json << "{"
+             << "\"available_categories\":[";
+
+        for (size_t i = 0; i < availableCategories.size(); ++i) {
+            if (i > 0) json << ",";
+            json << "\"" << availableCategories[i] << "\"";
+        }
+
+        json << "],"
+             << "\"total_available\":" << availableCategories.size() << ","
+             << "\"model_type\":\"yolov8n\","
+             << "\"dataset\":\"COCO\","
+             << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+        LOG_INFO() << "[APIService] Retrieved " << availableCategories.size() << " available detection categories";
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to get available categories: " + std::string(e.what()), 500);
+    }
 }

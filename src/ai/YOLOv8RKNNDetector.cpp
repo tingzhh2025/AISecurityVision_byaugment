@@ -688,7 +688,13 @@ std::vector<Detection> YOLOv8RKNNDetector::postprocessResults(rknn_output* outpu
 
 #endif
 
-    return detections;
+    // Apply category filtering before returning results
+    std::vector<Detection> filteredDetections = filterDetectionsByCategory(detections);
+
+    LOG_DEBUG() << "[YOLOv8RKNNDetector] Applied category filtering: "
+                << filteredDetections.size() << "/" << detections.size() << " detections kept";
+
+    return filteredDetections;
 }
 
 void YOLOv8RKNNDetector::cleanup() {

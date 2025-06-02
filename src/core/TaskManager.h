@@ -174,6 +174,9 @@ public:
     size_t getCrossCameraMatchCount() const;
     void resetCrossCameraTrackingStats();
 
+    // Detection category filtering
+    void updateDetectionCategories(const std::vector<std::string>& enabledCategories);
+
     // Configuration constants
     static constexpr size_t MAX_PIPELINES = 16;
     static constexpr int MONITORING_INTERVAL_MS = 1000;

@@ -89,6 +89,10 @@ public:
     void setDetectionThreads(int threads);
     int getDetectionThreads() const;
 
+    // Detection category filtering
+    bool updateDetectionCategories(const std::vector<std::string>& enabledCategories);
+    bool updateDetectionCategoriesInternal(const std::vector<std::string>& enabledCategories);
+
     // Streaming configuration
     bool configureStreaming(const StreamConfig& config);
     StreamConfig getStreamConfig() const;

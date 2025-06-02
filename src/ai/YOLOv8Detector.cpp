@@ -16,6 +16,8 @@ namespace AISecurityVision {
 
 YOLOv8Detector::YOLOv8Detector() {
     initializeDefaultClassNames();
+    // By default, enable all categories
+    m_enabledCategories = m_classNames;
 }
 
 YOLOv8Detector::~YOLOv8Detector() {
@@ -71,6 +73,50 @@ void YOLOv8Detector::initializeDefaultClassNames() {
     };
 
     LOG_INFO() << "[YOLOv8Detector] Initialized with " << m_classNames.size() << " COCO class names";
+}
+
+void YOLOv8Detector::setEnabledCategories(const std::vector<std::string>& categories) {
+    m_enabledCategories.clear();
+
+    // Validate that all provided categories exist in the class names
+    for (const auto& category : categories) {
+        auto it = std::find(m_classNames.begin(), m_classNames.end(), category);
+        if (it != m_classNames.end()) {
+            m_enabledCategories.push_back(category);
+        } else {
+            LOG_WARN() << "[YOLOv8Detector] Unknown category ignored: " << category;
+        }
+    }
+
+    LOG_INFO() << "[YOLOv8Detector] Enabled " << m_enabledCategories.size()
+               << " out of " << m_classNames.size() << " available categories";
+}
+
+bool YOLOv8Detector::isCategoryEnabled(const std::string& category) const {
+    return std::find(m_enabledCategories.begin(), m_enabledCategories.end(), category)
+           != m_enabledCategories.end();
+}
+
+bool YOLOv8Detector::isCategoryEnabled(int classId) const {
+    if (classId < 0 || classId >= static_cast<int>(m_classNames.size())) {
+        return false;
+    }
+    return isCategoryEnabled(m_classNames[classId]);
+}
+
+std::vector<Detection> YOLOv8Detector::filterDetectionsByCategory(const std::vector<Detection>& detections) const {
+    std::vector<Detection> filteredDetections;
+
+    for (const auto& detection : detections) {
+        if (isCategoryEnabled(detection.className)) {
+            filteredDetections.push_back(detection);
+        }
+    }
+
+    LOG_DEBUG() << "[YOLOv8Detector] Filtered " << filteredDetections.size()
+                << " detections from " << detections.size() << " total detections";
+
+    return filteredDetections;
 }
 
 } // namespace AISecurityVision

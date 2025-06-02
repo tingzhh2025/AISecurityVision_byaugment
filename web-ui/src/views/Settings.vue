@@ -107,14 +107,13 @@
             </el-form-item>
             
             <el-form-item label="检测类别" v-if="aiConfig.enabled">
-              <el-checkbox-group v-model="aiConfig.detectionClasses">
-                <el-checkbox label="person">人员</el-checkbox>
-                <el-checkbox label="car">汽车</el-checkbox>
-                <el-checkbox label="truck">卡车</el-checkbox>
-                <el-checkbox label="bus">公交车</el-checkbox>
-                <el-checkbox label="motorcycle">摩托车</el-checkbox>
-                <el-checkbox label="bicycle">自行车</el-checkbox>
-              </el-checkbox-group>
+              <el-button
+                type="primary"
+                link
+                @click="showCategoryFilter = true"
+              >
+                配置检测类别 ({{ aiConfig.detectionClasses.length }} 个已启用)
+              </el-button>
             </el-form-item>
             
             <el-form-item label="最大检测数量" v-if="aiConfig.enabled">
@@ -395,6 +394,16 @@
         </el-card>
       </el-tab-pane>
     </el-tabs>
+
+    <!-- 检测类别过滤对话框 -->
+    <el-dialog
+      v-model="showCategoryFilter"
+      title="AI检测类别过滤配置"
+      width="80%"
+      :close-on-click-modal="false"
+    >
+      <DetectionCategoryFilter @category-updated="onCategoryUpdated" />
+    </el-dialog>
   </div>
 </template>
 
@@ -402,9 +411,11 @@
 import { ref, reactive, onMounted } from 'vue'
 import { apiService } from '@/services/api'
 import { ElMessage } from 'element-plus'
+import DetectionCategoryFilter from '@/components/DetectionCategoryFilter.vue'
 
 // 响应式数据
 const activeTab = ref('system')
+const showCategoryFilter = ref(false)
 
 // 表单引用
 const systemFormRef = ref(null)
@@ -592,6 +603,12 @@ const testAlert = async () => {
   } catch (error) {
     ElMessage.error('测试失败')
   }
+}
+
+const onCategoryUpdated = () => {
+  // 当检测类别更新时，刷新AI配置
+  loadConfigs()
+  showCategoryFilter.value = false
 }
 
 onMounted(() => {

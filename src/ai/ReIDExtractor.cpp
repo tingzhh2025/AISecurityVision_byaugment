@@ -42,37 +42,20 @@ bool ReIDExtractor::initialize(const std::string& modelPath) {
     try {
         m_modelPath = modelPath;
 
-        // Check if model file exists
+        // Always use built-in feature extraction to avoid protobuf dependency issues
+        LOG_INFO() << "[ReIDExtractor] Using built-in feature extraction (protobuf-free)";
+
+        // Check if model file exists (for logging purposes only)
         std::ifstream modelFile(modelPath);
-        if (!modelFile.good()) {
+        if (modelFile.good()) {
+            LOG_INFO() << "[ReIDExtractor] Model file found but using built-in extraction for compatibility";
+        } else {
             LOG_INFO() << "[ReIDExtractor] Model file not found, using built-in feature extraction";
-            // Initialize with built-in feature extraction for now
-            m_initialized = true;
-            return true;
         }
 
-#ifdef DISABLE_OPENCV_DNN
-        LOG_INFO() << "[ReIDExtractor] OpenCV DNN is disabled, using built-in feature extraction";
-#else
-        // Try to load with OpenCV DNN (fallback when TensorRT not available)
-        try {
-            m_net = cv::dnn::readNetFromONNX(modelPath);
-            if (m_net.empty()) {
-                LOG_ERROR() << "[ReIDExtractor] Failed to load ONNX model, using built-in extraction";
-                m_initialized = true;
-                return true;
-            }
-
-            // Set backend and target
-            m_net.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
-            m_net.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
-
-            LOG_INFO() << "[ReIDExtractor] Successfully loaded ONNX model with OpenCV DNN";
-        } catch (const std::exception& e) {
-            LOG_ERROR() << "[ReIDExtractor] OpenCV DNN loading failed: " << e.what();
-            LOG_INFO() << "[ReIDExtractor] Falling back to built-in feature extraction";
-        }
-#endif
+        // Skip OpenCV DNN loading to avoid protobuf dependency issues
+        // This prevents the hanging issue during initialization
+        LOG_INFO() << "[ReIDExtractor] Skipping OpenCV DNN to avoid protobuf dependency issues";
 
         // Calculate buffer sizes
         m_inputSize = m_inputWidth * m_inputHeight * 3 * sizeof(float);
@@ -216,32 +199,8 @@ std::vector<float> ReIDExtractor::extractFeaturesFromROI(const cv::Mat& roi) {
     }
 
     try {
-#ifdef DISABLE_OPENCV_DNN
-        // Use hand-crafted features when DNN is disabled
+        // Always use hand-crafted features to avoid protobuf dependency issues
         features = generateHandcraftedFeatures(roi);
-#else
-        // If we have a loaded model, use it
-        if (!m_net.empty()) {
-            // Preprocess image for neural network
-            cv::Mat preprocessed = preprocessImage(roi);
-
-            // Create blob from image
-            cv::Mat blob = cv::dnn::blobFromImage(preprocessed, 1.0/255.0,
-                cv::Size(m_inputWidth, m_inputHeight), cv::Scalar(0, 0, 0), true, false);
-
-            // Set input to the network
-            m_net.setInput(blob);
-
-            // Run forward pass
-            cv::Mat output = m_net.forward();
-
-            // Convert output to feature vector
-            features = postprocessFeatures(output);
-        } else {
-            // Fallback: Use hand-crafted features based on image content
-            features = generateHandcraftedFeatures(roi);
-        }
-#endif
 
     } catch (const std::exception& e) {
         LOG_ERROR() << "[ReIDExtractor] Exception in extractFeaturesFromROI: " << e.what();

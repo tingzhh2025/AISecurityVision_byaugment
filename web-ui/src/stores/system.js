@@ -113,7 +113,7 @@ export const useSystemStore = defineStore('system', () => {
         // 确保所有摄像头状态为在线（临时修复）
         cameraList = cameraList.map(camera => ({
           ...camera,
-          status: 'online'
+          status: camera.status === 'configured' ? 'online' : camera.status
         }))
       }
 

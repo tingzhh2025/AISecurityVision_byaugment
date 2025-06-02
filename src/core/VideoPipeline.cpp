@@ -14,6 +14,7 @@
 // Person statistics extensions (optional)
 #include "../ai/PersonFilter.h"
 #include "../ai/AgeGenderAnalyzer.h"
+#include "../database/DatabaseManager.h"
 #include <iostream>
 #include <chrono>
 #include <sstream>
@@ -79,18 +80,41 @@ bool VideoPipeline::initialize() {
             }
         }
 
+        // Load saved detection categories from database
+        try {
+            DatabaseManager dbManager;
+            if (dbManager.initialize()) {
+                std::vector<std::string> savedCategories = dbManager.getDetectionCategories();
+                LOG_INFO() << "[VideoPipeline] Retrieved " << savedCategories.size() << " saved detection categories";
+                if (!savedCategories.empty()) {
+                    LOG_INFO() << "[VideoPipeline] About to call updateDetectionCategories...";
+                    updateDetectionCategoriesInternal(savedCategories);
+                    LOG_INFO() << "[VideoPipeline] Loaded " << savedCategories.size()
+                               << " saved detection categories for " << m_source.id;
+                }
+            }
+        } catch (const std::exception& e) {
+            LOG_WARN() << "[VideoPipeline] Failed to load saved detection categories: " << e.what();
+        }
+
+        LOG_INFO() << "[VideoPipeline] About to initialize ByteTracker...";
         m_tracker = std::make_unique<ByteTracker>();
+        LOG_INFO() << "[VideoPipeline] ByteTracker object created, calling initialize()...";
         if (!m_tracker->initialize()) {
             handleError("Failed to initialize ByteTracker");
             return false;
         }
+        LOG_INFO() << "[VideoPipeline] ByteTracker initialized successfully!";
 
         // Initialize ReID extractor
+        LOG_INFO() << "[VideoPipeline] About to initialize ReIDExtractor...";
         m_reidExtractor = std::make_unique<ReIDExtractor>();
+        LOG_INFO() << "[VideoPipeline] ReIDExtractor object created, calling initialize()...";
         if (!m_reidExtractor->initialize()) {
             handleError("Failed to initialize ReID extractor");
             return false;
         }
+        LOG_INFO() << "[VideoPipeline] ReIDExtractor initialized successfully!";
 
         // Enable ReID tracking in ByteTracker
         m_tracker->enableReIDTracking(true);
@@ -558,6 +582,72 @@ void VideoPipeline::setDetectionThreads(int threads) {
 
 int VideoPipeline::getDetectionThreads() const {
     return m_detectionThreads.load();
+}
+
+// Internal version without mutex lock (for use during initialization)
+bool VideoPipeline::updateDetectionCategoriesInternal(const std::vector<std::string>& enabledCategories) {
+    LOG_INFO() << "[VideoPipeline] updateDetectionCategoriesInternal called with " << enabledCategories.size() << " categories";
+
+    bool success = true;
+
+    // Update standard detector if available
+    if (m_detector) {
+        LOG_INFO() << "[VideoPipeline] Updating standard detector categories...";
+        m_detector->setEnabledCategories(enabledCategories);
+        LOG_INFO() << "[VideoPipeline] Updated standard detector categories for " << m_source.id;
+    } else {
+        LOG_INFO() << "[VideoPipeline] Standard detector not available";
+    }
+
+    // Update optimized detector if available
+    if (m_optimizedDetector) {
+        LOG_INFO() << "[VideoPipeline] Updating optimized detector categories...";
+        m_optimizedDetector->setEnabledCategories(enabledCategories);
+        LOG_INFO() << "[VideoPipeline] Updated optimized detector categories for " << m_source.id;
+    } else {
+        LOG_INFO() << "[VideoPipeline] Optimized detector not available";
+    }
+
+    if (!m_detector && !m_optimizedDetector) {
+        LOG_WARN() << "[VideoPipeline] No detectors available to update for " << m_source.id;
+        success = false;
+    }
+
+    return success;
+}
+
+// Detection category filtering implementation
+bool VideoPipeline::updateDetectionCategories(const std::vector<std::string>& enabledCategories) {
+    LOG_INFO() << "[VideoPipeline] updateDetectionCategories called with " << enabledCategories.size() << " categories";
+    std::lock_guard<std::mutex> lock(m_mutex);
+    LOG_INFO() << "[VideoPipeline] Acquired mutex lock in updateDetectionCategories";
+
+    bool success = true;
+
+    // Update standard detector if available
+    if (m_detector) {
+        LOG_INFO() << "[VideoPipeline] Updating standard detector categories...";
+        m_detector->setEnabledCategories(enabledCategories);
+        LOG_INFO() << "[VideoPipeline] Updated standard detector categories for " << m_source.id;
+    } else {
+        LOG_INFO() << "[VideoPipeline] Standard detector not available";
+    }
+
+    // Update optimized detector if available
+    if (m_optimizedDetector) {
+        LOG_INFO() << "[VideoPipeline] Updating optimized detector categories...";
+        m_optimizedDetector->setEnabledCategories(enabledCategories);
+        LOG_INFO() << "[VideoPipeline] Updated optimized detector categories for " << m_source.id;
+    } else {
+        LOG_INFO() << "[VideoPipeline] Optimized detector not available";
+    }
+
+    if (!m_detector && !m_optimizedDetector) {
+        LOG_WARN() << "[VideoPipeline] No detectors available to update for " << m_source.id;
+        success = false;
+    }
+
+    return success;
 }
 
 // Behavior analysis rule management implementation

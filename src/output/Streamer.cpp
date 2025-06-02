@@ -378,11 +378,21 @@ void Streamer::handleHttpRequest(int clientSocket, const std::string& request) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
         }
+    } else if (method == "OPTIONS") {
+        // Handle CORS preflight request
+        std::string response = "HTTP/1.1 200 OK\r\n"
+                              "Access-Control-Allow-Origin: *\r\n"
+                              "Access-Control-Allow-Methods: GET, OPTIONS\r\n"
+                              "Access-Control-Allow-Headers: Content-Type\r\n"
+                              "Content-Length: 0\r\n"
+                              "\r\n";
+        send(clientSocket, response.c_str(), response.length(), 0);
     } else {
         // Send 404 response
         std::string response = "HTTP/1.1 404 Not Found\r\n"
                               "Content-Type: text/plain\r\n"
                               "Content-Length: 13\r\n"
+                              "Access-Control-Allow-Origin: *\r\n"
                               "\r\n"
                               "404 Not Found";
         send(clientSocket, response.c_str(), response.length(), 0);
@@ -395,6 +405,9 @@ void Streamer::sendHttpHeaders(int clientSocket) {
         "Content-Type: multipart/x-mixed-replace; boundary=--mjpegboundary\r\n"
         "Cache-Control: no-cache\r\n"
         "Pragma: no-cache\r\n"
+        "Access-Control-Allow-Origin: *\r\n"
+        "Access-Control-Allow-Methods: GET, OPTIONS\r\n"
+        "Access-Control-Allow-Headers: Content-Type\r\n"
         "Connection: close\r\n"
         "\r\n";
 

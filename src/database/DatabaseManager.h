@@ -176,6 +176,11 @@ public:
     std::vector<std::string> getAllCameraIds();
     bool deleteCameraConfig(const std::string& cameraId);
 
+    // Detection category configuration operations
+    bool saveDetectionCategories(const std::vector<std::string>& enabledCategories);
+    std::vector<std::string> getDetectionCategories();
+    bool resetDetectionCategories();
+
     // Utility operations
     bool executeQuery(const std::string& query);
     int getLastInsertId();

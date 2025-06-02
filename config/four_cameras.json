@@ -1,0 +1,110 @@
+{
+  "cameras": [
+    {
+      "id": "camera_01",
+      "name": "RTSP Camera 1 (192.168.1.3)",
+      "rtsp_url": "rtsp://admin:sharpi1688@192.168.1.3:554/1/1",
+      "mjpeg_port": 8161,
+      "enabled": true,
+      "detection_enabled": true,
+      "recording_enabled": false,
+      "detection_config": {
+        "confidence_threshold": 0.5,
+        "nms_threshold": 0.4,
+        "backend": "RKNN",
+        "model_path": "models/yolov8n.rknn"
+      },
+      "stream_config": {
+        "fps": 25,
+        "quality": 80,
+        "max_width": 1280,
+        "max_height": 720
+      }
+    },
+    {
+      "id": "camera_02",
+      "name": "RTSP Camera 2 (192.168.1.3)",
+      "rtsp_url": "rtsp://admin:sharpi1688@192.168.1.3:554/1/1",
+      "mjpeg_port": 8162,
+      "enabled": true,
+      "detection_enabled": true,
+      "recording_enabled": false,
+      "detection_config": {
+        "confidence_threshold": 0.5,
+        "nms_threshold": 0.4,
+        "backend": "RKNN",
+        "model_path": "models/yolov8n.rknn"
+      },
+      "stream_config": {
+        "fps": 25,
+        "quality": 80,
+        "max_width": 1280,
+        "max_height": 720
+      }
+    },
+    {
+      "id": "camera_03",
+      "name": "RTSP Camera 3 (192.168.1.2)",
+      "rtsp_url": "rtsp://admin:sharpi1688@192.168.1.2:554/1/1",
+      "mjpeg_port": 8163,
+      "enabled": true,
+      "detection_enabled": true,
+      "recording_enabled": false,
+      "detection_config": {
+        "confidence_threshold": 0.5,
+        "nms_threshold": 0.4,
+        "backend": "RKNN",
+        "model_path": "models/yolov8n.rknn"
+      },
+      "stream_config": {
+        "fps": 25,
+        "quality": 80,
+        "max_width": 1280,
+        "max_height": 720
+      }
+    },
+    {
+      "id": "camera_04",
+      "name": "RTSP Camera 4 (192.168.1.2)",
+      "rtsp_url": "rtsp://admin:sharpi1688@192.168.1.2:554/1/1",
+      "mjpeg_port": 8164,
+      "enabled": true,
+      "detection_enabled": true,
+      "recording_enabled": false,
+      "detection_config": {
+        "confidence_threshold": 0.5,
+        "nms_threshold": 0.4,
+        "backend": "RKNN",
+        "model_path": "models/yolov8n.rknn"
+      },
+      "stream_config": {
+        "fps": 25,
+        "quality": 80,
+        "max_width": 1280,
+        "max_height": 720
+      }
+    }
+  ],
+  "global_config": {
+    "detection_backend": "RKNN",
+    "enable_tracking": true,
+    "enable_reid": false,
+    "max_concurrent_streams": 4,
+    "buffer_size": 10,
+    "timeout_seconds": 30
+  },
+  "visualization": {
+    "enable_mjpeg_stream": true,
+    "draw_bboxes": true,
+    "draw_labels": true,
+    "draw_confidence": true,
+    "bbox_thickness": 2,
+    "font_scale": 0.6,
+    "colors": {
+      "person": [0, 255, 0],
+      "car": [255, 0, 0],
+      "bicycle": [0, 0, 255],
+      "default": [255, 255, 0]
+    }
+  }
+}

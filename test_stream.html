@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MJPEG Stream Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .stream-container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .stream-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .stream-url {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 10px;
+            word-break: break-all;
+        }
+        .stream-image {
+            width: 100%;
+            max-width: 640px;
+            height: auto;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+        .success {
+            color: green;
+            font-weight: bold;
+        }
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            background-color: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MJPEG Stream Test</h1>
+        
+        <div class="stream-container">
+            <div class="stream-title">Direct MJPEG Stream (Port 8161)</div>
+            <div class="stream-url">http://192.168.1.199:8161/stream.mjpg</div>
+            <img 
+                id="stream1" 
+                class="stream-image" 
+                src="http://192.168.1.199:8161/stream.mjpg" 
+                alt="MJPEG Stream"
+                onload="handleLoad('stream1')"
+                onerror="handleError('stream1')"
+            />
+            <div id="status1" class="status">Loading...</div>
+        </div>
+
+        <div class="stream-container">
+            <div class="stream-title">Frontend Proxy Stream (Port 3000)</div>
+            <div class="stream-url">http://localhost:3000/mjpeg/stream.mjpg?port=8161</div>
+            <img 
+                id="stream2" 
+                class="stream-image" 
+                src="http://localhost:3000/mjpeg/stream.mjpg?port=8161" 
+                alt="Proxy MJPEG Stream"
+                onload="handleLoad('stream2')"
+                onerror="handleError('stream2')"
+            />
+            <div id="status2" class="status">Loading...</div>
+        </div>
+
+        <div class="stream-container">
+            <div class="stream-title">API Test</div>
+            <button onclick="testAPI()">Test Camera API</button>
+            <div id="api-result" class="status">Click button to test API</div>
+        </div>
+    </div>
+
+    <script>
+        function handleLoad(streamId) {
+            const statusElement = document.getElementById('status' + streamId.slice(-1));
+            statusElement.innerHTML = '<span class="success">✓ Stream loaded successfully!</span>';
+            statusElement.style.backgroundColor = '#d4edda';
+        }
+
+        function handleError(streamId) {
+            const statusElement = document.getElementById('status' + streamId.slice(-1));
+            statusElement.innerHTML = '<span class="error">✗ Failed to load stream</span>';
+            statusElement.style.backgroundColor = '#f8d7da';
+        }
+
+        async function testAPI() {
+            const resultElement = document.getElementById('api-result');
+            resultElement.innerHTML = 'Testing API...';
+            
+            try {
+                const response = await fetch('http://localhost:3000/api/cameras');
+                const data = await response.json();
+                
+                if (data.cameras && data.cameras.length > 0) {
+                    const camera = data.cameras[0];
+                    resultElement.innerHTML = `
+                        <span class="success">✓ API working!</span><br>
+                        Camera: ${camera.name}<br>
+                        Status: ${camera.status}<br>
+                        MJPEG Port: ${camera.mjpeg_port}
+                    `;
+                    resultElement.style.backgroundColor = '#d4edda';
+                } else {
+                    resultElement.innerHTML = '<span class="error">✗ No cameras found</span>';
+                    resultElement.style.backgroundColor = '#f8d7da';
+                }
+            } catch (error) {
+                resultElement.innerHTML = `<span class="error">✗ API Error: ${error.message}</span>`;
+                resultElement.style.backgroundColor = '#f8d7da';
+            }
+        }
+
+        // Auto-test API on page load
+        window.onload = function() {
+            setTimeout(testAPI, 1000);
+        };
+    </script>
+</body>
+</html>

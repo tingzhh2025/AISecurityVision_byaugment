@@ -104,10 +104,8 @@ private:
     void* m_inputBuffer;
     void* m_outputBuffer;
 
-    // OpenCV DNN network (current implementation, only when DNN is enabled)
-#ifndef DISABLE_OPENCV_DNN
-    cv::dnn::Net m_net;
-#endif
+    // OpenCV DNN network disabled to avoid protobuf dependency issues
+    // cv::dnn::Net m_net; // Commented out to prevent linking issues
 
     // Configuration
     bool m_initialized;
