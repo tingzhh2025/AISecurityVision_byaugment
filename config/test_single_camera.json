@@ -1,0 +1,47 @@
+{
+  "cameras": [
+    {
+      "id": "camera_01",
+      "name": "Test RTSP Camera",
+      "rtsp_url": "rtsp://admin:sharpi1688@192.168.1.3:554/1/1",
+      "mjpeg_port": 8161,
+      "enabled": true,
+      "detection_enabled": true,
+      "recording_enabled": false,
+      "detection_config": {
+        "confidence_threshold": 0.5,
+        "nms_threshold": 0.4,
+        "backend": "RKNN",
+        "model_path": "models/yolov8n.rknn"
+      },
+      "stream_config": {
+        "fps": 15,
+        "quality": 80,
+        "max_width": 640,
+        "max_height": 480
+      }
+    }
+  ],
+  "global_config": {
+    "detection_backend": "RKNN",
+    "enable_tracking": false,
+    "enable_reid": false,
+    "max_concurrent_streams": 1,
+    "buffer_size": 5,
+    "timeout_seconds": 30
+  },
+  "visualization": {
+    "enable_mjpeg_stream": true,
+    "draw_bboxes": true,
+    "draw_labels": true,
+    "draw_confidence": true,
+    "bbox_thickness": 2,
+    "font_scale": 0.6,
+    "colors": {
+      "person": [0, 255, 0],
+      "car": [255, 0, 0],
+      "bicycle": [0, 0, 255],
+      "default": [255, 255, 0]
+    }
+  }
+}

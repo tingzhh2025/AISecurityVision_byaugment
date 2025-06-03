@@ -13,8 +13,8 @@ export no_proxy=127.0.0.1,localhost
 
 # Start the development server
 echo "🔧 Starting Vite development server..."
-npm run dev -- --host 0.0.0.0 --port 3000
+npm run dev -- --host 0.0.0.0 --port 3001
 
 echo "✅ Development server started successfully!"
-echo "🌐 Local:   http://localhost:3000/"
-echo "🌐 Network: http://$(hostname -I | awk '{print $1}'):3000/"
+echo "🌐 Local:   http://localhost:3001/"
+echo "🌐 Network: http://$(hostname -I | awk '{print $1}'):3001/"

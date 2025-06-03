@@ -377,6 +377,7 @@ file(GLOB_RECURSE SOURCES
     "src/database/*.cpp"
     "src/utils/*.cpp"
     "src/onvif/*.cpp"
+    "src/network/*.cpp"
 )
 
 # Remove LoggerExample.cpp from sources as it contains unimplemented features

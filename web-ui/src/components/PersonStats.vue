@@ -333,9 +333,28 @@ const enableStats = () => {
 const loadConfig = async () => {
   try {
     const response = await apiService.getPersonStatsConfig(props.cameraId)
-    if (response.data.success) {
-      Object.assign(config, response.data.data)
+    console.log('PersonStats API Response:', response.data) // 调试日志
+
+    // 检查API响应格式
+    if (response.data.error) {
+      console.error('API Error:', response.data.error)
+      return
+    }
+
+    // 从正确的字段获取配置数据
+    let configData = null
+    if (response.data.config) {
+      // 新的API格式: {config: {...}, camera_id: "...", timestamp: "..."}
+      configData = response.data.config
+    } else if (response.data.success && response.data.data) {
+      // 旧的API格式: {success: true, data: {...}}
+      configData = response.data.data
+    }
+
+    if (configData) {
+      Object.assign(config, configData)
       enabled.value = config.enabled
+      console.log('PersonStats loaded config:', configData) // 调试日志
     }
   } catch (error) {
     console.error('Failed to load person stats config:', error)

@@ -505,6 +505,22 @@ void VideoPipeline::processPersonStatistics(FrameResult& result) {
                    << result.personStats.male_count << " male, "
                    << result.personStats.female_count << " female";
 
+        // Update current person statistics for API access
+        {
+            std::lock_guard<std::mutex> lock(m_personStatsMutex);
+            // Convert FrameResult::PersonStats to VideoPipeline::PersonStats
+            m_currentPersonStats.total_persons = result.personStats.total_persons;
+            m_currentPersonStats.male_count = result.personStats.male_count;
+            m_currentPersonStats.female_count = result.personStats.female_count;
+            m_currentPersonStats.child_count = result.personStats.child_count;
+            m_currentPersonStats.young_count = result.personStats.young_count;
+            m_currentPersonStats.middle_count = result.personStats.middle_count;
+            m_currentPersonStats.senior_count = result.personStats.senior_count;
+            m_currentPersonStats.person_boxes = result.personStats.person_boxes;
+            m_currentPersonStats.person_genders = result.personStats.person_genders;
+            m_currentPersonStats.person_ages = result.personStats.person_ages;
+        }
+
     } catch (const std::exception& e) {
         LOG_ERROR() << "[VideoPipeline] Error in person statistics processing: " << e.what();
         result.personStats = FrameResult::PersonStats();  // Reset to default
@@ -1042,4 +1058,29 @@ void VideoPipeline::setPersonStatsEnabled(bool enabled) {
 
 bool VideoPipeline::isPersonStatsEnabled() const {
     return m_personStatsEnabled.load();
+}
+
+void VideoPipeline::setPersonStatsConfig(float genderThreshold, float ageThreshold, int batchSize, bool enableCaching) {
+    m_genderThreshold.store(genderThreshold);
+    m_ageThreshold.store(ageThreshold);
+    m_batchSize.store(batchSize);
+    m_enableCaching.store(enableCaching);
+
+    LOG_INFO() << "[VideoPipeline] Person statistics config updated for pipeline: " << m_source.id
+               << " (gender_threshold=" << genderThreshold
+               << ", age_threshold=" << ageThreshold
+               << ", batch_size=" << batchSize
+               << ", enable_caching=" << enableCaching << ")";
+
+    // If AgeGenderAnalyzer is already initialized, update its configuration
+    if (m_ageGenderAnalyzer) {
+        // Note: AgeGenderAnalyzer configuration update would be implemented here
+        // For now, we just log the configuration change
+        LOG_DEBUG() << "[VideoPipeline] AgeGenderAnalyzer configuration will be updated on next analysis";
+    }
+}
+
+VideoPipeline::PersonStats VideoPipeline::getCurrentPersonStats() const {
+    std::lock_guard<std::mutex> lock(m_personStatsMutex);
+    return m_currentPersonStats;
 }

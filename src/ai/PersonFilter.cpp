@@ -69,16 +69,34 @@ cv::Mat PersonFilter::extractPersonCrop(
     if (frame.empty() || bbox.area() <= 0) {
         return cv::Mat();
     }
-    
+
     // Clamp padding to reasonable range
     padding = std::max(0.0f, std::min(padding, MAX_PADDING));
-    
+
     // Expand bounding box with padding
     cv::Rect expandedBbox = expandBbox(bbox, frame.size(), padding);
-    
+
     // Extract crop
     cv::Mat crop = frame(expandedBbox).clone();
-    
+
+    // Ensure crop is large enough for age/gender analysis
+    if (!crop.empty() && (crop.cols < 64 || crop.rows < 64)) {
+        cv::resize(crop, crop, cv::Size(std::max(64, crop.cols), std::max(64, crop.rows)));
+        LOG_DEBUG() << "[PersonFilter] Resized small crop to " << crop.cols << "x" << crop.rows;
+    }
+
+    // Fix RGA alignment: ensure width is 16-aligned for RGB888
+    if (!crop.empty()) {
+        int alignedWidth = ((crop.cols + 15) / 16) * 16;
+        if (alignedWidth != crop.cols) {
+            cv::Mat aligned;
+            cv::resize(crop, aligned, cv::Size(alignedWidth, crop.rows));
+            crop = aligned;
+            LOG_DEBUG() << "[PersonFilter] Aligned crop width from " << expandedBbox.width
+                       << " to " << alignedWidth << " for RGA compatibility";
+        }
+    }
+
     return crop;
 }
 

@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>人员统计配置测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .section {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .section h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button.success {
+            background: #28a745;
+        }
+        button.danger {
+            background: #dc3545;
+        }
+        .config-form {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin: 10px 0;
+        }
+        .config-form label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .config-form input {
+            padding: 4px 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .success { color: #28a745; }
+        .error { color: #dc3545; }
+        .info { color: #007bff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>人员统计配置持久化测试</h1>
+        
+        <div class="section">
+            <h3>摄像头选择</h3>
+            <label>
+                摄像头ID: 
+                <input type="text" id="cameraId" value="test_camera" placeholder="输入摄像头ID">
+            </label>
+            <button onclick="loadCameras()">获取摄像头列表</button>
+        </div>
+
+        <div class="section">
+            <h3>配置操作</h3>
+            <button onclick="loadConfig()">加载配置</button>
+            <button onclick="saveConfig()" class="success">保存配置</button>
+            <button onclick="testPersistence()" class="info">测试持久化</button>
+            <button onclick="clearLog()" class="danger">清空日志</button>
+        </div>
+
+        <div class="section">
+            <h3>配置参数</h3>
+            <div class="config-form">
+                <label>
+                    启用状态:
+                    <input type="checkbox" id="enabled">
+                </label>
+                <label>
+                    性别阈值:
+                    <input type="number" id="genderThreshold" min="0.1" max="1" step="0.05" value="0.7">
+                </label>
+                <label>
+                    年龄阈值:
+                    <input type="number" id="ageThreshold" min="0.1" max="1" step="0.05" value="0.6">
+                </label>
+                <label>
+                    批处理大小:
+                    <input type="number" id="batchSize" min="1" max="16" value="4">
+                </label>
+                <label>
+                    启用缓存:
+                    <input type="checkbox" id="enableCaching" checked>
+                </label>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>测试日志</h3>
+            <div id="log" class="log"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8080/api';
+        
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : 'info';
+            logDiv.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+        
+        function getCameraId() {
+            return document.getElementById('cameraId').value.trim();
+        }
+        
+        function getConfigFromForm() {
+            return {
+                enabled: document.getElementById('enabled').checked,
+                gender_threshold: parseFloat(document.getElementById('genderThreshold').value),
+                age_threshold: parseFloat(document.getElementById('ageThreshold').value),
+                batch_size: parseInt(document.getElementById('batchSize').value),
+                enable_caching: document.getElementById('enableCaching').checked
+            };
+        }
+        
+        function setConfigToForm(config) {
+            document.getElementById('enabled').checked = config.enabled || false;
+            document.getElementById('genderThreshold').value = config.gender_threshold || 0.7;
+            document.getElementById('ageThreshold').value = config.age_threshold || 0.6;
+            document.getElementById('batchSize').value = config.batch_size || 4;
+            document.getElementById('enableCaching').checked = config.enable_caching !== false;
+        }
+        
+        async function loadCameras() {
+            try {
+                log('正在获取摄像头列表...');
+                const response = await fetch(`${API_BASE}/cameras`);
+                const data = await response.json();
+                
+                if (data.cameras && data.cameras.length > 0) {
+                    log(`找到 ${data.cameras.length} 个摄像头:`, 'success');
+                    data.cameras.forEach(camera => {
+                        log(`  - ${camera.id}: ${camera.name} (${camera.enabled ? '启用' : '禁用'})`);
+                    });
+                } else {
+                    log('未找到摄像头', 'error');
+                }
+            } catch (error) {
+                log(`获取摄像头列表失败: ${error.message}`, 'error');
+            }
+        }
+        
+        async function loadConfig() {
+            const cameraId = getCameraId();
+            if (!cameraId) {
+                log('请输入摄像头ID', 'error');
+                return;
+            }
+            
+            try {
+                log(`正在加载摄像头 ${cameraId} 的配置...`);
+                const response = await fetch(`${API_BASE}/cameras/${cameraId}/person-stats/config`);
+                const data = await response.json();
+                
+                log(`API响应: ${JSON.stringify(data, null, 2)}`);
+                
+                if (data.error) {
+                    log(`API错误: ${data.error}`, 'error');
+                    return;
+                }
+                
+                let config = null;
+                if (data.config) {
+                    config = data.config;
+                    log('使用新API格式解析配置', 'success');
+                } else if (data.success && data.data) {
+                    config = data.data;
+                    log('使用旧API格式解析配置', 'success');
+                } else {
+                    log('无法解析API响应格式', 'error');
+                    return;
+                }
+                
+                setConfigToForm(config);
+                log(`配置加载成功: ${JSON.stringify(config, null, 2)}`, 'success');
+                
+            } catch (error) {
+                log(`加载配置失败: ${error.message}`, 'error');
+            }
+        }
+        
+        async function saveConfig() {
+            const cameraId = getCameraId();
+            if (!cameraId) {
+                log('请输入摄像头ID', 'error');
+                return;
+            }
+            
+            const config = getConfigFromForm();
+            
+            try {
+                log(`正在保存摄像头 ${cameraId} 的配置...`);
+                log(`配置数据: ${JSON.stringify(config, null, 2)}`);
+                
+                const response = await fetch(`${API_BASE}/cameras/${cameraId}/person-stats/config`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(config)
+                });
+                
+                const data = await response.json();
+                log(`保存响应: ${JSON.stringify(data, null, 2)}`);
+                
+                if (data.status === 'success' || data.success) {
+                    log('配置保存成功', 'success');
+                } else {
+                    log(`保存失败: ${data.error || data.message || '未知错误'}`, 'error');
+                }
+                
+            } catch (error) {
+                log(`保存配置失败: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testPersistence() {
+            log('开始持久化测试...', 'info');
+            
+            // 1. 保存当前配置
+            await saveConfig();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // 2. 重新加载配置
+            log('重新加载配置验证持久化...', 'info');
+            await loadConfig();
+            
+            log('持久化测试完成', 'success');
+        }
+        
+        // 页面加载时自动获取摄像头列表
+        window.onload = function() {
+            log('页面加载完成，开始初始化...', 'info');
+            loadCameras();
+        };
+    </script>
+</body>
+</html>

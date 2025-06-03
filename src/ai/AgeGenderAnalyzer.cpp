@@ -197,34 +197,50 @@ bool AgeGenderAnalyzer::initialize(const std::string& modelPath) {
 
 std::vector<PersonAttributes> AgeGenderAnalyzer::analyze(const std::vector<PersonDetection>& persons) {
     std::vector<PersonAttributes> attributes;
-    
+
     if (!m_initialized) {
         LOG_ERROR() << "[AgeGenderAnalyzer] Analyzer not initialized";
         return attributes;
     }
-    
+
     if (persons.empty()) {
+        LOG_DEBUG() << "[AgeGenderAnalyzer] No persons to analyze";
         return attributes;
     }
-    
+
+    LOG_INFO() << "[AgeGenderAnalyzer] Starting analysis of " << persons.size() << " persons";
+
     auto start_time = std::chrono::high_resolution_clock::now();
-    
+
     // Extract crops for analysis
     std::vector<cv::Mat> crops;
-    for (const auto& person : persons) {
-        if (!person.crop.empty() && 
-            person.crop.cols >= MIN_CROP_SIZE && 
+    int validCrops = 0;
+    for (size_t i = 0; i < persons.size(); ++i) {
+        const auto& person = persons[i];
+
+        if (!person.crop.empty() &&
+            person.crop.cols >= MIN_CROP_SIZE &&
             person.crop.rows >= MIN_CROP_SIZE) {
             crops.push_back(person.crop);
+            validCrops++;
+            LOG_DEBUG() << "[AgeGenderAnalyzer] Person " << i << " crop valid: "
+                       << person.crop.cols << "x" << person.crop.rows
+                       << ", bbox: (" << person.bbox.x << "," << person.bbox.y
+                       << "," << person.bbox.width << "," << person.bbox.height << ")";
         } else {
             // Add placeholder for invalid crops
             crops.push_back(cv::Mat());
+            LOG_WARN() << "[AgeGenderAnalyzer] Person " << i << " crop invalid: "
+                      << (person.crop.empty() ? "empty" :
+                          (std::to_string(person.crop.cols) + "x" + std::to_string(person.crop.rows)));
         }
     }
-    
+
+    LOG_INFO() << "[AgeGenderAnalyzer] Processing " << validCrops << " valid crops out of " << persons.size();
+
     // Process in batches for efficiency
     attributes = processBatch(crops);
-    
+
     // Update performance metrics
     auto end_time = std::chrono::high_resolution_clock::now();
     m_inferenceTime = std::chrono::duration<double, std::milli>(end_time - start_time).count();
@@ -233,10 +249,19 @@ std::vector<PersonAttributes> AgeGenderAnalyzer::analyze(const std::vector<Perso
         m_inferenceTimes.erase(m_inferenceTimes.begin());
     }
     m_analysisCount += persons.size();
-    
-    LOG_DEBUG() << "[AgeGenderAnalyzer] Analyzed " << persons.size() 
-               << " persons in " << m_inferenceTime << "ms";
-    
+
+    // Count successful analyses
+    int successfulAnalyses = 0;
+    for (const auto& attr : attributes) {
+        if (attr.isValid()) {
+            successfulAnalyses++;
+        }
+    }
+
+    LOG_INFO() << "[AgeGenderAnalyzer] Completed analysis: " << successfulAnalyses
+               << " successful out of " << persons.size() << " persons in "
+               << m_inferenceTime << "ms";
+
     return attributes;
 }
 
@@ -334,18 +359,30 @@ double AgeGenderAnalyzer::getAverageInferenceTime() const {
 std::vector<PersonAttributes> AgeGenderAnalyzer::processBatch(const std::vector<cv::Mat>& crops) {
     std::vector<PersonAttributes> results;
 
-    for (const auto& crop : crops) {
+    LOG_DEBUG() << "[AgeGenderAnalyzer] Processing batch of " << crops.size() << " crops";
+
+    for (size_t i = 0; i < crops.size(); ++i) {
+        const auto& crop = crops[i];
+
         if (crop.empty()) {
+            LOG_DEBUG() << "[AgeGenderAnalyzer] Crop " << i << " is empty, skipping";
             results.push_back(PersonAttributes());
             continue;
         }
 
+        LOG_DEBUG() << "[AgeGenderAnalyzer] Processing crop " << i << " size: "
+                   << crop.cols << "x" << crop.rows << " channels: " << crop.channels();
+
         // Preprocess image for InsightFace
         cv::Mat processed = preprocessImage(crop);
         if (processed.empty()) {
+            LOG_WARN() << "[AgeGenderAnalyzer] Preprocessing failed for crop " << i;
             results.push_back(PersonAttributes());
             continue;
         }
+
+        LOG_DEBUG() << "[AgeGenderAnalyzer] Preprocessed crop " << i << " to size: "
+                   << processed.cols << "x" << processed.rows;
 
         // Save image temporarily and create bitmap from file
         std::string tempImagePath = "/tmp/temp_face_" + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -389,15 +426,33 @@ std::vector<PersonAttributes> AgeGenderAnalyzer::processBatch(const std::vector<
 
         PersonAttributes attributes;
 
+        LOG_DEBUG() << "[AgeGenderAnalyzer] Crop " << i << " face detection result: "
+                   << multipleFaceData.detectedNum << " faces detected";
+
         if (multipleFaceData.detectedNum > 0) {
+            LOG_DEBUG() << "[AgeGenderAnalyzer] Running face attribute pipeline for crop " << i;
+
             // Run pipeline for face attributes
             HOption pipelineOption = HF_ENABLE_QUALITY | HF_ENABLE_MASK_DETECT | HF_ENABLE_FACE_ATTRIBUTE;
             ret = HFMultipleFacePipelineProcessOptional(m_session, imageStream,
                                                       &multipleFaceData, pipelineOption);
             if (ret == HSUCCEED) {
+                LOG_DEBUG() << "[AgeGenderAnalyzer] Face attribute pipeline successful for crop " << i;
                 // Process the first detected face
                 attributes = processInsightFaceResult(0, &multipleFaceData, nullptr, nullptr, nullptr);
+
+                if (attributes.isValid()) {
+                    LOG_INFO() << "[AgeGenderAnalyzer] Crop " << i << " analysis successful: "
+                              << "gender=" << attributes.gender << " (conf: " << attributes.gender_confidence
+                              << "), age=" << attributes.age_group << " (conf: " << attributes.age_confidence << ")";
+                } else {
+                    LOG_WARN() << "[AgeGenderAnalyzer] Crop " << i << " analysis failed - invalid attributes";
+                }
+            } else {
+                LOG_ERROR() << "[AgeGenderAnalyzer] Face attribute pipeline failed for crop " << i << ": " << ret;
             }
+        } else {
+            LOG_WARN() << "[AgeGenderAnalyzer] No faces detected in crop " << i;
         }
 
         // Set timestamp
@@ -416,6 +471,10 @@ std::vector<PersonAttributes> AgeGenderAnalyzer::processBatch(const std::vector<
 }
 
 cv::Mat AgeGenderAnalyzer::preprocessImage(const cv::Mat& image) {
+    if (image.empty()) {
+        return cv::Mat();
+    }
+
     cv::Mat processed = image.clone();
 
     // Ensure image is in BGR format
@@ -423,6 +482,24 @@ cv::Mat AgeGenderAnalyzer::preprocessImage(const cv::Mat& image) {
         cv::cvtColor(processed, processed, cv::COLOR_GRAY2BGR);
     } else if (processed.channels() == 4) {
         cv::cvtColor(processed, processed, cv::COLOR_BGRA2BGR);
+    }
+
+    // Fix RGA alignment issues: ensure width is 16-aligned for RGB888
+    int alignedWidth = ((processed.cols + 15) / 16) * 16;
+    int alignedHeight = processed.rows;
+
+    if (alignedWidth != processed.cols) {
+        cv::Mat aligned;
+        cv::resize(processed, aligned, cv::Size(alignedWidth, alignedHeight));
+        processed = aligned;
+        LOG_DEBUG() << "[AgeGenderAnalyzer] Aligned image from " << image.cols
+                   << "x" << image.rows << " to " << alignedWidth << "x" << alignedHeight;
+    }
+
+    // Ensure minimum size for face detection
+    if (processed.cols < 112 || processed.rows < 112) {
+        cv::resize(processed, processed, cv::Size(112, 112));
+        LOG_DEBUG() << "[AgeGenderAnalyzer] Resized small image to 112x112";
     }
 
     return processed;

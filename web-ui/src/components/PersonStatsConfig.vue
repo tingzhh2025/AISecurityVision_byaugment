@@ -55,15 +55,7 @@
           </el-text>
         </el-form-item>
         
-        <el-form-item label="模型文件路径">
-          <el-input 
-            v-model="config.model_path" 
-            placeholder="models/age_gender_mobilenet.rknn"
-          />
-          <el-text size="small" type="info">
-            RKNN模型文件的路径
-          </el-text>
-        </el-form-item>
+
       </template>
       
       <el-form-item>
@@ -158,8 +150,7 @@ const config = reactive({
   gender_threshold: 0.7,
   age_threshold: 0.6,
   batch_size: 4,
-  enable_caching: true,
-  model_path: 'models/age_gender_mobilenet.rknn'
+  enable_caching: true
 })
 
 const originalConfig = reactive({})
@@ -217,17 +208,40 @@ const suggestions = computed(() => {
 const loadConfig = async () => {
   try {
     const response = await apiService.getPersonStatsConfig(props.cameraId)
-    if (response.data.success) {
-      Object.assign(config, response.data.data)
-      Object.assign(originalConfig, response.data.data)
-      
+    console.log('API Response:', response.data) // 调试日志
+
+    // 检查API响应格式
+    if (response.data.error) {
+      console.error('API Error:', response.data.error)
+      ElMessage.error('配置加载失败: ' + response.data.error)
+      return
+    }
+
+    // 从正确的字段获取配置数据
+    let configData = null
+    if (response.data.config) {
+      // 新的API格式: {config: {...}, camera_id: "...", timestamp: "..."}
+      configData = response.data.config
+    } else if (response.data.success && response.data.data) {
+      // 旧的API格式: {success: true, data: {...}}
+      configData = response.data.data
+    }
+
+    if (configData) {
+      Object.assign(config, configData)
+      Object.assign(originalConfig, configData)
+      console.log('Loaded config:', configData) // 调试日志
+
       if (config.enabled) {
         await checkStatus()
       }
+    } else {
+      console.error('Invalid API response format:', response.data)
+      ElMessage.error('配置数据格式错误')
     }
   } catch (error) {
     console.error('Failed to load config:', error)
-    ElMessage.error('配置加载失败')
+    ElMessage.error('配置加载失败: ' + (error.response?.data?.message || error.message))
   }
 }
 

@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>前端网络配置测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        .success { background: #d4edda; border-color: #c3e6cb; }
+        .error { background: #f8d7da; border-color: #f5c6cb; }
+        .info { background: #d1ecf1; border-color: #bee5eb; }
+        .btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .btn:hover {
+            background: #0056b3;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            max-height: 300px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 前端网络配置测试</h1>
+        
+        <div class="test-section info">
+            <h3>📋 测试说明</h3>
+            <p>这个页面用于测试前端网络配置功能是否正常工作。</p>
+            <ul>
+                <li>✅ 后端API服务：http://localhost:8080</li>
+                <li>✅ 前端服务：http://localhost:3000</li>
+                <li>🔗 设置页面：<a href="http://localhost:3000/settings" target="_blank">http://localhost:3000/settings</a></li>
+            </ul>
+        </div>
+
+        <div class="test-section">
+            <h3>🌐 网络接口API测试</h3>
+            <button class="btn" onclick="testNetworkAPI()">测试网络接口API</button>
+            <button class="btn" onclick="testNetworkStats()">测试网络统计API</button>
+            <div id="api-result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🎨 前端页面测试</h3>
+            <button class="btn" onclick="openSettings()">打开设置页面</button>
+            <button class="btn" onclick="testFrontendAPI()">测试前端API调用</button>
+            <div id="frontend-result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>📊 实时网络数据</h3>
+            <button class="btn" onclick="startMonitoring()">开始监控</button>
+            <button class="btn" onclick="stopMonitoring()">停止监控</button>
+            <div id="monitoring-result"></div>
+        </div>
+    </div>
+
+    <script>
+        let monitoringInterval = null;
+
+        async function testNetworkAPI() {
+            const resultDiv = document.getElementById('api-result');
+            resultDiv.innerHTML = '<p>正在测试网络接口API...</p>';
+            
+            try {
+                const response = await fetch('http://localhost:8080/api/network/interfaces');
+                const data = await response.json();
+                
+                resultDiv.innerHTML = `
+                    <div class="success">
+                        <h4>✅ 网络接口API测试成功</h4>
+                        <p>检测到 ${data.interfaces?.length || 0} 个网络接口</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>❌ 网络接口API测试失败</h4>
+                        <p>错误: ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        async function testNetworkStats() {
+            const resultDiv = document.getElementById('api-result');
+            resultDiv.innerHTML = '<p>正在测试网络统计API...</p>';
+            
+            try {
+                const response = await fetch('http://localhost:8080/api/network/stats');
+                const data = await response.json();
+                
+                resultDiv.innerHTML = `
+                    <div class="success">
+                        <h4>✅ 网络统计API测试成功</h4>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>❌ 网络统计API测试失败</h4>
+                        <p>错误: ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        function openSettings() {
+            window.open('http://localhost:3000/settings', '_blank');
+        }
+
+        async function testFrontendAPI() {
+            const resultDiv = document.getElementById('frontend-result');
+            resultDiv.innerHTML = '<p>正在测试前端API调用...</p>';
+            
+            try {
+                // 测试前端是否可以访问
+                const frontendResponse = await fetch('http://localhost:3000');
+                const frontendText = await frontendResponse.text();
+                
+                if (frontendText.includes('AI安防视频监控系统')) {
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            <h4>✅ 前端服务正常</h4>
+                            <p>前端页面可以正常访问</p>
+                            <p>标题: AI安防视频监控系统</p>
+                        </div>
+                    `;
+                } else {
+                    throw new Error('前端页面内容异常');
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>❌ 前端服务测试失败</h4>
+                        <p>错误: ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        async function startMonitoring() {
+            if (monitoringInterval) {
+                clearInterval(monitoringInterval);
+            }
+            
+            const resultDiv = document.getElementById('monitoring-result');
+            resultDiv.innerHTML = '<div class="info"><h4>📊 开始实时监控网络数据...</h4></div>';
+            
+            monitoringInterval = setInterval(async () => {
+                try {
+                    const response = await fetch('http://localhost:8080/api/network/interfaces');
+                    const data = await response.json();
+                    
+                    const eth0 = data.interfaces?.find(iface => iface.name === 'eth0');
+                    if (eth0) {
+                        const rxGB = (eth0.bytes_received / (1024*1024*1024)).toFixed(2);
+                        const txGB = (eth0.bytes_sent / (1024*1024*1024)).toFixed(2);
+                        
+                        resultDiv.innerHTML = `
+                            <div class="success">
+                                <h4>📊 实时网络监控 (${new Date().toLocaleTimeString()})</h4>
+                                <p><strong>eth0接口状态:</strong> ${eth0.status}</p>
+                                <p><strong>IP地址:</strong> ${eth0.ip_address}</p>
+                                <p><strong>接收数据:</strong> ${rxGB} GB</p>
+                                <p><strong>发送数据:</strong> ${txGB} GB</p>
+                            </div>
+                        `;
+                    }
+                } catch (error) {
+                    resultDiv.innerHTML = `
+                        <div class="error">
+                            <h4>❌ 监控失败</h4>
+                            <p>错误: ${error.message}</p>
+                        </div>
+                    `;
+                }
+            }, 2000);
+        }
+
+        function stopMonitoring() {
+            if (monitoringInterval) {
+                clearInterval(monitoringInterval);
+                monitoringInterval = null;
+                document.getElementById('monitoring-result').innerHTML = '<div class="info"><h4>⏹️ 监控已停止</h4></div>';
+            }
+        }
+
+        // 页面加载时自动测试
+        window.onload = function() {
+            console.log('页面加载完成，开始自动测试...');
+            testNetworkAPI();
+        };
+    </script>
+</body>
+</html>

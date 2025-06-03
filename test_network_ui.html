@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>网络接口测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .interface-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+            background: #f9f9f9;
+        }
+        .interface-name {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
+        .interface-status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        .status-connected { background: #d4edda; color: #155724; }
+        .status-enabled { background: #fff3cd; color: #856404; }
+        .status-disabled { background: #f8d7da; color: #721c24; }
+        .interface-details {
+            margin-top: 10px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+        }
+        .detail-item {
+            background: white;
+            padding: 8px;
+            border-radius: 4px;
+            border-left: 3px solid #007bff;
+        }
+        .detail-label {
+            font-weight: bold;
+            color: #666;
+            font-size: 12px;
+        }
+        .detail-value {
+            color: #333;
+            font-family: monospace;
+        }
+        .btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .btn:hover {
+            background: #0056b3;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌐 网络接口管理</h1>
+        
+        <div style="margin-bottom: 20px;">
+            <button class="btn" onclick="loadInterfaces()">🔄 刷新接口</button>
+            <button class="btn" onclick="loadStats()">📊 网络统计</button>
+            <button class="btn" onclick="testConnection()">🔗 测试连接</button>
+        </div>
+
+        <div id="loading" class="loading" style="display: none;">
+            正在加载网络接口信息...
+        </div>
+
+        <div id="error" class="error" style="display: none;"></div>
+
+        <div id="interfaces-container"></div>
+
+        <div id="stats-container" style="margin-top: 20px;"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8080/api';
+
+        async function loadInterfaces() {
+            const loading = document.getElementById('loading');
+            const error = document.getElementById('error');
+            const container = document.getElementById('interfaces-container');
+            
+            loading.style.display = 'block';
+            error.style.display = 'none';
+            container.innerHTML = '';
+
+            try {
+                const response = await fetch(`${API_BASE}/network/interfaces`);
+                const data = await response.json();
+                
+                if (data.interfaces) {
+                    displayInterfaces(data.interfaces);
+                } else {
+                    throw new Error('无效的响应格式');
+                }
+            } catch (err) {
+                error.textContent = `加载失败: ${err.message}`;
+                error.style.display = 'block';
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        function displayInterfaces(interfaces) {
+            const container = document.getElementById('interfaces-container');
+            
+            interfaces.forEach(iface => {
+                const card = document.createElement('div');
+                card.className = 'interface-card';
+                
+                const statusClass = iface.status === '已连接' ? 'status-connected' : 
+                                  iface.is_up ? 'status-enabled' : 'status-disabled';
+                
+                card.innerHTML = `
+                    <div>
+                        <span class="interface-name">${iface.display_name || iface.name}</span>
+                        <span class="interface-status ${statusClass}">${iface.status}</span>
+                    </div>
+                    <div class="interface-details">
+                        <div class="detail-item">
+                            <div class="detail-label">类型</div>
+                            <div class="detail-value">${getTypeLabel(iface.type)}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">MAC地址</div>
+                            <div class="detail-value">${iface.mac_address || 'N/A'}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">IP地址</div>
+                            <div class="detail-value">${iface.ip_address || '未分配'}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">子网掩码</div>
+                            <div class="detail-value">${iface.netmask || 'N/A'}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">配置方式</div>
+                            <div class="detail-value">${iface.is_dhcp ? 'DHCP' : '静态IP'}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">接收数据</div>
+                            <div class="detail-value">${formatBytes(iface.bytes_received)}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">发送数据</div>
+                            <div class="detail-value">${formatBytes(iface.bytes_sent)}</div>
+                        </div>
+                    </div>
+                `;
+                
+                container.appendChild(card);
+            });
+        }
+
+        function getTypeLabel(type) {
+            const typeMap = {
+                'ethernet': '以太网',
+                'wireless': '无线网络',
+                'loopback': '回环接口',
+                'unknown': '未知类型'
+            };
+            return typeMap[type] || type;
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        async function loadStats() {
+            try {
+                const response = await fetch(`${API_BASE}/network/stats`);
+                const data = await response.json();
+                
+                const container = document.getElementById('stats-container');
+                container.innerHTML = '<h3>📊 网络统计</h3>';
+                
+                if (data.network_stats) {
+                    const statsDiv = document.createElement('div');
+                    statsDiv.style.display = 'grid';
+                    statsDiv.style.gridTemplateColumns = 'repeat(auto-fit, minmax(200px, 1fr))';
+                    statsDiv.style.gap = '10px';
+                    
+                    Object.entries(data.network_stats).forEach(([key, value]) => {
+                        const statItem = document.createElement('div');
+                        statItem.className = 'detail-item';
+                        statItem.innerHTML = `
+                            <div class="detail-label">${formatStatLabel(key)}</div>
+                            <div class="detail-value">${formatStatValue(key, value)}</div>
+                        `;
+                        statsDiv.appendChild(statItem);
+                    });
+                    
+                    container.appendChild(statsDiv);
+                }
+            } catch (err) {
+                console.error('加载统计失败:', err);
+            }
+        }
+
+        function formatStatLabel(key) {
+            const labelMap = {
+                'eth0_rx_bytes': 'eth0 接收',
+                'eth0_tx_bytes': 'eth0 发送',
+                'eth0_status': 'eth0 状态',
+                'wlan0_rx_bytes': 'wlan0 接收',
+                'wlan0_tx_bytes': 'wlan0 发送',
+                'wlan0_status': 'wlan0 状态'
+            };
+            return labelMap[key] || key;
+        }
+
+        function formatStatValue(key, value) {
+            if (key.includes('_bytes')) {
+                return formatBytes(parseInt(value));
+            }
+            return value;
+        }
+
+        async function testConnection() {
+            const host = prompt('请输入要测试的主机地址:', '8.8.8.8');
+            if (!host) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/network/test`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        host: host,
+                        timeout: 5
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.test_result) {
+                    alert(`✅ 连接到 ${host} 成功！`);
+                } else {
+                    alert(`❌ 连接到 ${host} 失败！`);
+                }
+            } catch (err) {
+                alert(`❌ 测试失败: ${err.message}`);
+            }
+        }
+
+        // 页面加载时自动加载接口信息
+        window.onload = function() {
+            loadInterfaces();
+            loadStats();
+        };
+    </script>
+</body>
+</html>

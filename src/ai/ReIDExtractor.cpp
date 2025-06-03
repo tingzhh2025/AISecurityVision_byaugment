@@ -493,11 +493,25 @@ cv::Mat ReIDExtractor::extractROI(const cv::Mat& frame, const cv::Rect& bbox) {
     // Ensure bbox is within frame bounds
     cv::Rect safeBbox = bbox & cv::Rect(0, 0, frame.cols, frame.rows);
 
-    if (safeBbox.width < m_minObjectWidth || safeBbox.height < m_minObjectHeight) {
+    // Relax minimum size requirements for better person detection
+    int minWidth = std::max(16, m_minObjectWidth / 2);  // Reduce minimum width requirement
+    int minHeight = std::max(32, m_minObjectHeight / 2); // Reduce minimum height requirement
+
+    if (safeBbox.width < minWidth || safeBbox.height < minHeight) {
+        LOG_DEBUG() << "[ReIDExtractor] ROI too small: " << safeBbox.width << "x" << safeBbox.height
+                   << " (min: " << minWidth << "x" << minHeight << ")";
         return cv::Mat();
     }
 
-    return frame(safeBbox).clone();
+    cv::Mat roi = frame(safeBbox).clone();
+
+    // Ensure ROI is large enough for feature extraction
+    if (!roi.empty() && (roi.cols < 32 || roi.rows < 64)) {
+        cv::resize(roi, roi, cv::Size(std::max(32, roi.cols), std::max(64, roi.rows)));
+        LOG_DEBUG() << "[ReIDExtractor] Resized small ROI to " << roi.cols << "x" << roi.rows;
+    }
+
+    return roi;
 }
 
 std::vector<float> ReIDExtractor::postprocessFeatures(const cv::Mat& output) {

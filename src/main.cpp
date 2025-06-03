@@ -184,6 +184,51 @@ std::vector<CameraConfig> loadCameraConfigFromDatabase() {
     return cameras;
 }
 
+// Load person statistics configuration from database for a camera
+void loadPersonStatsConfig(const std::string& cameraId, TaskManager& taskManager) {
+    try {
+        DatabaseManager dbManager;
+        if (!dbManager.initialize("aibox.db")) {
+            LOG_WARN() << "[Config] Failed to initialize database for person stats config loading";
+            return;
+        }
+
+        std::string configKey = "person_stats_" + cameraId;
+        std::string savedConfig = dbManager.getConfig("person_statistics", configKey, "");
+
+        if (!savedConfig.empty()) {
+            auto pipeline = taskManager.getPipeline(cameraId);
+            if (!pipeline) {
+                LOG_WARN() << "[Config] Pipeline not found for camera: " << cameraId;
+                return;
+            }
+
+            try {
+                nlohmann::json configJson = nlohmann::json::parse(savedConfig);
+                bool enabled = configJson.value("enabled", false);
+                float genderThreshold = configJson.value("gender_threshold", 0.7f);
+                float ageThreshold = configJson.value("age_threshold", 0.6f);
+                int batchSize = configJson.value("batch_size", 4);
+                bool enableCaching = configJson.value("enable_caching", true);
+
+                // Apply configuration to pipeline
+                pipeline->setPersonStatsEnabled(enabled);
+                pipeline->setPersonStatsConfig(genderThreshold, ageThreshold, batchSize, enableCaching);
+
+                LOG_INFO() << "[Config] Loaded person stats config for camera: " << cameraId
+                           << " (enabled=" << enabled << ", gender_threshold=" << genderThreshold
+                           << ", age_threshold=" << ageThreshold << ")";
+            } catch (const std::exception& e) {
+                LOG_WARN() << "[Config] Failed to parse person stats config for camera " << cameraId << ": " << e.what();
+            }
+        } else {
+            LOG_DEBUG() << "[Config] No saved person stats config found for camera: " << cameraId;
+        }
+    } catch (const std::exception& e) {
+        LOG_ERROR() << "[Config] Error loading person stats config for camera " << cameraId << ": " << e.what();
+    }
+}
+
 void printUsage(const char* programName) {
     LOG_INFO() << "Usage: " << programName << " [options]\n"
               << "Options:\n"
@@ -409,6 +454,9 @@ int main(int argc, char* argv[]) {
                                       << " with " << detectionThreads << " threads";
                         }
                     }
+
+                    // Load person statistics configuration from database
+                    loadPersonStatsConfig(camera.id, taskManager);
                 } else {
                     LOG_ERROR() << "[Main] Failed to add camera: " << camera.id;
                 }

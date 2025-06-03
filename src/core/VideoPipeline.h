@@ -115,6 +115,23 @@ public:
     // Person statistics configuration (optional extension)
     void setPersonStatsEnabled(bool enabled);
     bool isPersonStatsEnabled() const;
+    void setPersonStatsConfig(float genderThreshold, float ageThreshold, int batchSize, bool enableCaching);
+
+    // Forward declaration for PersonStats
+    struct PersonStats {
+        int total_persons = 0;
+        int male_count = 0;
+        int female_count = 0;
+        int child_count = 0;
+        int young_count = 0;
+        int middle_count = 0;
+        int senior_count = 0;
+        std::vector<cv::Rect> person_boxes;
+        std::vector<std::string> person_genders;
+        std::vector<std::string> person_ages;
+    };
+
+    PersonStats getCurrentPersonStats() const;
 
     // Statistics
     double getFrameRate() const;
@@ -178,6 +195,14 @@ private:
     std::atomic<bool> m_optimizedDetectionEnabled{true};
     std::atomic<int> m_detectionThreads{3};
     std::atomic<bool> m_personStatsEnabled{false};  // Person statistics (optional extension)
+
+    // Person statistics configuration parameters
+    std::atomic<float> m_genderThreshold{0.7f};
+    std::atomic<float> m_ageThreshold{0.6f};
+    std::atomic<int> m_batchSize{4};
+    std::atomic<bool> m_enableCaching{true};
+    mutable std::mutex m_personStatsMutex;
+    PersonStats m_currentPersonStats;
 
     // Statistics
     mutable std::atomic<double> m_frameRate{0.0};

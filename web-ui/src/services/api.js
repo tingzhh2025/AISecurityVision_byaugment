@@ -4,7 +4,7 @@ import { ElMessage } from 'element-plus'
 // 创建axios实例
 const api = axios.create({
   baseURL: '/api',
-  timeout: 10000,
+  timeout: 30000, // 增加到30秒
   headers: {
     'Content-Type': 'application/json'
   }
@@ -55,7 +55,12 @@ api.interceptors.response.use(
 
       ElMessage.error(message)
     } else if (error.request) {
-      ElMessage.error('网络连接失败')
+      // 检查是否是超时错误
+      if (error.code === 'ECONNABORTED') {
+        ElMessage.error('请求超时，请检查网络连接或稍后重试')
+      } else {
+        ElMessage.error('网络连接失败')
+      }
     } else {
       ElMessage.error('请求配置错误')
     }
@@ -69,6 +74,15 @@ export const apiService = {
   // 系统相关
   getSystemStatus: () => api.get('/system/status'),
   getSystemInfo: () => api.get('/system/info'),
+
+  // 网络接口管理
+  getNetworkInterfaces: () => api.get('/network/interfaces'),
+  getNetworkInterface: (interfaceName) => api.get(`/network/interfaces/${interfaceName}`),
+  configureNetworkInterface: (interfaceName, config) => api.post(`/network/interfaces/${interfaceName}`, config),
+  enableNetworkInterface: (interfaceName) => api.post(`/network/interfaces/${interfaceName}/enable`),
+  disableNetworkInterface: (interfaceName) => api.post(`/network/interfaces/${interfaceName}/disable`),
+  getNetworkStats: () => api.get('/network/stats'),
+  testNetworkConnection: (testConfig) => api.post('/network/test', testConfig),
   updateSystemConfig: (config) => api.put('/system/config', config),
 
   // 配置管理相关
@@ -98,26 +112,26 @@ export const apiService = {
 
       if (camera && camera.mjpeg_port) {
         // 直接访问MJPEG流，不通过Vite代理
-        return `http://192.168.1.199:${camera.mjpeg_port}/stream.mjpg`
+        return `http://127.0.0.1:${camera.mjpeg_port}/stream.mjpg`
       }
 
       // 如果API调用失败，回退到静态映射
       const streamMapping = {
-        'camera_01': 'http://192.168.1.199:8161/stream.mjpg',
-        'camera_02': 'http://192.168.1.199:8162/stream.mjpg',
-        'camera_03': 'http://192.168.1.199:8163/stream.mjpg',
-        'camera_04': 'http://192.168.1.199:8164/stream.mjpg',
-        'camera_05': 'http://192.168.1.199:8165/stream.mjpg',
-        'camera_06': 'http://192.168.1.199:8166/stream.mjpg',
-        'camera_07': 'http://192.168.1.199:8167/stream.mjpg',
-        'camera_08': 'http://192.168.1.199:8168/stream.mjpg',
-        'test_camera': 'http://192.168.1.199:8161/stream.mjpg'
+        'camera_01': 'http://127.0.0.1:8161/stream.mjpg',
+        'camera_02': 'http://127.0.0.1:8162/stream.mjpg',
+        'camera_03': 'http://127.0.0.1:8163/stream.mjpg',
+        'camera_04': 'http://127.0.0.1:8164/stream.mjpg',
+        'camera_05': 'http://127.0.0.1:8165/stream.mjpg',
+        'camera_06': 'http://127.0.0.1:8166/stream.mjpg',
+        'camera_07': 'http://127.0.0.1:8167/stream.mjpg',
+        'camera_08': 'http://127.0.0.1:8168/stream.mjpg',
+        'test_camera': 'http://127.0.0.1:8161/stream.mjpg'
       }
 
-      return streamMapping[cameraId] || 'http://192.168.1.199:8161/stream.mjpg'
+      return streamMapping[cameraId] || 'http://127.0.0.1:8161/stream.mjpg'
     } catch (error) {
       console.error('Failed to get camera info for stream URL:', error)
-      return 'http://192.168.1.199:8161/stream.mjpg'
+      return 'http://127.0.0.1:8161/stream.mjpg'
     }
   },
 

@@ -11,6 +11,13 @@
 struct ROI;
 struct IntrusionRule;
 struct AlarmConfig;
+
+// Network forward declarations
+namespace AISecurityVision {
+    class NetworkManager;
+    struct NetworkInterface;
+    struct NetworkConfiguration;
+}
 #include <memory>
 
 /**
@@ -58,7 +65,6 @@ public:
         float age_threshold = 0.6f;
         int batch_size = 4;
         bool enable_caching = true;
-        std::string model_path = "models/age_gender_mobilenet.rknn";
     };
 
     explicit APIService(int port = 8080);
@@ -204,6 +210,15 @@ private:
     void handleGetPersonStatsConfig(const std::string& request, std::string& response, const std::string& cameraId);
     void handlePostPersonStatsConfig(const std::string& request, std::string& response, const std::string& cameraId);
 
+    // Network interface management handlers
+    void handleGetNetworkInterfaces(const std::string& request, std::string& response);
+    void handleGetNetworkInterface(const std::string& request, std::string& response, const std::string& interfaceName);
+    void handlePostNetworkInterface(const std::string& request, std::string& response, const std::string& interfaceName);
+    void handlePostNetworkInterfaceEnable(const std::string& request, std::string& response, const std::string& interfaceName);
+    void handlePostNetworkInterfaceDisable(const std::string& request, std::string& response, const std::string& interfaceName);
+    void handleGetNetworkStats(const std::string& request, std::string& response);
+    void handlePostNetworkTest(const std::string& request, std::string& response);
+
     // Utility methods
     std::string createJsonResponse(const std::string& data, int statusCode = 200);
     std::string createErrorResponse(const std::string& error, int statusCode = 400);
@@ -246,6 +261,12 @@ private:
     std::string serializePersonStats(const PersonStats& stats);
     std::string serializePersonStatsConfig(const PersonStatsConfig& config);
 
+    // Network interface serialization
+    std::string serializeNetworkInterface(const AISecurityVision::NetworkInterface& interface);
+    std::string serializeNetworkInterfaceList(const std::vector<AISecurityVision::NetworkInterface>& interfaces);
+    std::string serializeNetworkConfiguration(const AISecurityVision::NetworkConfiguration& config);
+    bool deserializeNetworkConfiguration(const std::string& json, AISecurityVision::NetworkConfiguration& config);
+
     // Web interface utilities
     std::string loadWebFile(const std::string& filePath);
 
@@ -274,6 +295,9 @@ private:
     // ONVIF discovery manager
     std::unique_ptr<class ONVIFManager> m_onvifManager;
     std::thread m_serverThread;
+
+    // Network manager
+    std::unique_ptr<AISecurityVision::NetworkManager> m_networkManager;
 
     // HTTP server implementation
     std::unique_ptr<httplib::Server> m_httpServer;

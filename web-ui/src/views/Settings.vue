@@ -181,13 +181,6 @@
               </el-text>
             </el-form-item>
 
-            <el-form-item label="模型文件路径" v-if="aiConfig.enabled && personStatsConfig.enabled">
-              <el-input
-                v-model="personStatsConfig.modelPath"
-                placeholder="models/age_gender_mobilenet.rknn"
-              />
-            </el-form-item>
-
             <el-form-item>
               <el-button type="primary" @click="saveAiConfig">保存配置</el-button>
               <el-button @click="resetAiConfig">重置</el-button>
@@ -341,11 +334,11 @@
         </el-card>
       </el-tab-pane>
 
-      <!-- 网络配置 -->
-      <el-tab-pane label="网络配置" name="network">
+      <!-- 服务端口配置 -->
+      <el-tab-pane label="服务端口配置" name="network">
         <el-card>
           <template #header>
-            <span>网络服务配置</span>
+            <span>服务端口配置</span>
           </template>
           
           <el-form
@@ -393,6 +386,11 @@
           </el-form>
         </el-card>
       </el-tab-pane>
+
+      <!-- 网卡配置 -->
+      <el-tab-pane label="网卡配置" name="interfaces">
+        <NetworkInterfaces />
+      </el-tab-pane>
     </el-tabs>
 
     <!-- 检测类别过滤对话框 -->
@@ -412,6 +410,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { apiService } from '@/services/api'
 import { ElMessage } from 'element-plus'
 import DetectionCategoryFilter from '@/components/DetectionCategoryFilter.vue'
+import NetworkInterfaces from '@/views/NetworkInterfaces.vue'
 
 // 响应式数据
 const activeTab = ref('system')
@@ -449,8 +448,7 @@ const personStatsConfig = reactive({
   genderThreshold: 0.7,
   ageThreshold: 0.6,
   batchSize: 4,
-  enableCaching: true,
-  modelPath: 'models/age_gender_mobilenet.rknn'
+  enableCaching: true
 })
 
 const recordingConfig = reactive({
@@ -568,7 +566,7 @@ const saveAlertConfig = async () => {
 const saveNetworkConfig = async () => {
   try {
     await apiService.saveSystemConfig({ network: networkConfig })
-    ElMessage.success('网络配置保存成功，重启后生效')
+    ElMessage.success('服务端口配置保存成功，重启后生效')
   } catch (error) {
     console.error('Failed to save network config:', error)
     ElMessage.error('保存失败: ' + (error.response?.data?.message || error.message))

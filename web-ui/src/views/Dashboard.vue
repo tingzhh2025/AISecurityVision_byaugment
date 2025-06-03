@@ -59,56 +59,38 @@
       </el-col>
     </el-row>
 
-    <!-- 系统监控 -->
-    <el-row :gutter="20" class="monitor-row">
+    <!-- 人员统计与最新报警并列 -->
+    <el-row :gutter="20" class="monitor-row" v-if="systemStore.cameras.length > 0">
       <el-col :span="12">
         <el-card class="monitor-card">
           <template #header>
             <div class="card-header">
-              <span>系统性能</span>
-              <el-button link @click="refreshSystemInfo">
-                <el-icon><Refresh /></el-icon>
-              </el-button>
+              <span>人员统计</span>
+              <el-select
+                v-model="selectedCameraForStats"
+                placeholder="选择摄像头"
+                style="width: 200px"
+                @change="onCameraChange"
+              >
+                <el-option
+                  v-for="camera in systemStore.cameras"
+                  :key="camera.id"
+                  :label="camera.name"
+                  :value="camera.id"
+                />
+              </el-select>
             </div>
           </template>
 
-          <div class="performance-metrics">
-            <div class="metric-item">
-              <div class="metric-label">CPU使用率</div>
-              <el-progress
-                :percentage="systemStore.systemInfo.cpuUsage"
-                :color="getProgressColor(systemStore.systemInfo.cpuUsage)"
-              />
-            </div>
+          <PersonStats
+            v-if="selectedCameraForStats"
+            :camera-id="selectedCameraForStats"
+            :auto-refresh="true"
+            :refresh-interval="5000"
+          />
 
-            <div class="metric-item">
-              <div class="metric-label">内存使用率</div>
-              <el-progress
-                :percentage="systemStore.systemInfo.memoryUsage"
-                :color="getProgressColor(systemStore.systemInfo.memoryUsage)"
-              />
-            </div>
-
-            <div class="metric-item">
-              <div class="metric-label">磁盘使用率</div>
-              <el-progress
-                :percentage="systemStore.systemInfo.diskUsage"
-                :color="getProgressColor(systemStore.systemInfo.diskUsage)"
-              />
-            </div>
-
-            <div class="metric-item">
-              <div class="metric-label">系统温度</div>
-              <div class="temperature">
-                {{ systemStore.systemInfo.temperature }}°C
-                <el-tag
-                  :type="getTemperatureType(systemStore.systemInfo.temperature)"
-                  size="small"
-                >
-                  {{ getTemperatureStatus(systemStore.systemInfo.temperature) }}
-                </el-tag>
-              </div>
-            </div>
+          <div v-else class="no-camera-selected">
+            <el-empty description="请选择摄像头查看人员统计" />
           </div>
         </el-card>
       </el-col>
@@ -149,43 +131,6 @@
               <el-icon><CircleCheck /></el-icon>
               <span>暂无报警信息</span>
             </div>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <!-- 人员统计 -->
-    <el-row :gutter="20" class="person-stats-row" v-if="systemStore.cameras.length > 0">
-      <el-col :span="24">
-        <el-card class="person-stats-card">
-          <template #header>
-            <div class="card-header">
-              <span>人员统计</span>
-              <el-select
-                v-model="selectedCameraForStats"
-                placeholder="选择摄像头"
-                style="width: 200px"
-                @change="onCameraChange"
-              >
-                <el-option
-                  v-for="camera in systemStore.cameras"
-                  :key="camera.id"
-                  :label="camera.name"
-                  :value="camera.id"
-                />
-              </el-select>
-            </div>
-          </template>
-
-          <PersonStats
-            v-if="selectedCameraForStats"
-            :camera-id="selectedCameraForStats"
-            :auto-refresh="true"
-            :refresh-interval="5000"
-          />
-
-          <div v-else class="no-camera-selected">
-            <el-empty description="请选择摄像头查看人员统计" />
           </div>
         </el-card>
       </el-col>
@@ -234,6 +179,71 @@
                 </div>
               </div>
             </div>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <!-- 系统性能 -->
+    <el-row :gutter="20" class="system-performance-row">
+      <el-col :span="24">
+        <el-card class="system-performance-card">
+          <template #header>
+            <div class="card-header">
+              <span>系统性能</span>
+              <el-button link @click="refreshSystemInfo">
+                <el-icon><Refresh /></el-icon>
+              </el-button>
+            </div>
+          </template>
+
+          <div class="performance-metrics">
+            <el-row :gutter="20">
+              <el-col :span="6">
+                <div class="metric-item">
+                  <div class="metric-label">CPU使用率</div>
+                  <el-progress
+                    :percentage="systemStore.systemInfo.cpuUsage"
+                    :color="getProgressColor(systemStore.systemInfo.cpuUsage)"
+                  />
+                </div>
+              </el-col>
+
+              <el-col :span="6">
+                <div class="metric-item">
+                  <div class="metric-label">内存使用率</div>
+                  <el-progress
+                    :percentage="systemStore.systemInfo.memoryUsage"
+                    :color="getProgressColor(systemStore.systemInfo.memoryUsage)"
+                  />
+                </div>
+              </el-col>
+
+              <el-col :span="6">
+                <div class="metric-item">
+                  <div class="metric-label">磁盘使用率</div>
+                  <el-progress
+                    :percentage="systemStore.systemInfo.diskUsage"
+                    :color="getProgressColor(systemStore.systemInfo.diskUsage)"
+                  />
+                </div>
+              </el-col>
+
+              <el-col :span="6">
+                <div class="metric-item">
+                  <div class="metric-label">系统温度</div>
+                  <div class="temperature">
+                    {{ systemStore.systemInfo.temperature }}°C
+                    <el-tag
+                      :type="getTemperatureType(systemStore.systemInfo.temperature)"
+                      size="small"
+                    >
+                      {{ getTemperatureStatus(systemStore.systemInfo.temperature) }}
+                    </el-tag>
+                  </div>
+                </div>
+              </el-col>
+            </el-row>
           </div>
         </el-card>
       </el-col>
@@ -494,17 +504,17 @@ onMounted(() => {
   color: #67c23a;
 }
 
-.person-stats-row {
-  margin-bottom: 20px;
-}
-
-.person-stats-card {
-  min-height: 350px;
-}
-
 .no-camera-selected {
   padding: 40px 20px;
   text-align: center;
+}
+
+.system-performance-row {
+  margin-bottom: 20px;
+}
+
+.system-performance-card {
+  min-height: 200px;
 }
 
 .cameras-card {
