@@ -65,7 +65,7 @@ private:
     std::unique_ptr<httplib::Server> m_httpServer;
 
     // Shared system components
-    std::unique_ptr<TaskManager> m_taskManager;
+    // Note: TaskManager is a singleton, accessed via TaskManager::getInstance()
     std::unique_ptr<ONVIFManager> m_onvifManager;
     std::unique_ptr<AISecurityVision::NetworkManager> m_networkManager;
 

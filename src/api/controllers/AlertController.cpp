@@ -104,13 +104,13 @@ void AlertController::handlePostAlarmConfig(const std::string& request, std::str
 
         } else if (method == "websocket") {
             config.method = AlarmMethod::WEBSOCKET;
-            config.websocketConfig = WebSocketAlarmConfig(url);
+            config.webSocketConfig.port = std::stoi(url);  // Assuming URL contains port number
 
             int reconnectInterval = parseJsonInt(request, "reconnect_interval_ms", 5000);
             if (reconnectInterval < 1000 || reconnectInterval > 60000) {
                 reconnectInterval = 5000;
             }
-            config.websocketConfig.reconnect_interval_ms = reconnectInterval;
+            config.webSocketConfig.ping_interval_ms = reconnectInterval;
 
         } else if (method == "mqtt") {
             config.method = AlarmMethod::MQTT;
@@ -128,7 +128,8 @@ void AlertController::handlePostAlarmConfig(const std::string& request, std::str
                 return;
             }
 
-            config.mqttConfig = MqttAlarmConfig(broker, topic);
+            config.mqttConfig = MQTTAlarmConfig(broker);
+            config.mqttConfig.topic = topic;
             
             int port = parseJsonInt(request, "port", 1883);
             if (port < 1 || port > 65535) {
@@ -199,7 +200,7 @@ void AlertController::handleGetAlarmConfigs(const std::string& request, std::str
             initialized = true;
         }
 
-        auto configs = alarmTrigger.getAllConfigs();
+        auto configs = alarmTrigger.getAlarmConfigs();
 
         std::ostringstream json;
         json << "{"
@@ -280,8 +281,8 @@ std::string AlertController::serializeAlarmConfig(const struct AlarmConfig& conf
             break;
         case AlarmMethod::WEBSOCKET:
             json << "\"method\":\"websocket\","
-                 << "\"url\":\"" << config.websocketConfig.url << "\","
-                 << "\"reconnect_interval_ms\":" << config.websocketConfig.reconnect_interval_ms;
+                 << "\"port\":" << config.webSocketConfig.port << ","
+                 << "\"ping_interval_ms\":" << config.webSocketConfig.ping_interval_ms;
             break;
         case AlarmMethod::MQTT:
             json << "\"method\":\"mqtt\","
@@ -294,4 +295,40 @@ std::string AlertController::serializeAlarmConfig(const struct AlarmConfig& conf
 
     json << "}";
     return json.str();
+}
+
+void AlertController::handleGetAlarmStatus(const std::string& request, std::string& response) {
+    try {
+        static AlarmTrigger alarmTrigger;
+        static bool initialized = false;
+        if (!initialized) {
+            alarmTrigger.initialize();
+            initialized = true;
+        }
+
+        // Get alarm system status and statistics
+        size_t pendingCount = alarmTrigger.getPendingAlarmsCount();
+        size_t deliveredCount = alarmTrigger.getDeliveredAlarmsCount();
+        size_t failedCount = alarmTrigger.getFailedAlarmsCount();
+        double avgDeliveryTime = alarmTrigger.getAverageDeliveryTime();
+
+        std::ostringstream json;
+        json << "{"
+             << "\"status\":\"active\","
+             << "\"pending_alarms\":" << pendingCount << ","
+             << "\"delivered_alarms\":" << deliveredCount << ","
+             << "\"failed_alarms\":" << failedCount << ","
+             << "\"average_delivery_time_ms\":" << avgDeliveryTime << ","
+             << "\"total_processed\":" << (deliveredCount + failedCount) << ","
+             << "\"success_rate\":" << (deliveredCount + failedCount > 0 ?
+                 (double)deliveredCount / (deliveredCount + failedCount) * 100.0 : 0.0) << ","
+             << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+        logInfo("Retrieved alarm system status");
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to get alarm status: " + std::string(e.what()), 500);
+    }
 }

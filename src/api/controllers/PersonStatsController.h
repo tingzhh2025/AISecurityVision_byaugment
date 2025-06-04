@@ -5,6 +5,9 @@
 #include <string>
 #include <opencv2/opencv.hpp>
 
+// Forward declarations
+class VideoPipeline;
+
 namespace AISecurityVision {
 
 /**

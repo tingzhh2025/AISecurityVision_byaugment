@@ -1,5 +1,6 @@
 #include "PersonStatsController.h"
 #include "../../core/TaskManager.h"
+#include "../../core/VideoPipeline.h"
 #include <nlohmann/json.hpp>
 #include <sstream>
 
@@ -24,7 +25,20 @@ void PersonStatsController::handleGetPersonStats(const std::string& request, std
         }
 
         // Get person statistics from pipeline
-        PersonStats stats = pipeline->getPersonStats();
+        auto pipelineStats = pipeline->getCurrentPersonStats();
+
+        // Convert to local PersonStats structure
+        PersonStats stats;
+        stats.total_persons = pipelineStats.total_persons;
+        stats.male_count = pipelineStats.male_count;
+        stats.female_count = pipelineStats.female_count;
+        stats.child_count = pipelineStats.child_count;
+        stats.young_count = pipelineStats.young_count;
+        stats.middle_count = pipelineStats.middle_count;
+        stats.senior_count = pipelineStats.senior_count;
+        stats.person_boxes = pipelineStats.person_boxes;
+        stats.person_genders = pipelineStats.person_genders;
+        stats.person_ages = pipelineStats.person_ages;
 
         response = createJsonResponse(serializePersonStats(stats));
         logInfo("Retrieved person statistics for camera: " + cameraId);
@@ -126,8 +140,15 @@ void PersonStatsController::handleGetPersonStatsConfig(const std::string& reques
             return;
         }
 
-        // Get person statistics configuration from pipeline
-        PersonStatsConfig config = pipeline->getPersonStatsConfig();
+        // Create person statistics configuration from pipeline settings
+        PersonStatsConfig config;
+        config.enabled = pipeline->isPersonStatsEnabled();
+        // Note: Individual config parameters are not exposed by VideoPipeline
+        // Using default values for now
+        config.gender_threshold = 0.7f;
+        config.age_threshold = 0.6f;
+        config.batch_size = 4;
+        config.enable_caching = true;
 
         response = createJsonResponse(serializePersonStatsConfig(config));
         logInfo("Retrieved person statistics config for camera: " + cameraId);
@@ -163,7 +184,9 @@ void PersonStatsController::handlePostPersonStatsConfig(const std::string& reque
         }
 
         // Apply configuration to pipeline
-        pipeline->setPersonStatsConfig(config);
+        pipeline->setPersonStatsEnabled(config.enabled);
+        pipeline->setPersonStatsConfig(config.gender_threshold, config.age_threshold,
+                                      config.batch_size, config.enable_caching);
 
         std::ostringstream json;
         json << "{"

@@ -434,33 +434,15 @@ void CameraController::handleGetDiscoverDevices(const std::string& request, std:
                  << "\"name\":\"" << device.name << "\","
                  << "\"manufacturer\":\"" << device.manufacturer << "\","
                  << "\"model\":\"" << device.model << "\","
-                 << "\"firmware_version\":\"" << device.firmware_version << "\","
-                 << "\"serial_number\":\"" << device.serial_number << "\","
-                 << "\"hardware_id\":\"" << device.hardware_id << "\","
-                 << "\"scopes\":[";
-
-            for (size_t j = 0; j < device.scopes.size(); ++j) {
-                if (j > 0) json << ",";
-                json << "\"" << device.scopes[j] << "\"";
-            }
-
-            json << "],"
-                 << "\"xaddrs\":[";
-
-            for (size_t j = 0; j < device.xaddrs.size(); ++j) {
-                if (j > 0) json << ",";
-                json << "\"" << device.xaddrs[j] << "\"";
-            }
-
-            json << "],"
-                 << "\"types\":[";
-
-            for (size_t j = 0; j < device.types.size(); ++j) {
-                if (j > 0) json << ",";
-                json << "\"" << device.types[j] << "\"";
-            }
-
-            json << "]}";
+                 << "\"firmware_version\":\"" << device.firmwareVersion << "\","
+                 << "\"serial_number\":\"" << device.serialNumber << "\","
+                 << "\"hardware_id\":\"" << device.uuid << "\","  // Use uuid as hardware_id
+                 << "\"ip_address\":\"" << device.ipAddress << "\","
+                 << "\"port\":" << device.port << ","
+                 << "\"service_url\":\"" << device.serviceUrl << "\","
+                 << "\"stream_uri\":\"" << device.streamUri << "\","
+                 << "\"requires_auth\":" << (device.requiresAuth ? "true" : "false")
+                 << "}";
         }
 
         json << "],"
@@ -473,5 +455,91 @@ void CameraController::handleGetDiscoverDevices(const std::string& request, std:
 
     } catch (const std::exception& e) {
         response = createErrorResponse("ONVIF discovery failed: " + std::string(e.what()), 500);
+    }
+}
+
+void CameraController::handlePostAddDiscoveredDevice(const std::string& request, std::string& response) {
+    try {
+        // Parse the discovered device information from request
+        std::string deviceId = parseJsonField(request, "device_id");
+        std::string name = parseJsonField(request, "name");
+        std::string ipAddress = parseJsonField(request, "ip_address");
+        std::string username = parseJsonField(request, "username");
+        std::string password = parseJsonField(request, "password");
+
+        if (deviceId.empty() || ipAddress.empty()) {
+            response = createErrorResponse("device_id and ip_address are required", 400);
+            return;
+        }
+
+        // Create camera configuration from discovered device
+        std::string cameraId = "camera_" + deviceId;
+        std::string url = "rtsp://" + ipAddress + ":554/1/1"; // Default RTSP URL
+
+        if (!username.empty() && !password.empty()) {
+            url = "rtsp://" + username + ":" + password + "@" + ipAddress + ":554/1/1";
+        }
+
+        // Create camera config
+        CameraConfig camera;
+        camera.id = cameraId;
+        camera.name = name.empty() ? ("Camera " + deviceId) : name;
+        camera.url = url;
+        camera.protocol = "rtsp";
+        camera.username = username;
+        camera.password = password;
+        camera.width = 1920;
+        camera.height = 1080;
+        camera.fps = 25;
+        camera.mjpeg_port = 8161; // Default MJPEG port
+        camera.enabled = true;
+
+        // Add to in-memory configuration
+        m_cameraConfigs.push_back(camera);
+
+        // Save to database
+        DatabaseManager dbManager;
+        if (dbManager.initialize()) {
+            std::string configJson = serializeCameraConfig(camera);
+            if (!dbManager.saveCameraConfig(cameraId, configJson)) {
+                logWarn("Failed to save discovered camera config to database for: " + cameraId);
+            }
+        }
+
+        // Add to TaskManager
+        if (m_taskManager) {
+            VideoSource source;
+            source.id = cameraId;
+            source.name = camera.name;
+            source.url = camera.url;
+            source.protocol = camera.protocol;
+            source.username = camera.username;
+            source.password = camera.password;
+            source.width = camera.width;
+            source.height = camera.height;
+            source.fps = camera.fps;
+            source.enabled = camera.enabled;
+
+            if (m_taskManager->addVideoSource(source)) {
+                logInfo("Successfully added discovered camera: " + cameraId);
+            } else {
+                logWarn("Failed to add discovered camera to TaskManager: " + cameraId);
+            }
+        }
+
+        std::ostringstream json;
+        json << "{"
+             << "\"status\":\"success\","
+             << "\"message\":\"Discovered device added successfully\","
+             << "\"camera_id\":\"" << cameraId << "\","
+             << "\"device_id\":\"" << deviceId << "\","
+             << "\"created_at\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str(), 201);
+        logInfo("Successfully added discovered device as camera: " + cameraId);
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to add discovered device: " + std::string(e.what()), 500);
     }
 }

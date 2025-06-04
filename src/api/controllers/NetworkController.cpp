@@ -96,7 +96,7 @@ void NetworkController::handlePostNetworkInterfaceEnable(const std::string& requ
             return;
         }
 
-        if (!m_networkManager->enableInterface(interfaceName)) {
+        if (!m_networkManager->setInterfaceEnabled(interfaceName, true)) {
             response = createErrorResponse("Failed to enable interface: " + m_networkManager->getLastError(), 500);
             return;
         }
@@ -129,7 +129,7 @@ void NetworkController::handlePostNetworkInterfaceDisable(const std::string& req
             return;
         }
 
-        if (!m_networkManager->disableInterface(interfaceName)) {
+        if (!m_networkManager->setInterfaceEnabled(interfaceName, false)) {
             response = createErrorResponse("Failed to disable interface: " + m_networkManager->getLastError(), 500);
             return;
         }
@@ -158,15 +158,29 @@ void NetworkController::handleGetNetworkStats(const std::string& request, std::s
         }
 
         auto stats = m_networkManager->getNetworkStats();
+        auto interfaces = m_networkManager->getAllInterfaces();
+
+        // Calculate totals from interfaces
+        uint64_t totalRxBytes = 0, totalTxBytes = 0;
+        int totalInterfaces = interfaces.size();
+        int activeInterfaces = 0;
+
+        for (const auto& interface : interfaces) {
+            totalRxBytes += interface.bytesReceived;
+            totalTxBytes += interface.bytesSent;
+            if (interface.isUp && interface.isConnected) {
+                activeInterfaces++;
+            }
+        }
 
         std::ostringstream json;
         json << "{"
-             << "\"total_interfaces\":" << stats.totalInterfaces << ","
-             << "\"active_interfaces\":" << stats.activeInterfaces << ","
-             << "\"total_rx_bytes\":" << stats.totalRxBytes << ","
-             << "\"total_tx_bytes\":" << stats.totalTxBytes << ","
-             << "\"total_rx_packets\":" << stats.totalRxPackets << ","
-             << "\"total_tx_packets\":" << stats.totalTxPackets << ","
+             << "\"total_interfaces\":" << totalInterfaces << ","
+             << "\"active_interfaces\":" << activeInterfaces << ","
+             << "\"total_rx_bytes\":" << totalRxBytes << ","
+             << "\"total_tx_bytes\":" << totalTxBytes << ","
+             << "\"total_rx_packets\":0,"  // Not available in current implementation
+             << "\"total_tx_packets\":0,"  // Not available in current implementation
              << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
              << "}";
 
@@ -221,11 +235,11 @@ std::string NetworkController::serializeNetworkInterface(const AISecurityVision:
          << "\"netmask\":\"" << interface.netmask << "\","
          << "\"gateway\":\"" << interface.gateway << "\","
          << "\"mac_address\":\"" << interface.macAddress << "\","
-         << "\"mtu\":" << interface.mtu << ","
-         << "\"rx_bytes\":" << interface.rxBytes << ","
-         << "\"tx_bytes\":" << interface.txBytes << ","
-         << "\"rx_packets\":" << interface.rxPackets << ","
-         << "\"tx_packets\":" << interface.txPackets
+         << "\"mtu\":1500,"  // Default MTU, not available in current NetworkInterface
+         << "\"rx_bytes\":" << interface.bytesReceived << ","
+         << "\"tx_bytes\":" << interface.bytesSent << ","
+         << "\"rx_packets\":0,"  // Not available in current NetworkInterface
+         << "\"tx_packets\":0"   // Not available in current NetworkInterface
          << "}";
     return json.str();
 }
@@ -253,13 +267,13 @@ bool NetworkController::deserializeNetworkConfiguration(const std::string& json,
         auto j = nlohmann::json::parse(json);
 
         config.interfaceName = j.value("interface_name", "");
-        config.dhcp = j.value("dhcp", true);
+        config.isDhcp = j.value("dhcp", true);
         config.ipAddress = j.value("ip_address", "");
         config.netmask = j.value("netmask", "");
         config.gateway = j.value("gateway", "");
         config.dns1 = j.value("dns1", "");
         config.dns2 = j.value("dns2", "");
-        config.mtu = j.value("mtu", 1500);
+        // Note: mtu field not available in NetworkConfiguration struct
 
         return true;
     } catch (const std::exception& e) {

@@ -16,7 +16,7 @@ APIService::APIService(int port) : m_port(port), m_httpServer(std::make_unique<h
     LOG_INFO() << "[APIService] Initializing API service on port " << port;
 
     // Initialize shared system components
-    m_taskManager = std::make_unique<TaskManager>();
+    // Note: TaskManager is a singleton, we'll access it via getInstance() when needed
     m_onvifManager = std::make_unique<ONVIFManager>();
     m_networkManager = std::make_unique<AISecurityVision::NetworkManager>();
 
@@ -44,11 +44,13 @@ APIService::APIService(int port) : m_port(port), m_httpServer(std::make_unique<h
     m_networkController = std::make_unique<NetworkController>();
 
     // Initialize controllers with shared components
-    m_cameraController->initialize(m_taskManager.get(), m_onvifManager.get(), m_networkManager.get());
-    m_systemController->initialize(m_taskManager.get(), m_onvifManager.get(), m_networkManager.get());
-    m_personStatsController->initialize(m_taskManager.get(), m_onvifManager.get(), m_networkManager.get());
-    m_alertController->initialize(m_taskManager.get(), m_onvifManager.get(), m_networkManager.get());
-    m_networkController->initialize(m_taskManager.get(), m_onvifManager.get(), m_networkManager.get());
+    // TaskManager is a singleton, pass reference to the instance
+    TaskManager& taskManager = TaskManager::getInstance();
+    m_cameraController->initialize(&taskManager, m_onvifManager.get(), m_networkManager.get());
+    m_systemController->initialize(&taskManager, m_onvifManager.get(), m_networkManager.get());
+    m_personStatsController->initialize(&taskManager, m_onvifManager.get(), m_networkManager.get());
+    m_alertController->initialize(&taskManager, m_onvifManager.get(), m_networkManager.get());
+    m_networkController->initialize(&taskManager, m_onvifManager.get(), m_networkManager.get());
 
     LOG_INFO() << "[APIService] All controllers initialized";
 
