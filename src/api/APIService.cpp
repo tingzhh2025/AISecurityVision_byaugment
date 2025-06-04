@@ -9,6 +9,7 @@
 #include "../network/NetworkManager.h"
 #include "../core/Logger.h"
 #include <sstream>
+#include <nlohmann/json.hpp>
 
 using namespace AISecurityVision;
 
@@ -148,155 +149,306 @@ void APIService::setupRoutes() {
 
     // Handle OPTIONS requests for CORS preflight
     m_httpServer->Options(".*", [](const httplib::Request& req, httplib::Response& res) {
-        LOG_INFO() << "[APIService] OPTIONS request for: " << req.path;
         res.set_header("Access-Control-Allow-Origin", "*");
         res.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
         res.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
         res.status = 200;
-        LOG_INFO() << "[APIService] OPTIONS response sent";
     });
 
-    // System endpoints - delegate to SystemController
-    m_httpServer->Get("/api/system/status", [this](const httplib::Request& req, httplib::Response& res) {
-        std::string response;
-        m_systemController->handleGetStatus("", response);
-        res.set_content(stripHttpHeaders(response), "application/json");
+    // Helper lambda to add CORS headers
+    auto addCorsHeaders = [](httplib::Response& res) {
         res.set_header("Access-Control-Allow-Origin", "*");
         res.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
         res.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    };
+
+    // ========== System endpoints ==========
+    m_httpServer->Get("/api/system/status", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        m_systemController->handleGetStatus("", response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
     });
 
-    m_httpServer->Get("/api/system/metrics", [this](const httplib::Request& req, httplib::Response& res) {
+    m_httpServer->Get("/api/system/metrics", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
         std::string response;
         m_systemController->handleGetSystemMetrics("", response);
         res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
     });
 
-    m_httpServer->Get("/api/system/pipeline-stats", [this](const httplib::Request& req, httplib::Response& res) {
+    m_httpServer->Get("/api/system/pipeline-stats", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
         std::string response;
         m_systemController->handleGetPipelineStats("", response);
         res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
     });
 
-    m_httpServer->Get("/api/system/stats", [this](const httplib::Request& req, httplib::Response& res) {
+    m_httpServer->Get("/api/system/stats", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
         std::string response;
         m_systemController->handleGetSystemStats("", response);
         res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
     });
 
-    m_httpServer->Get("/api/system/info", [this](const httplib::Request& req, httplib::Response& res) {
+    m_httpServer->Get("/api/system/info", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
         std::string response;
         m_systemController->handleGetSystemInfo("", response);
         res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
     });
 
-    m_httpServer->Get("/api/system/config", [this](const httplib::Request& req, httplib::Response& res) {
+    m_httpServer->Get("/api/system/config", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
         std::string response;
         m_systemController->handleGetSystemConfig("", response);
         res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
     });
 
-    m_httpServer->Post("/api/system/config", [this](const httplib::Request& req, httplib::Response& res) {
+    m_httpServer->Post("/api/system/config", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
         std::string response;
         m_systemController->handlePostSystemConfig(req.body, response);
         res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
     });
 
-    // Camera and video source management - delegate to CameraController
-    m_httpServer->Post("/api/source/add", [this](const httplib::Request& req, httplib::Response& res) {
-        std::string response;
-        m_cameraController->handlePostVideoSource(req.body, response);
-        res.set_content(stripHttpHeaders(response), "application/json");
-    });
-
-    m_httpServer->Get("/api/source/list", [this](const httplib::Request& req, httplib::Response& res) {
-        std::string response;
-        m_cameraController->handleGetVideoSources("", response);
-        res.set_content(stripHttpHeaders(response), "application/json");
-    });
-
-    m_httpServer->Get("/api/cameras", [this](const httplib::Request& req, httplib::Response& res) {
+    // ========== Camera management endpoints ==========
+    // List all cameras
+    m_httpServer->Get("/api/cameras", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
         std::string response;
         m_cameraController->handleGetCameras("", response);
         res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
     });
 
-    m_httpServer->Post("/api/cameras", [this](const httplib::Request& req, httplib::Response& res) {
+    // Add new camera
+    m_httpServer->Post("/api/cameras", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
         std::string response;
         m_cameraController->handlePostVideoSource(req.body, response);
         res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
     });
 
-    m_httpServer->Post("/api/cameras/test-connection", [this](const httplib::Request& req, httplib::Response& res) {
+    // Test camera connection
+    m_httpServer->Post("/api/cameras/test-connection", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
         std::string response;
         m_cameraController->handleTestCameraConnection(req.body, response);
         res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
     });
 
-    // ONVIF discovery endpoints - delegate to CameraController
-    m_httpServer->Get("/api/source/discover", [this](const httplib::Request& req, httplib::Response& res) {
+    // Test camera (alias for compatibility)
+    m_httpServer->Post("/api/cameras/test", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        m_cameraController->handleTestCameraConnection(req.body, response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    // ========== Person Statistics endpoints ==========
+    // Get person stats for camera
+    m_httpServer->Get(R"(/api/cameras/([^/]+)/person-stats)", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string cameraId = req.matches[1];
+        std::string response;
+        m_personStatsController->handleGetPersonStats("", response, cameraId);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    // Enable person stats
+    m_httpServer->Post(R"(/api/cameras/([^/]+)/person-stats/enable)", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string cameraId = req.matches[1];
+        std::string response;
+        m_personStatsController->handlePostPersonStatsEnable(req.body, response, cameraId);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    // Disable person stats
+    m_httpServer->Post(R"(/api/cameras/([^/]+)/person-stats/disable)", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string cameraId = req.matches[1];
+        std::string response;
+        m_personStatsController->handlePostPersonStatsDisable(req.body, response, cameraId);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    // Get person stats config
+    m_httpServer->Get(R"(/api/cameras/([^/]+)/person-stats/config)", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string cameraId = req.matches[1];
+        std::string response;
+        m_personStatsController->handleGetPersonStatsConfig("", response, cameraId);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    // Update person stats config
+    m_httpServer->Post(R"(/api/cameras/([^/]+)/person-stats/config)", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string cameraId = req.matches[1];
+        std::string response;
+        m_personStatsController->handlePostPersonStatsConfig(req.body, response, cameraId);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    // ========== Detection configuration endpoints ==========
+    // Get detection categories
+    m_httpServer->Get("/api/detection/categories", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        m_cameraController->handleGetDetectionCategories("", response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    // Update detection categories
+    m_httpServer->Post("/api/detection/categories", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        m_cameraController->handlePostDetectionCategories(req.body, response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    // Get available categories
+    m_httpServer->Get("/api/detection/categories/available", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        m_cameraController->handleGetAvailableCategories("", response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    // Get detection config
+    m_httpServer->Get("/api/detection/config", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        m_cameraController->handleGetDetectionConfig("", response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    // ========== Legacy source endpoints (for backward compatibility) ==========
+    m_httpServer->Post("/api/source/add", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        m_cameraController->handlePostVideoSource(req.body, response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    m_httpServer->Get("/api/source/list", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        m_cameraController->handleGetVideoSources("", response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    // ========== ONVIF discovery endpoints ==========
+    m_httpServer->Get("/api/source/discover", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
         std::string response;
         m_cameraController->handleGetDiscoverDevices("", response);
         res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
     });
 
-    m_httpServer->Post("/api/source/add-discovered", [this](const httplib::Request& req, httplib::Response& res) {
+    m_httpServer->Post("/api/source/add-discovered", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
         std::string response;
         m_cameraController->handlePostAddDiscoveredDevice(req.body, response);
         res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
     });
 
-    // Alert and alarm management - delegate to AlertController
-    m_httpServer->Get("/api/alerts", [this](const httplib::Request& req, httplib::Response& res) {
+    // ========== Alert and alarm management ==========
+    m_httpServer->Get("/api/alerts", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
         std::string response;
         m_alertController->handleGetAlerts("", response);
         res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
     });
 
-    m_httpServer->Post("/api/alarms/config", [this](const httplib::Request& req, httplib::Response& res) {
+    m_httpServer->Post("/api/alarms/config", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
         std::string response;
         m_alertController->handlePostAlarmConfig(req.body, response);
         res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
     });
 
-    m_httpServer->Get("/api/alarms/config", [this](const httplib::Request& req, httplib::Response& res) {
+    m_httpServer->Get("/api/alarms/config", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
         std::string response;
         m_alertController->handleGetAlarmConfigs("", response);
         res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
     });
 
-    m_httpServer->Post("/api/alarms/test", [this](const httplib::Request& req, httplib::Response& res) {
+    m_httpServer->Post("/api/alarms/test", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
         std::string response;
         m_alertController->handlePostTestAlarm(req.body, response);
         res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
     });
 
-    m_httpServer->Get("/api/alarms/status", [this](const httplib::Request& req, httplib::Response& res) {
+    m_httpServer->Get("/api/alarms/status", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
         std::string response;
         m_alertController->handleGetAlarmStatus("", response);
         res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
     });
 
-    // Network management - delegate to NetworkController
-    m_httpServer->Get("/api/network/interfaces", [this](const httplib::Request& req, httplib::Response& res) {
+    // ========== Network management ==========
+    m_httpServer->Get("/api/network/interfaces", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
         std::string response;
         m_networkController->handleGetNetworkInterfaces("", response);
         res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
     });
 
-    m_httpServer->Get("/api/network/stats", [this](const httplib::Request& req, httplib::Response& res) {
+    m_httpServer->Get("/api/network/stats", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
         std::string response;
         m_networkController->handleGetNetworkStats("", response);
         res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
     });
 
-    m_httpServer->Post("/api/network/test", [this](const httplib::Request& req, httplib::Response& res) {
+    m_httpServer->Post("/api/network/test", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
         std::string response;
         m_networkController->handlePostNetworkTest(req.body, response);
         res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
     });
 
+    // ========== Placeholder routes for unimplemented features ==========
+    // These return 501 Not Implemented to avoid frontend errors
+    auto notImplementedHandler = [addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        nlohmann::json response;
+        response["error"] = "Not implemented";
+        response["message"] = "This endpoint is not yet implemented";
+        response["path"] = req.path;
+        res.set_content(response.dump(), "application/json");
+        addCorsHeaders(res);
+        res.status = 501; // Not Implemented
+    };
+
+    // Camera CRUD operations (placeholders)
+    m_httpServer->Get(R"(/api/cameras/([^/]+)$)", notImplementedHandler);
+    m_httpServer->Put(R"(/api/cameras/([^/]+)$)", notImplementedHandler);
+    m_httpServer->Delete(R"(/api/cameras/([^/]+)$)", notImplementedHandler);
+
+    // Detection config and stats (placeholders)
+    m_httpServer->Put("/api/detection/config", notImplementedHandler);
+    m_httpServer->Get("/api/detection/stats", notImplementedHandler);
+
+    // Recording management (placeholders)
+    m_httpServer->Get("/api/recordings", notImplementedHandler);
+    m_httpServer->Get(R"(/api/recordings/([^/]+))", notImplementedHandler);
+    m_httpServer->Delete(R"(/api/recordings/([^/]+))", notImplementedHandler);
+
+    // Logs and statistics (placeholders)
+    m_httpServer->Get("/api/logs", notImplementedHandler);
+    m_httpServer->Get("/api/statistics", notImplementedHandler);
+
+    // Authentication (placeholders)
+    m_httpServer->Post("/api/auth/login", notImplementedHandler);
+    m_httpServer->Post("/api/auth/logout", notImplementedHandler);
+    m_httpServer->Get("/api/auth/user", notImplementedHandler);
+
     LOG_INFO() << "[APIService] HTTP routes configured successfully";
+    LOG_INFO() << "[APIService] Added support for person statistics, detection config, and placeholder routes";
 }
 
 std::string APIService::stripHttpHeaders(const std::string& response) {

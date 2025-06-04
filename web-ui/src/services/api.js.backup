@@ -14,10 +14,6 @@ const api = axios.create({
 api.interceptors.request.use(
   config => {
     // 可以在这里添加token等认证信息
-    // 开发环境下记录请求
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[API Request] ${config.method?.toUpperCase()} ${config.url}`, config.data || '')
-    }
     return config
   },
   error => {
@@ -28,10 +24,6 @@ api.interceptors.request.use(
 // 响应拦截器
 api.interceptors.response.use(
   response => {
-    // 开发环境下记录响应
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[API Response] ${response.config.method?.toUpperCase()} ${response.config.url}`, response.data)
-    }
     return response
   },
   error => {
@@ -40,11 +32,10 @@ api.interceptors.response.use(
     if (error.response) {
       const { status, data } = error.response
       let message = data?.message || '请求失败'
-      let showMessage = true
 
       switch (status) {
         case 400:
-          message = data?.message || '请求参数错误'
+          message = '请求参数错误'
           break
         case 401:
           message = '未授权访问'
@@ -53,23 +44,16 @@ api.interceptors.response.use(
           message = '禁止访问'
           break
         case 404:
-          message = '请求的资源不存在'
+          message = '资源不存在'
           break
         case 500:
           message = '服务器内部错误'
-          break
-        case 501:
-          // Not Implemented - 功能尚未实现
-          message = '该功能尚未实现'
-          showMessage = process.env.NODE_ENV === 'development' // 仅在开发环境显示
           break
         default:
           message = `请求失败 (${status})`
       }
 
-      if (showMessage) {
-        ElMessage.error(message)
-      }
+      ElMessage.error(message)
     } else if (error.request) {
       // 检查是否是超时错误
       if (error.code === 'ECONNABORTED') {
@@ -90,11 +74,6 @@ export const apiService = {
   // 系统相关
   getSystemStatus: () => api.get('/system/status'),
   getSystemInfo: () => api.get('/system/info'),
-  getSystemConfig: () => api.get('/system/config'),
-  updateSystemConfig: (config) => api.post('/system/config', config),
-  getSystemMetrics: () => api.get('/system/metrics'),
-  getSystemStats: () => api.get('/system/stats'),
-  getPipelineStats: () => api.get('/system/pipeline-stats'),
 
   // 网络接口管理
   getNetworkInterfaces: () => api.get('/network/interfaces'),
@@ -104,8 +83,11 @@ export const apiService = {
   disableNetworkInterface: (interfaceName) => api.post(`/network/interfaces/${interfaceName}/disable`),
   getNetworkStats: () => api.get('/network/stats'),
   testNetworkConnection: (testConfig) => api.post('/network/test', testConfig),
+  updateSystemConfig: (config) => api.put('/system/config', config),
 
   // 配置管理相关
+  getSystemConfig: () => api.get('/system/config'),
+  saveSystemConfig: (config) => api.post('/system/config', config),
   getCameraConfigs: () => api.get('/cameras/config'),
   saveCameraConfig: (config) => api.post('/cameras/config', config),
   deleteCameraConfig: (cameraId) => api.delete(`/cameras/config/${cameraId}`),
@@ -164,10 +146,6 @@ export const apiService = {
   getAlert: (id) => api.get(`/alerts/${id}`),
   markAlertAsRead: (id) => api.put(`/alerts/${id}/read`),
   deleteAlert: (id) => api.delete(`/alerts/${id}`),
-  getAlarmConfigs: () => api.get('/alarms/config'),
-  saveAlarmConfig: (config) => api.post('/alarms/config', config),
-  testAlarm: (config) => api.post('/alarms/test', config),
-  getAlarmStatus: () => api.get('/alarms/status'),
 
   // AI检测相关
   getDetectionConfig: () => api.get('/detection/config'),
@@ -176,141 +154,26 @@ export const apiService = {
 
   // 检测类别过滤相关
   getDetectionCategories: () => api.get('/detection/categories'),
-  updateDetectionCategories: (categories) => api.post('/detection/categories', { enabled_categories: categories }),
+  updateDetectionCategories: (categories) => api.post('/detection/categories', categories),
   getAvailableCategories: () => api.get('/detection/categories/available'),
 
-  // 用户相关 (占位符，返回模拟数据)
-  login: async (credentials) => {
-    try {
-      return await api.post('/auth/login', credentials)
-    } catch (error) {
-      if (error.response?.status === 501) {
-        // 模拟登录成功
-        return {
-          data: {
-            token: 'mock-token-' + Date.now(),
-            user: {
-              id: 1,
-              username: credentials.username,
-              role: 'admin'
-            }
-          }
-        }
-      }
-      throw error
-    }
-  },
+  // 用户相关
+  login: (credentials) => api.post('/auth/login', credentials),
   logout: () => api.post('/auth/logout'),
-  getCurrentUser: async () => {
-    try {
-      return await api.get('/auth/user')
-    } catch (error) {
-      if (error.response?.status === 501) {
-        // 返回模拟用户
-        return {
-          data: {
-            user: {
-              id: 1,
-              username: 'admin',
-              role: 'admin'
-            }
-          }
-        }
-      }
-      throw error
-    }
-  },
+  getCurrentUser: () => api.get('/auth/user'),
 
   // 日志相关
-  getLogs: async (params) => {
-    try {
-      return await api.get('/logs', { params })
-    } catch (error) {
-      if (error.response?.status === 501) {
-        // 返回模拟日志
-        return {
-          data: {
-            logs: [],
-            total: 0,
-            message: '日志功能尚未实现'
-          }
-        }
-      }
-      throw error
-    }
-  },
+  getLogs: (params) => api.get('/logs', { params }),
 
   // 统计相关
-  getStatistics: async (params) => {
-    try {
-      return await api.get('/statistics', { params })
-    } catch (error) {
-      if (error.response?.status === 501) {
-        // 返回模拟统计
-        return {
-          data: {
-            total_detections: 0,
-            total_alarms: 0,
-            active_cameras: 0,
-            message: '统计功能尚未实现'
-          }
-        }
-      }
-      throw error
-    }
-  },
+  getStatistics: (params) => api.get('/statistics', { params }),
 
   // 人员统计相关 (Person Statistics Extension)
   getPersonStats: (cameraId) => api.get(`/cameras/${cameraId}/person-stats`),
   enablePersonStats: (cameraId) => api.post(`/cameras/${cameraId}/person-stats/enable`),
   disablePersonStats: (cameraId) => api.post(`/cameras/${cameraId}/person-stats/disable`),
   getPersonStatsConfig: (cameraId) => api.get(`/cameras/${cameraId}/person-stats/config`),
-  updatePersonStatsConfig: (cameraId, config) => api.post(`/cameras/${cameraId}/person-stats/config`, config),
-
-  // ONVIF设备发现
-  discoverDevices: () => api.get('/source/discover'),
-  addDiscoveredDevice: (deviceInfo) => api.post('/source/add-discovered', deviceInfo),
-
-  // 视频源管理（兼容旧API）
-  addVideoSource: (source) => api.post('/source/add', source),
-  getVideoSources: () => api.get('/source/list')
-}
-
-// 导出API健康检查工具
-export const checkApiHealth = async () => {
-  const endpoints = [
-    { name: '系统状态', path: '/system/status', method: 'GET' },
-    { name: '摄像头列表', path: '/cameras', method: 'GET' },
-    { name: '检测类别', path: '/detection/categories', method: 'GET' },
-    { name: '网络接口', path: '/network/interfaces', method: 'GET' }
-  ]
-
-  const results = []
-  
-  for (const endpoint of endpoints) {
-    try {
-      await api.request({
-        method: endpoint.method,
-        url: endpoint.path,
-        validateStatus: (status) => status < 500
-      })
-      results.push({ ...endpoint, status: 'ok' })
-    } catch (error) {
-      results.push({ 
-        ...endpoint, 
-        status: 'error',
-        error: error.message 
-      })
-    }
-  }
-
-  return results
-}
-
-// 开发环境下添加到window对象以便调试
-if (process.env.NODE_ENV === 'development') {
-  window.__apiService = apiService
-  window.__checkApiHealth = checkApiHealth
+  updatePersonStatsConfig: (cameraId, config) => api.post(`/cameras/${cameraId}/person-stats/config`, config)
 }
 
 export default api
