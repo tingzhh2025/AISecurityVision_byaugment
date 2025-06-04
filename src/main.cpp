@@ -184,6 +184,55 @@ std::vector<CameraConfig> loadCameraConfigFromDatabase() {
     return cameras;
 }
 
+// System configuration structure
+struct SystemConfig {
+    bool optimized_detection = false;
+    int detection_threads = 3;
+    bool verbose_logging = false;
+    int status_interval = 30; // seconds
+
+    // Default constructor with sensible defaults
+    SystemConfig() = default;
+};
+
+// Load system configuration from database
+SystemConfig loadSystemConfig() {
+    SystemConfig config;
+
+    try {
+        DatabaseManager dbManager;
+        if (!dbManager.initialize()) {
+            LOG_WARN() << "[Config] Failed to initialize database for system config loading, using defaults";
+            return config;
+        }
+
+        // Load system configuration from database
+        config.optimized_detection = (dbManager.getConfig("system", "optimized_detection", "false") == "true");
+        config.detection_threads = std::stoi(dbManager.getConfig("system", "detection_threads", "3"));
+        config.verbose_logging = (dbManager.getConfig("system", "verbose_logging", "false") == "true");
+        config.status_interval = std::stoi(dbManager.getConfig("system", "status_interval", "30"));
+
+        // Validate detection threads range
+        if (config.detection_threads < 1 || config.detection_threads > 8) {
+            LOG_WARN() << "[Config] Invalid detection_threads value: " << config.detection_threads
+                      << ", using default: 3";
+            config.detection_threads = 3;
+        }
+
+        LOG_INFO() << "[Config] Loaded system configuration from database:";
+        LOG_INFO() << "  - Optimized detection: " << (config.optimized_detection ? "enabled" : "disabled");
+        LOG_INFO() << "  - Detection threads: " << config.detection_threads;
+        LOG_INFO() << "  - Verbose logging: " << (config.verbose_logging ? "enabled" : "disabled");
+        LOG_INFO() << "  - Status interval: " << config.status_interval << "s";
+
+    } catch (const std::exception& e) {
+        LOG_ERROR() << "[Config] Error loading system config from database: " << e.what();
+        LOG_INFO() << "[Config] Using default system configuration";
+    }
+
+    return config;
+}
+
 // Load person statistics configuration from database for a camera
 void loadPersonStatsConfig(const std::string& cameraId, TaskManager& taskManager) {
     try {
@@ -234,12 +283,10 @@ void printUsage(const char* programName) {
               << "Options:\n"
               << "  -h, --help       Show this help message\n"
               << "  -p, --port       API server port (default: 8080)\n"
-              << "  -c, --config     Configuration file path\n"
+              << "  -c, --config     Configuration file path (fallback if database empty)\n"
               << "  -v, --verbose    Enable verbose logging\n"
-              << "  --test           Run in test mode with sample video\n"
-              << "  --optimized      Run with optimized multi-threaded RKNN detection\n"
-              << "  --cameras        Use real RTSP cameras for testing\n"
-              << "  --threads N      Number of detection threads (default: 3)\n";
+              << "\nNote: All operational settings (cameras, detection, optimization)\n"
+              << "      are now loaded from the database configuration.\n";
 }
 
 int main(int argc, char* argv[]) {
@@ -251,11 +298,7 @@ int main(int argc, char* argv[]) {
     // Parse command line arguments
     int apiPort = 8080;
     std::string configFile;
-    bool verbose = false;
-    bool testMode = false;
-    bool optimizedMode = false;
-    bool useRealCameras = false;
-    int detectionThreads = 3;
+    bool cmdLineVerbose = false; // Command-line verbose flag
 
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -278,24 +321,7 @@ int main(int argc, char* argv[]) {
                 return 1;
             }
         } else if (arg == "-v" || arg == "--verbose") {
-            verbose = true;
-        } else if (arg == "--test") {
-            testMode = true;
-        } else if (arg == "--optimized") {
-            optimizedMode = true;
-        } else if (arg == "--cameras") {
-            useRealCameras = true;
-        } else if (arg == "--threads") {
-            if (i + 1 < argc) {
-                detectionThreads = std::atoi(argv[++i]);
-                if (detectionThreads < 1 || detectionThreads > 8) {
-                    LOG_ERROR() << "Error: Detection threads must be between 1 and 8";
-                    return 1;
-                }
-            } else {
-                LOG_ERROR() << "Error: Number of threads required";
-                return 1;
-            }
+            cmdLineVerbose = true;
         } else {
             LOG_ERROR() << "Error: Unknown argument: " << arg;
             printUsage(argv[0]);
@@ -308,6 +334,16 @@ int main(int argc, char* argv[]) {
     signal(SIGTERM, signalHandler);
 
     try {
+        // Load system configuration from database
+        LOG_INFO() << "[Main] Loading system configuration...";
+        SystemConfig systemConfig = loadSystemConfig();
+
+        // Apply verbose logging setting (command-line overrides database)
+        bool verbose = cmdLineVerbose || systemConfig.verbose_logging;
+        if (verbose) {
+            LOG_INFO() << "[Main] Verbose logging enabled";
+        }
+
         // Initialize TaskManager
         LOG_INFO() << "[Main] Initializing TaskManager...";
         TaskManager& taskManager = TaskManager::getInstance();
@@ -316,12 +352,16 @@ int main(int argc, char* argv[]) {
         // Initialize API Service
         LOG_INFO() << "[Main] Starting API service on port " << apiPort << "...";
         APIService apiService(apiPort);
+
+        // Clear any in-memory configurations to ensure clean state
+        apiService.clearInMemoryConfigurations();
+
         if (!apiService.start()) {
             LOG_ERROR() << "[Main] Failed to start API service";
             return 1;
         }
 
-        // Load cameras from database first, then config file, or use defaults
+        // Load cameras from database first, then config file as fallback
         std::vector<VideoSource> cameras;
 
         // Always try to load from database first
@@ -360,80 +400,34 @@ int main(int argc, char* argv[]) {
             auto cameraConfigs = loadCameraConfig(configFile);
 
             if (cameraConfigs.empty()) {
-                LOG_ERROR() << "[Main] No cameras loaded from config file";
-                return 1;
-            }
+                LOG_WARN() << "[Main] No cameras loaded from config file";
+            } else {
+                // Convert CameraConfig to VideoSource
+                for (const auto& camConfig : cameraConfigs) {
+                    if (!camConfig.enabled) {
+                        LOG_INFO() << "[Main] Skipping disabled camera: " << camConfig.id;
+                        continue;
+                    }
 
-            // Convert CameraConfig to VideoSource
-            for (const auto& camConfig : cameraConfigs) {
-                if (!camConfig.enabled) {
-                    LOG_INFO() << "[Main] Skipping disabled camera: " << camConfig.id;
-                    continue;
+                    VideoSource camera;
+                    camera.id = camConfig.id;
+                    camera.name = camConfig.name;
+                    camera.url = camConfig.rtsp_url;
+                    camera.protocol = "rtsp";
+                    camera.width = camConfig.stream_config.max_width;
+                    camera.height = camConfig.stream_config.max_height;
+                    camera.fps = camConfig.stream_config.fps;
+                    camera.mjpeg_port = camConfig.mjpeg_port;
+                    camera.enabled = camConfig.enabled;
+
+                    cameras.push_back(camera);
+
+                    LOG_INFO() << "[Main] Configured camera from file: " << camera.id
+                              << " -> MJPEG port: " << camConfig.mjpeg_port;
                 }
-
-                VideoSource camera;
-                camera.id = camConfig.id;
-                camera.name = camConfig.name;
-                camera.url = camConfig.rtsp_url;
-                camera.protocol = "rtsp";
-                camera.width = camConfig.stream_config.max_width;
-                camera.height = camConfig.stream_config.max_height;
-                camera.fps = camConfig.stream_config.fps;
-                camera.mjpeg_port = camConfig.mjpeg_port;
-                camera.enabled = camConfig.enabled;
-
-                cameras.push_back(camera);
-
-                LOG_INFO() << "[Main] Configured camera from file: " << camera.id
-                          << " -> MJPEG port: " << camConfig.mjpeg_port;
             }
-
-        } else if (testMode || useRealCameras) {
-            if (useRealCameras) {
-                LOG_INFO() << "[Main] Running with real RTSP cameras (hardcoded)...";
-                if (optimizedMode) {
-                    LOG_INFO() << "[Main] Using optimized multi-threaded RKNN detection with "
-                              << detectionThreads << " threads";
-                }
-
-                // Fallback to hardcoded cameras if no config file
-                VideoSource camera1;
-                camera1.id = "camera_01";
-                camera1.name = "Security Camera 1";
-                camera1.url = "rtsp://admin:sharpi1688@192.168.1.3:554/1/1";
-                camera1.protocol = "rtsp";
-                camera1.width = 1920;
-                camera1.height = 1080;
-                camera1.fps = 25;
-                camera1.mjpeg_port = 8161; // Default MJPEG port for camera 1
-                camera1.enabled = true;
-                cameras.push_back(camera1);
-
-                VideoSource camera2;
-                camera2.id = "camera_02";
-                camera2.name = "Security Camera 2";
-                camera2.url = "rtsp://admin:sharpi1688@192.168.1.3:554/1/1";
-                camera2.protocol = "rtsp";
-                camera2.width = 1920;
-                camera2.height = 1080;
-                camera2.fps = 25;
-                camera2.mjpeg_port = 8162; // Default MJPEG port for camera 2
-                camera2.enabled = true;
-                cameras.push_back(camera2);
-            } else if (testMode) {
-                LOG_INFO() << "[Main] Running in test mode...";
-
-                VideoSource testSource;
-                testSource.id = "test_camera_01";
-                testSource.url = "rtsp://admin:admin123@192.168.1.100:554/stream1";
-                testSource.protocol = "rtsp";
-                testSource.width = 1920;
-                testSource.height = 1080;
-                testSource.fps = 25;
-                testSource.enabled = true;
-
-                cameras.push_back(testSource);
-            }
+        } else {
+            LOG_INFO() << "[Main] No cameras configured in database or config file";
         }
 
         // Add cameras to TaskManager
@@ -444,14 +438,14 @@ int main(int argc, char* argv[]) {
                 if (taskManager.addVideoSource(camera)) {
                     LOG_INFO() << "[Main] Camera added successfully: " << camera.id;
 
-                    // Configure optimized detection if enabled
-                    if (optimizedMode) {
+                    // Configure optimized detection if enabled in system config
+                    if (systemConfig.optimized_detection) {
                         auto pipeline = taskManager.getPipeline(camera.id);
                         if (pipeline) {
                             pipeline->setOptimizedDetectionEnabled(true);
-                            pipeline->setDetectionThreads(detectionThreads);
+                            pipeline->setDetectionThreads(systemConfig.detection_threads);
                             LOG_INFO() << "[Main] Optimized detection enabled for " << camera.id
-                                      << " with " << detectionThreads << " threads";
+                                      << " with " << systemConfig.detection_threads << " threads";
                         }
                     }
 
@@ -468,8 +462,8 @@ int main(int argc, char* argv[]) {
         LOG_INFO() << "[Main] System started successfully!";
         LOG_INFO() << "[Main] API endpoints available at http://localhost:" << apiPort;
 
-        // Display MJPEG stream URLs
-        if (useRealCameras || testMode) {
+        // Display MJPEG stream URLs if cameras are configured
+        if (!cameras.empty()) {
             LOG_INFO() << "\n[Main] === MJPEG Video Streams ===";
             auto activePipelines = taskManager.getActivePipelines();
             for (const auto& pipelineId : activePipelines) {
@@ -487,9 +481,9 @@ int main(int argc, char* argv[]) {
         while (g_running.load()) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
 
-            // Print system status (more frequently for camera mode)
+            // Print system status using database-configured interval
             static int statusCounter = 0;
-            int statusInterval = (useRealCameras || optimizedMode) ? 10 : 30; // 10s for camera mode, 30s for normal
+            int statusInterval = systemConfig.status_interval;
 
             if (++statusCounter >= statusInterval) {
                 statusCounter = 0;
@@ -500,7 +494,7 @@ int main(int argc, char* argv[]) {
                 LOG_INFO() << "🖥️  CPU Usage: " << taskManager.getCpuUsage() << "%";
                 LOG_INFO() << "🎮 GPU Memory: " << taskManager.getGpuMemoryUsage();
 
-                if (verbose || useRealCameras || optimizedMode) {
+                if (verbose || systemConfig.optimized_detection) {
                     for (const auto& pipelineId : activePipelines) {
                         auto pipeline = taskManager.getPipeline(pipelineId);
                         if (pipeline) {

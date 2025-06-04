@@ -22,7 +22,7 @@ npm run dev
 
 ### 访问系统
 
-- **前端界面**: http://localhost:3001
+- **前端界面**: http://localhost:3000
 - **API服务**: http://localhost:8080
 - **MJPEG流**: http://localhost:8161, 8162 (添加摄像头后)
 

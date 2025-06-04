@@ -367,11 +367,12 @@ const getStreamUrl = (cameraId) => {
     streamUrls.value[cameraId] = url
   }).catch(error => {
     console.error('Failed to get stream URL for camera:', cameraId, error)
-    streamUrls.value[cameraId] = 'http://192.168.1.199:8161/stream.mjpg' // 默认URL
+    // 不设置任何默认URL，让组件显示离线状态
+    streamUrls.value[cameraId] = null
   })
 
-  // 返回默认URL作为占位符
-  return 'http://192.168.1.199:8161/stream.mjpg'
+  // 返回null，让组件显示加载状态
+  return null
 }
 
 const handleStreamError = (cameraId) => {

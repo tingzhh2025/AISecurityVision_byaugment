@@ -107,6 +107,12 @@ int APIService::getPort() const {
     return m_port;
 }
 
+void APIService::clearInMemoryConfigurations() {
+    LOG_INFO() << "[APIService] Clearing in-memory camera configurations";
+    m_cameraConfigs.clear();
+    LOG_INFO() << "[APIService] In-memory camera configurations cleared";
+}
+
 void APIService::serverThread() {
     LOG_INFO() << "[APIService] Server thread started on port " << m_port;
 
@@ -5483,7 +5489,12 @@ void APIService::handlePostPersonStatsConfig(const std::string& request, std::st
         }
 
         // Parse configuration from request
+        LOG_INFO() << "[APIService] ===== POST PERSON STATS CONFIG DEBUG =====";
+        LOG_INFO() << "[APIService] Camera ID: " << cameraId;
+        LOG_INFO() << "[APIService] Raw request body: " << request;
+
         nlohmann::json configJson = nlohmann::json::parse(request);
+        LOG_INFO() << "[APIService] Parsed request JSON: " << configJson.dump();
 
         // Extract configuration parameters with defaults
         bool enabled = configJson.value("enabled", false);
@@ -5491,6 +5502,12 @@ void APIService::handlePostPersonStatsConfig(const std::string& request, std::st
         float ageThreshold = configJson.value("age_threshold", 0.6f);
         int batchSize = configJson.value("batch_size", 4);
         bool enableCaching = configJson.value("enable_caching", true);
+
+        LOG_INFO() << "[APIService] Extracted values - enabled: " << enabled
+                  << ", gender_threshold: " << genderThreshold
+                  << ", age_threshold: " << ageThreshold
+                  << ", batch_size: " << batchSize
+                  << ", enable_caching: " << enableCaching;
 
         // Update pipeline configuration
         pipeline->setPersonStatsEnabled(enabled);
@@ -5513,10 +5530,16 @@ void APIService::handlePostPersonStatsConfig(const std::string& request, std::st
         dbConfigJson["batch_size"] = batchSize;
         dbConfigJson["enable_caching"] = enableCaching;
 
+        LOG_INFO() << "[APIService] Database config JSON: " << dbConfigJson.dump();
+
         std::string configKey = "person_stats_" + cameraId;
+        LOG_INFO() << "[APIService] Saving with config key: " << configKey;
+
         if (!dbManager.saveConfig("person_statistics", configKey, dbConfigJson.dump())) {
-            LOG_WARN() << "[APIService] Failed to save person stats config to database: " << dbManager.getErrorMessage();
+            LOG_ERROR() << "[APIService] Failed to save person stats config to database: " << dbManager.getErrorMessage();
             // Continue anyway - configuration is still applied to pipeline
+        } else {
+            LOG_INFO() << "[APIService] Successfully saved person stats config to database";
         }
 
         std::ostringstream json;

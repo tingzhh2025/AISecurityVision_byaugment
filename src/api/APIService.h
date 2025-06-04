@@ -79,6 +79,9 @@ public:
     void setPort(int port);
     int getPort() const;
 
+    // Clean state management
+    void clearInMemoryConfigurations();
+
     // Enhanced polygon validation with detailed error reporting
     struct PolygonValidationResult {
         bool isValid;

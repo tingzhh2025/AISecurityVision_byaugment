@@ -39,154 +39,17 @@ export const useSystemStore = defineStore('system', () => {
   const fetchCameras = async () => {
     try {
       const response = await apiService.getCameras()
-      let cameraList = response.data.cameras || []
+      const cameraList = response.data.cameras || []
 
-      // 临时修复：如果没有摄像头数据，添加8路测试摄像头
-      if (cameraList.length === 0) {
-        cameraList = [
-          {
-            id: 'camera_01',
-            name: 'RTSP Camera 1 (192.168.1.3)',
-            url: 'rtsp://admin:sharpi1688@192.168.1.3:554/1/1',
-            status: 'online',
-            enabled: true,
-            created_at: new Date().toISOString()
-          },
-          {
-            id: 'camera_02',
-            name: 'RTSP Camera 2 (192.168.1.3)',
-            url: 'rtsp://admin:sharpi1688@192.168.1.3:554/1/1',
-            status: 'online',
-            enabled: true,
-            created_at: new Date().toISOString()
-          },
-          {
-            id: 'camera_03',
-            name: 'RTSP Camera 3 (192.168.1.3)',
-            url: 'rtsp://admin:sharpi1688@192.168.1.3:554/1/1',
-            status: 'online',
-            enabled: true,
-            created_at: new Date().toISOString()
-          },
-          {
-            id: 'camera_04',
-            name: 'RTSP Camera 4 (192.168.1.3)',
-            url: 'rtsp://admin:sharpi1688@192.168.1.3:554/1/1',
-            status: 'online',
-            enabled: true,
-            created_at: new Date().toISOString()
-          },
-          {
-            id: 'camera_05',
-            name: 'RTSP Camera 5 (192.168.1.2)',
-            url: 'rtsp://admin:sharpi1688@192.168.1.2:554/1/1',
-            status: 'online',
-            enabled: true,
-            created_at: new Date().toISOString()
-          },
-          {
-            id: 'camera_06',
-            name: 'RTSP Camera 6 (192.168.1.2)',
-            url: 'rtsp://admin:sharpi1688@192.168.1.2:554/1/1',
-            status: 'online',
-            enabled: true,
-            created_at: new Date().toISOString()
-          },
-          {
-            id: 'camera_07',
-            name: 'RTSP Camera 7 (192.168.1.2)',
-            url: 'rtsp://admin:sharpi1688@192.168.1.2:554/1/1',
-            status: 'online',
-            enabled: true,
-            created_at: new Date().toISOString()
-          },
-          {
-            id: 'camera_08',
-            name: 'RTSP Camera 8 (192.168.1.2)',
-            url: 'rtsp://admin:sharpi1688@192.168.1.2:554/1/1',
-            status: 'online',
-            enabled: true,
-            created_at: new Date().toISOString()
-          }
-        ]
-      } else {
-        // 确保所有摄像头状态为在线（临时修复）
-        cameraList = cameraList.map(camera => ({
-          ...camera,
-          status: camera.status === 'configured' ? 'online' : camera.status
-        }))
-      }
-
+      // 直接使用从后端获取的摄像头数据，不添加任何模拟数据
       cameras.value = cameraList
+
+      console.log(`[System Store] Loaded ${cameraList.length} cameras from backend`)
     } catch (error) {
       console.error('Failed to fetch cameras:', error)
-      // 如果API失败，使用8路默认摄像头数据
-      cameras.value = [
-        {
-          id: 'camera_01',
-          name: 'RTSP Camera 1 (192.168.1.3)',
-          url: 'rtsp://admin:sharpi1688@192.168.1.3:554/1/1',
-          status: 'online',
-          enabled: true,
-          created_at: new Date().toISOString()
-        },
-        {
-          id: 'camera_02',
-          name: 'RTSP Camera 2 (192.168.1.3)',
-          url: 'rtsp://admin:sharpi1688@192.168.1.3:554/1/1',
-          status: 'online',
-          enabled: true,
-          created_at: new Date().toISOString()
-        },
-        {
-          id: 'camera_03',
-          name: 'RTSP Camera 3 (192.168.1.3)',
-          url: 'rtsp://admin:sharpi1688@192.168.1.3:554/1/1',
-          status: 'online',
-          enabled: true,
-          created_at: new Date().toISOString()
-        },
-        {
-          id: 'camera_04',
-          name: 'RTSP Camera 4 (192.168.1.3)',
-          url: 'rtsp://admin:sharpi1688@192.168.1.3:554/1/1',
-          status: 'online',
-          enabled: true,
-          created_at: new Date().toISOString()
-        },
-        {
-          id: 'camera_05',
-          name: 'RTSP Camera 5 (192.168.1.2)',
-          url: 'rtsp://admin:sharpi1688@192.168.1.2:554/1/1',
-          status: 'online',
-          enabled: true,
-          created_at: new Date().toISOString()
-        },
-        {
-          id: 'camera_06',
-          name: 'RTSP Camera 6 (192.168.1.2)',
-          url: 'rtsp://admin:sharpi1688@192.168.1.2:554/1/1',
-          status: 'online',
-          enabled: true,
-          created_at: new Date().toISOString()
-        },
-        {
-          id: 'camera_07',
-          name: 'RTSP Camera 7 (192.168.1.2)',
-          url: 'rtsp://admin:sharpi1688@192.168.1.2:554/1/1',
-          status: 'online',
-          enabled: true,
-          created_at: new Date().toISOString()
-        },
-        {
-          id: 'camera_08',
-          name: 'RTSP Camera 8 (192.168.1.2)',
-          url: 'rtsp://admin:sharpi1688@192.168.1.2:554/1/1',
-          status: 'online',
-          enabled: true,
-          created_at: new Date().toISOString()
-        }
-      ]
+      // API失败时设置为空数组，不使用任何默认数据
+      cameras.value = []
+      console.log('[System Store] API failed, cameras set to empty array')
     }
   }
 
@@ -212,6 +75,35 @@ export const useSystemStore = defineStore('system', () => {
     } catch (error) {
       console.error('Failed to mark alert as read:', error)
     }
+  }
+
+  // 清除所有缓存数据
+  const clearAllCache = () => {
+    console.log('[System Store] Clearing all cached data')
+
+    // 清除状态数据
+    cameras.value = []
+    alerts.value = []
+    isOnline.value = false
+    systemInfo.value = {
+      version: '',
+      uptime: 0,
+      cpuUsage: 0,
+      memoryUsage: 0,
+      diskUsage: 0,
+      temperature: 0
+    }
+
+    // 清除浏览器存储（如果有的话）
+    try {
+      localStorage.clear()
+      sessionStorage.clear()
+      console.log('[System Store] Browser storage cleared')
+    } catch (error) {
+      console.warn('[System Store] Failed to clear browser storage:', error)
+    }
+
+    console.log('[System Store] All cached data cleared')
   }
 
   // 初始化系统
@@ -240,6 +132,7 @@ export const useSystemStore = defineStore('system', () => {
     fetchCameras,
     fetchAlerts,
     markAlertAsRead,
+    clearAllCache,
     initializeSystem
   }
 })
