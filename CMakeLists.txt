@@ -18,13 +18,12 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
 # Find required packages
 find_package(PkgConfig REQUIRED)
 
-# Force OpenCV 4.5.5 to avoid version conflicts
-set(OpenCV_DIR "/usr/lib/aarch64-linux-gnu/cmake/opencv4")
-find_package(OpenCV 4.5.5 EXACT REQUIRED)
+# Find OpenCV 4.5.5 or higher
+find_package(OpenCV 4.5.5 REQUIRED)
 
-# Verify we're using the correct OpenCV version
+# Verify we're using a compatible OpenCV version
 if(OpenCV_VERSION VERSION_LESS "4.5.5")
-    message(FATAL_ERROR "OpenCV 4.5.5 is required, found ${OpenCV_VERSION}")
+    message(FATAL_ERROR "OpenCV 4.5.5 or higher is required, found ${OpenCV_VERSION}")
 endif()
 
 # Force specific OpenCV library paths to ensure 4.5.5 is used
@@ -364,6 +363,7 @@ endif()
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_SOURCE_DIR}/third_party)
+include_directories(${CMAKE_SOURCE_DIR}/third_party/nlohmann)
 include_directories(${OpenCV_INCLUDE_DIRS})
 
 # Source files

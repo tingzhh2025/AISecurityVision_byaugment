@@ -1,10 +1,22 @@
+#include "CameraController.h"
+#include "../../database/DatabaseManager.h"
+#include "../../core/TaskManager.h"
+#include <nlohmann/json.hpp>
+#include <string>
+#include <vector>
+#include <sstream>
+#include <map>
+#include <cstddef>
+#include <exception>
+
+namespace AISecurityVision {
 
 // ========== Detection Configuration Methods ==========
 
 void CameraController::handleGetDetectionCategories(const std::string& request, std::string& response) {
     try {
         // Get enabled categories from database
-        DatabaseManager dbManager;
+        ::DatabaseManager dbManager;
         std::vector<std::string> enabledCategories;
         
         if (dbManager.initialize()) {
@@ -69,10 +81,10 @@ void CameraController::handlePostDetectionCategories(const std::string& request,
         }
 
         // Save to database
-        DatabaseManager dbManager;
+        ::DatabaseManager dbManager;
         if (dbManager.initialize()) {
             nlohmann::json categoriesJson = enabledCategories;
-            if (!dbManager.setConfig("detection", "enabled_categories", categoriesJson.dump())) {
+            if (!dbManager.saveConfig("detection", "enabled_categories", categoriesJson.dump())) {
                 logWarn("Failed to save enabled categories to database");
             }
         }
@@ -161,7 +173,7 @@ void CameraController::handleGetAvailableCategories(const std::string& request, 
 void CameraController::handleGetDetectionConfig(const std::string& request, std::string& response) {
     try {
         // Get detection configuration from database
-        DatabaseManager dbManager;
+        ::DatabaseManager dbManager;
         float confidenceThreshold = 0.5f;
         float nmsThreshold = 0.4f;
         int maxDetections = 100;
@@ -225,12 +237,12 @@ void CameraController::handlePostDetectionConfig(const std::string& request, std
         }
 
         // Save to database
-        DatabaseManager dbManager;
+        ::DatabaseManager dbManager;
         if (dbManager.initialize()) {
-            dbManager.setConfig("detection", "confidence_threshold", std::to_string(confidenceThreshold));
-            dbManager.setConfig("detection", "nms_threshold", std::to_string(nmsThreshold));
-            dbManager.setConfig("detection", "max_detections", std::to_string(maxDetections));
-            dbManager.setConfig("detection", "detection_interval", std::to_string(detectionInterval));
+            dbManager.saveConfig("detection", "confidence_threshold", std::to_string(confidenceThreshold));
+            dbManager.saveConfig("detection", "nms_threshold", std::to_string(nmsThreshold));
+            dbManager.saveConfig("detection", "max_detections", std::to_string(maxDetections));
+            dbManager.saveConfig("detection", "detection_interval", std::to_string(detectionInterval));
         }
 
         // Apply to all active pipelines
@@ -316,3 +328,5 @@ void CameraController::handleGetDetectionStats(const std::string& request, std::
         response = createErrorResponse("Failed to get detection stats: " + std::string(e.what()), 500);
     }
 }
+
+} // namespace AISecurityVision
