@@ -39,7 +39,7 @@ VideoPipeline::~VideoPipeline() {
 }
 
 bool VideoPipeline::initialize() {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::VIDEO_PIPELINE, "VideoPipeline::m_mutex");
 
     try {
         LOG_INFO() << "[VideoPipeline] Initializing pipeline: " << m_source.id;
@@ -524,7 +524,7 @@ void VideoPipeline::processPersonStatistics(FrameResult& result) {
 
         // Update current person statistics for API access
         {
-            std::lock_guard<std::mutex> lock(m_personStatsMutex);
+            AISecurityVision::HierarchicalMutexLock lock(m_personStatsMutex, AISecurityVision::LockLevel::PERSON_STATS, "VideoPipeline::m_personStatsMutex");
             // Convert FrameResult::PersonStats to VideoPipeline::PersonStats
             m_currentPersonStats.total_persons = result.personStats.total_persons;
             m_currentPersonStats.male_count = result.personStats.male_count;
@@ -545,7 +545,7 @@ void VideoPipeline::processPersonStatistics(FrameResult& result) {
 }
 
 void VideoPipeline::handleError(const std::string& error) {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::VIDEO_PIPELINE, "VideoPipeline::m_mutex");
     m_lastError = error;
     m_healthy.store(false);
     LOG_ERROR() << "[VideoPipeline] Error in " << m_source.id << ": " << error;
@@ -652,7 +652,7 @@ bool VideoPipeline::updateDetectionCategoriesInternal(const std::vector<std::str
 // Detection category filtering implementation
 bool VideoPipeline::updateDetectionCategories(const std::vector<std::string>& enabledCategories) {
     LOG_INFO() << "[VideoPipeline] updateDetectionCategories called with " << enabledCategories.size() << " categories";
-    std::lock_guard<std::mutex> lock(m_mutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::VIDEO_PIPELINE, "VideoPipeline::m_mutex");
     LOG_INFO() << "[VideoPipeline] Acquired mutex lock in updateDetectionCategories";
 
     bool success = true;
@@ -1098,7 +1098,7 @@ void VideoPipeline::setPersonStatsConfig(float genderThreshold, float ageThresho
 }
 
 VideoPipeline::PersonStats VideoPipeline::getCurrentPersonStats() const {
-    std::lock_guard<std::mutex> lock(m_personStatsMutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_personStatsMutex, AISecurityVision::LockLevel::PERSON_STATS, "VideoPipeline::m_personStatsMutex");
     return m_currentPersonStats;
 }
 

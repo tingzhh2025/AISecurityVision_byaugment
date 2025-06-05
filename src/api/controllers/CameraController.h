@@ -1,8 +1,12 @@
 #pragma once
 
 #include "BaseController.h"
+#include "../../core/ThreadPool.h"
 #include <vector>
 #include <string>
+#include <unordered_set>
+#include <mutex>
+#include <memory>
 #include <httplib.h>
 
 namespace AISecurityVision {
@@ -39,9 +43,12 @@ public:
     };
 
     // Initialize controller
-    void initialize(TaskManager* taskManager, 
-                   ONVIFManager* onvifManager, 
+    void initialize(TaskManager* taskManager,
+                   ONVIFManager* onvifManager,
                    AISecurityVision::NetworkManager* networkManager) override;
+
+    // Cleanup resources
+    void cleanup();
 
     // Camera management endpoints
     void handleGetCameras(const std::string& request, std::string& response);
@@ -136,6 +143,11 @@ private:
     // Camera configuration storage
     std::vector<CameraConfig> m_cameraConfigs;
 
+    // Thread-safe asynchronous operation management
+    std::shared_ptr<AISecurityVision::ThreadPool> m_threadPool;
+    mutable std::mutex m_pendingOperationsMutex;
+    std::unordered_set<std::string> m_pendingCameraOperations;
+
     // Utility methods for serialization
     std::string serializeCameraConfig(const CameraConfig& config);
     std::string serializeCameraConfigList(const std::vector<CameraConfig>& configs);
@@ -143,6 +155,11 @@ private:
 
     // Helper methods
     std::string extractIpFromUrl(const std::string& url);
+
+    // Thread-safe operation management
+    bool isOperationPending(const std::string& cameraId) const;
+    void markOperationPending(const std::string& cameraId);
+    void markOperationComplete(const std::string& cameraId);
 };
 
 } // namespace AISecurityVision

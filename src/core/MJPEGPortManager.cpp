@@ -26,7 +26,7 @@ bool MJPEGPortManager::isValidPort(int port) const {
 }
 
 int MJPEGPortManager::allocatePort(const std::string& cameraId) {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::MJPEG_PORT_MANAGER, "MJPEGPortManager::m_mutex");
 
     // Check if camera already has a port
     auto it = m_cameraToPort.find(cameraId);
@@ -60,7 +60,7 @@ int MJPEGPortManager::allocatePort(const std::string& cameraId) {
 }
 
 bool MJPEGPortManager::releasePort(const std::string& cameraId) {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::MJPEG_PORT_MANAGER, "MJPEGPortManager::m_mutex");
 
     // Find camera's port
     auto it = m_cameraToPort.find(cameraId);

@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <mutex>
 #include <thread>
 #include <atomic>
@@ -9,6 +10,7 @@
 #include <vector>
 #include <chrono>
 #include <opencv2/opencv.hpp>
+#include "LockHierarchy.h"
 
 // Forward declarations
 class VideoPipeline;
@@ -204,6 +206,7 @@ private:
     // Member variables
     mutable std::mutex m_mutex;
     std::unordered_map<std::string, std::shared_ptr<VideoPipeline>> m_pipelines;
+    std::unordered_set<std::string> m_initializingPipelines; // Track pipelines being initialized
     std::atomic<bool> m_running{false};
     std::thread m_monitoringThread;
     std::chrono::steady_clock::time_point m_systemStartTime;

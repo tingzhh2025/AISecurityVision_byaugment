@@ -23,10 +23,30 @@ void CameraController::initialize(TaskManager* taskManager,
                                  AISecurityVision::NetworkManager* networkManager) {
     BaseController::initialize(taskManager, onvifManager, networkManager);
 
+    // Initialize thread pool for asynchronous operations
+    m_threadPool = std::make_shared<AISecurityVision::ThreadPool>(4); // 4 worker threads for camera operations
+
     // Load existing camera configurations from database
     loadCameraConfigsFromDatabase();
 
     logInfo("CameraController initialized with " + std::to_string(m_cameraConfigs.size()) + " cameras from database");
+}
+
+void CameraController::cleanup() {
+    logInfo("CameraController cleanup initiated");
+
+    if (m_threadPool) {
+        m_threadPool->shutdown();
+        m_threadPool.reset();
+    }
+
+    // Clear pending operations
+    {
+        std::lock_guard<std::mutex> lock(m_pendingOperationsMutex);
+        m_pendingCameraOperations.clear();
+    }
+
+    logInfo("CameraController cleanup completed");
 }
 
 void CameraController::clearInMemoryConfigurations() {
@@ -212,7 +232,14 @@ void CameraController::handlePostVideoSource(const std::string& request, std::st
         }
 
         // Start video pipeline for new cameras asynchronously to avoid blocking API
-        if (isNewCamera && m_taskManager && config.enabled) {
+        if (isNewCamera && m_taskManager && config.enabled && m_threadPool) {
+            // Check if operation is already pending for this camera
+            if (isOperationPending(config.id)) {
+                logWarn("Camera initialization already in progress for: " + config.id);
+                response = createErrorResponse("Camera initialization already in progress", 409);
+                return;
+            }
+
             VideoSource source;
             source.id = config.id;
             source.name = config.name;
@@ -226,10 +253,13 @@ void CameraController::handlePostVideoSource(const std::string& request, std::st
             source.mjpeg_port = 0; // Will be dynamically allocated by TaskManager
             source.enabled = config.enabled;
 
-            // Start pipeline initialization in a separate thread to avoid blocking API
-            std::thread([this, source]() {
+            // Mark operation as pending
+            markOperationPending(config.id);
+
+            // Submit pipeline initialization to thread pool
+            m_threadPool->submitDetached([this, source]() {
                 try {
-                    if (m_taskManager->addVideoSource(source)) {
+                    if (m_taskManager && m_taskManager->addVideoSource(source)) {
                         logInfo("Started video pipeline for new camera: " + source.id);
                     } else {
                         logError("Failed to start video pipeline for camera: " + source.id);
@@ -237,7 +267,10 @@ void CameraController::handlePostVideoSource(const std::string& request, std::st
                 } catch (const std::exception& e) {
                     logError("Exception starting video pipeline for camera " + source.id + ": " + e.what());
                 }
-            }).detach();
+
+                // Mark operation as complete
+                markOperationComplete(source.id);
+            });
 
             logInfo("Initiated async video pipeline startup for camera: " + config.id);
         }
@@ -961,19 +994,29 @@ void CameraController::handleUpdateCamera(const std::string& cameraId, const std
         }
 
         // If camera is currently running and configuration changed, restart it
-        if (m_taskManager && existingConfig.value("enabled", true)) {
+        if (m_taskManager && existingConfig.value("enabled", true) && m_threadPool) {
+            // Check if operation is already pending for this camera
+            if (isOperationPending(cameraId)) {
+                logWarn("Camera restart already in progress for: " + cameraId);
+                response = createErrorResponse("Camera restart already in progress", 409);
+                return;
+            }
+
             // Stop existing pipeline
             m_taskManager->removeVideoSource(cameraId);
 
-            // Start new pipeline with updated configuration
-            std::thread([this, cameraId, existingConfig]() {
+            // Mark operation as pending
+            markOperationPending(cameraId);
+
+            // Start new pipeline with updated configuration using thread pool
+            m_threadPool->submitDetached([this, cameraId, existingConfig]() {
                 try {
                     VideoSource source;
                     source.id = cameraId;
                     source.name = existingConfig.value("name", cameraId);
                     source.url = existingConfig.value("rtsp_url", "");
                     source.protocol = "rtsp";
-                    source.mjpeg_port = existingConfig.value("mjpeg_port", 8161);
+                    source.mjpeg_port = 0; // Will be dynamically allocated by TaskManager
                     source.enabled = existingConfig.value("enabled", true);
 
                     if (existingConfig.contains("stream_config")) {
@@ -983,7 +1026,7 @@ void CameraController::handleUpdateCamera(const std::string& cameraId, const std
                         source.height = streamConfig.value("max_height", 1080);
                     }
 
-                    if (m_taskManager->addVideoSource(source)) {
+                    if (m_taskManager && m_taskManager->addVideoSource(source)) {
                         logInfo("Restarted video pipeline for updated camera: " + cameraId);
                     } else {
                         logError("Failed to restart video pipeline for camera: " + cameraId);
@@ -991,7 +1034,10 @@ void CameraController::handleUpdateCamera(const std::string& cameraId, const std
                 } catch (const std::exception& e) {
                     logError("Exception restarting video pipeline for camera " + cameraId + ": " + e.what());
                 }
-            }).detach();
+
+                // Mark operation as complete
+                markOperationComplete(cameraId);
+            });
         }
 
         response = createSuccessResponse(existingConfig.dump());
@@ -1231,6 +1277,22 @@ void CameraController::handlePutDetectionConfig(const std::string& request, std:
         logError("Error updating detection config via PUT: " + std::string(e.what()));
         response = createErrorResponse("Failed to update detection config: " + std::string(e.what()), 400);
     }
+}
+
+// Thread-safe operation management methods
+bool CameraController::isOperationPending(const std::string& cameraId) const {
+    std::lock_guard<std::mutex> lock(m_pendingOperationsMutex);
+    return m_pendingCameraOperations.find(cameraId) != m_pendingCameraOperations.end();
+}
+
+void CameraController::markOperationPending(const std::string& cameraId) {
+    std::lock_guard<std::mutex> lock(m_pendingOperationsMutex);
+    m_pendingCameraOperations.insert(cameraId);
+}
+
+void CameraController::markOperationComplete(const std::string& cameraId) {
+    std::lock_guard<std::mutex> lock(m_pendingOperationsMutex);
+    m_pendingCameraOperations.erase(cameraId);
 }
 
 } // namespace AISecurityVision

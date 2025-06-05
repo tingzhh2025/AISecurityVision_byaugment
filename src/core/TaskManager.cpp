@@ -89,8 +89,9 @@ bool TaskManager::addVideoSource(const VideoSource& source) {
         return false;
     }
 
-    // Use a separate mutex for pipeline initialization to avoid blocking other operations
-    std::unique_lock<std::mutex> lock(m_mutex);
+    // Thread-safe two-phase initialization to prevent race conditions
+    // Use hierarchical locking to prevent deadlocks
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::TASK_MANAGER, "TaskManager::m_mutex");
 
     if (m_pipelines.size() >= MAX_PIPELINES) {
         LOG_ERROR() << "[TaskManager] Maximum pipeline limit reached: " << MAX_PIPELINES;
@@ -102,13 +103,23 @@ bool TaskManager::addVideoSource(const VideoSource& source) {
         return false;
     }
 
+    // Check if pipeline is currently being initialized by another thread
+    if (m_initializingPipelines.find(source.id) != m_initializingPipelines.end()) {
+        LOG_WARN() << "[TaskManager] Pipeline initialization already in progress for: " << source.id;
+        return false;
+    }
+
     try {
         LOG_INFO() << "[TaskManager] Creating pipeline for: " << source.id;
+
+        // Mark pipeline as being initialized to prevent concurrent attempts
+        m_initializingPipelines.insert(source.id);
 
         // Allocate MJPEG port dynamically
         auto& portManager = AISecurityVision::MJPEGPortManager::getInstance();
         int allocatedPort = portManager.allocatePort(source.id);
         if (allocatedPort == -1) {
+            m_initializingPipelines.erase(source.id);
             LOG_ERROR() << "[TaskManager] Failed to allocate MJPEG port for camera: " << source.id;
             return false;
         }
@@ -122,33 +133,49 @@ bool TaskManager::addVideoSource(const VideoSource& source) {
         // Create pipeline object with dynamically allocated port
         auto pipeline = std::make_shared<VideoPipeline>(modifiedSource);
 
-        // Add to pipelines map immediately to prevent duplicate additions
-        m_pipelines[source.id] = pipeline;
-
-        // Release lock before expensive initialization
+        // Release lock before expensive initialization to avoid blocking other operations
         lock.unlock();
 
-        // Initialize pipeline (this may take time)
-        if (pipeline->initialize()) {
+        // Initialize pipeline (this may take time) - done outside lock
+        bool initSuccess = false;
+        try {
+            initSuccess = pipeline->initialize();
+        } catch (const std::exception& e) {
+            LOG_ERROR() << "[TaskManager] Exception during pipeline initialization: " << e.what();
+            initSuccess = false;
+        }
+
+        // Reacquire lock for final state update
+        {
+            AISecurityVision::HierarchicalMutexLock finalLock(m_mutex, AISecurityVision::LockLevel::TASK_MANAGER, "TaskManager::m_mutex");
+
+            // Remove from initializing set regardless of outcome
+            m_initializingPipelines.erase(source.id);
+
+            if (initSuccess) {
+                // Add successfully initialized pipeline to map
+                m_pipelines[source.id] = pipeline;
+            }
+        }
+
+        if (initSuccess) {
+            // Start pipeline processing (outside lock)
             pipeline->start();
             LOG_INFO() << "[TaskManager] Added video source: " << source.id
                       << " (" << source.protocol << ") on MJPEG port " << allocatedPort;
             return true;
         } else {
-            // Remove from map and release port if initialization failed
-            lock.lock();
-            m_pipelines.erase(source.id);
-            lock.unlock();
-
+            // Initialization failed - cleanup resources
             portManager.releasePort(source.id);
             LOG_ERROR() << "[TaskManager] Failed to initialize pipeline for: " << source.id;
             return false;
         }
     } catch (const std::exception& e) {
-        // Remove from map and release port if exception occurred
-        lock.lock();
-        m_pipelines.erase(source.id);
-        lock.unlock();
+        // Exception during setup - cleanup and remove from initializing set
+        {
+            AISecurityVision::HierarchicalMutexLock cleanupLock(m_mutex, AISecurityVision::LockLevel::TASK_MANAGER, "TaskManager::m_mutex");
+            m_initializingPipelines.erase(source.id);
+        }
 
         auto& portManager = AISecurityVision::MJPEGPortManager::getInstance();
         portManager.releasePort(source.id);
@@ -158,7 +185,7 @@ bool TaskManager::addVideoSource(const VideoSource& source) {
 }
 
 bool TaskManager::removeVideoSource(const std::string& sourceId) {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::TASK_MANAGER, "TaskManager::m_mutex");
 
     auto it = m_pipelines.find(sourceId);
     if (it == m_pipelines.end()) {
@@ -215,7 +242,7 @@ double TaskManager::getGpuTemperature() const {
 }
 
 std::shared_ptr<VideoPipeline> TaskManager::getPipeline(const std::string& sourceId) const {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::TASK_MANAGER, "TaskManager::m_mutex");
 
     auto it = m_pipelines.find(sourceId);
     return (it != m_pipelines.end()) ? it->second : nullptr;
@@ -658,7 +685,7 @@ void TaskManager::reportTrackUpdate(const std::string& cameraId, int localTrackI
         return;
     }
 
-    std::lock_guard<std::mutex> lock(m_crossCameraMutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_crossCameraMutex, AISecurityVision::LockLevel::CROSS_CAMERA_TRACKING, "TaskManager::m_crossCameraMutex");
 
     // Check if this local track already has a global track ID
     auto cameraIt = m_localToGlobalTrackMap.find(cameraId);
@@ -697,7 +724,7 @@ void TaskManager::reportTrackUpdate(const std::string& cameraId, int localTrackI
 }
 
 int TaskManager::getGlobalTrackId(const std::string& cameraId, int localTrackId) const {
-    std::lock_guard<std::mutex> lock(m_crossCameraMutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_crossCameraMutex, AISecurityVision::LockLevel::CROSS_CAMERA_TRACKING, "TaskManager::m_crossCameraMutex");
 
     auto cameraIt = m_localToGlobalTrackMap.find(cameraId);
     if (cameraIt != m_localToGlobalTrackMap.end()) {

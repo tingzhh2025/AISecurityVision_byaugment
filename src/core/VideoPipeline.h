@@ -7,6 +7,7 @@
 #include <queue>
 #include <condition_variable>
 #include <opencv2/opencv.hpp>
+#include "LockHierarchy.h"
 
 // Forward declarations
 class FFmpegDecoder;

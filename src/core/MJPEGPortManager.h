@@ -5,6 +5,7 @@
 #include <unordered_set>
 #include <string>
 #include <queue>
+#include "LockHierarchy.h"
 
 namespace AISecurityVision {
 
