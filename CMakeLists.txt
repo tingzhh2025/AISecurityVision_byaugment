@@ -220,6 +220,14 @@ else()
     message(FATAL_ERROR "libcurl is required for HTTP alarm delivery")
 endif()
 
+# Find OpenSSL for JWT authentication (NEW - Phase 2)
+find_package(OpenSSL REQUIRED)
+if(OpenSSL_FOUND)
+    message(STATUS "OpenSSL found: ${OPENSSL_LIBRARIES}")
+else()
+    message(FATAL_ERROR "OpenSSL is required for JWT authentication")
+endif()
+
 # Find or download websocketpp for WebSocket alarm delivery
 find_path(WEBSOCKETPP_INCLUDE_DIR websocketpp/config/asio_no_tls.hpp
     PATHS
@@ -366,6 +374,15 @@ include_directories(${CMAKE_SOURCE_DIR}/third_party)
 include_directories(${CMAKE_SOURCE_DIR}/third_party/nlohmann)
 include_directories(${OpenCV_INCLUDE_DIRS})
 
+# Phase 4 build options
+option(ENABLE_SECURITY "Enable security features (rate limiting, input validation)" ON)
+option(ENABLE_RATE_LIMITING "Enable API rate limiting" ON)
+option(ENABLE_INPUT_VALIDATION "Enable input validation and sanitization" ON)
+option(ENABLE_ACCESS_LOGGING "Enable access logging" ON)
+option(ENABLE_CONNECTION_POOL "Enable database connection pooling" ON)
+option(ENABLE_SWAGGER_UI "Enable Swagger UI for API documentation" ON)
+option(ENABLE_PERFORMANCE_MONITORING "Enable performance monitoring" ON)
+
 # Source files
 file(GLOB_RECURSE SOURCES
     "src/core/*.cpp"
@@ -378,6 +395,8 @@ file(GLOB_RECURSE SOURCES
     "src/utils/*.cpp"
     "src/onvif/*.cpp"
     "src/network/*.cpp"
+    "src/auth/*.cpp"
+    "src/security/*.cpp"
 )
 
 # Remove LoggerExample.cpp from sources as it contains unimplemented features
@@ -463,6 +482,13 @@ if(CURL_FOUND)
     include_directories(${CURL_INCLUDE_DIRS})
 endif()
 
+# Add OpenSSL for JWT authentication (NEW - Phase 2)
+if(OpenSSL_FOUND)
+    list(APPEND LINK_LIBRARIES ${OPENSSL_LIBRARIES})
+    include_directories(${OPENSSL_INCLUDE_DIR})
+    target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_OPENSSL)
+endif()
+
 # Add WebSocket dependencies
 if(WEBSOCKETPP_INCLUDE_DIR)
     if(Boost_FOUND)
@@ -478,6 +504,42 @@ endif()
 if(PAHO_MQTT_CPP_FOUND AND PAHO_MQTT_CPP_LIBRARIES)
     list(APPEND LINK_LIBRARIES ${PAHO_MQTT_CPP_LIBRARIES})
     target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_PAHO_MQTT)
+endif()
+
+# Phase 4 feature definitions
+if(ENABLE_SECURITY)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE ENABLE_SECURITY)
+    message(STATUS "Security features enabled")
+endif()
+
+if(ENABLE_RATE_LIMITING)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE ENABLE_RATE_LIMITING)
+    message(STATUS "API rate limiting enabled")
+endif()
+
+if(ENABLE_INPUT_VALIDATION)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE ENABLE_INPUT_VALIDATION)
+    message(STATUS "Input validation enabled")
+endif()
+
+if(ENABLE_ACCESS_LOGGING)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE ENABLE_ACCESS_LOGGING)
+    message(STATUS "Access logging enabled")
+endif()
+
+if(ENABLE_CONNECTION_POOL)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE ENABLE_CONNECTION_POOL)
+    message(STATUS "Database connection pooling enabled")
+endif()
+
+if(ENABLE_SWAGGER_UI)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE ENABLE_SWAGGER_UI)
+    message(STATUS "Swagger UI enabled")
+endif()
+
+if(ENABLE_PERFORMANCE_MONITORING)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE ENABLE_PERFORMANCE_MONITORING)
+    message(STATUS "Performance monitoring enabled")
 endif()
 
 target_link_libraries(${PROJECT_NAME} ${LINK_LIBRARIES})

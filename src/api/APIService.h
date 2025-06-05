@@ -18,6 +18,10 @@ namespace AISecurityVision {
     class PersonStatsController;
     class AlertController;
     class NetworkController;
+    class AuthController;
+    class RecordingController;
+    class LogController;
+    class StatisticsController;
 }
 
 /**
@@ -30,6 +34,10 @@ namespace AISecurityVision {
  * - PersonStatsController: Person analytics and statistics
  * - AlertController: Alert and alarm management
  * - NetworkController: Network interface management
+ * - AuthController: User authentication and authorization (NEW - Phase 2)
+ * - RecordingController: Recording management (NEW - Phase 3)
+ * - LogController: System log management (NEW - Phase 3)
+ * - StatisticsController: System statistics (NEW - Phase 3)
  */
 class APIService {
 public:
@@ -47,6 +55,7 @@ public:
 
     // Delegate to CameraController for configuration management
     void clearInMemoryConfigurations();
+    void reloadCameraConfigurations();
 
 private:
     // HTTP server implementation
@@ -75,4 +84,8 @@ private:
     std::unique_ptr<AISecurityVision::PersonStatsController> m_personStatsController;
     std::unique_ptr<AISecurityVision::AlertController> m_alertController;
     std::unique_ptr<AISecurityVision::NetworkController> m_networkController;
+    std::unique_ptr<AISecurityVision::AuthController> m_authController; // NEW - Phase 2
+    std::unique_ptr<AISecurityVision::RecordingController> m_recordingController; // NEW - Phase 3
+    std::unique_ptr<AISecurityVision::LogController> m_logController; // NEW - Phase 3
+    std::unique_ptr<AISecurityVision::StatisticsController> m_statisticsController; // NEW - Phase 3
 };

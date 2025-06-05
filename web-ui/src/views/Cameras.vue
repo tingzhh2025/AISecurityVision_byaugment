@@ -398,10 +398,8 @@ const saveCamera = async () => {
       await apiService.saveCameraConfig(cameraConfig)
       ElMessage.success('摄像头更新成功')
     } else {
-      // 添加摄像头
+      // 添加摄像头 - 只调用一个API，后端会处理所有逻辑
       await apiService.addCamera(cameraForm)
-      // 同时保存到配置数据库
-      await apiService.saveCameraConfig(cameraConfig)
       ElMessage.success('摄像头添加成功')
     }
 

@@ -1,0 +1,619 @@
+openapi: 3.0.3
+info:
+  title: AI Security Vision System API
+  description: |
+    AI安全视觉系统的RESTful API接口文档
+    
+    ## 功能特性
+    - 🎥 摄像头管理和RTSP流处理
+    - 🤖 YOLOv8 AI目标检测 (RKNN NPU加速)
+    - 👥 人员统计和年龄性别识别
+    - 🚨 智能报警和事件管理
+    - 📹 录像管理和回放
+    - 🔐 JWT用户认证和授权
+    - 📊 系统监控和统计分析
+    
+    ## 技术架构
+    - **后端**: C++ (RK3588平台)
+    - **AI推理**: RKNN NPU + YOLOv8
+    - **数据库**: SQLite3
+    - **认证**: JWT Token
+    - **流媒体**: MJPEG over HTTP
+    
+  version: 1.0.0
+  contact:
+    name: AI Security Vision Team
+    email: support@aisecurityvision.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8080
+    description: 开发环境
+  - url: https://api.aisecurityvision.com
+    description: 生产环境
+
+tags:
+  - name: System Management
+    description: 系统管理和配置
+  - name: Camera Management
+    description: 摄像头管理和配置
+  - name: AI Detection
+    description: AI检测和配置
+  - name: Person Statistics
+    description: 人员统计功能
+  - name: Alarm Management
+    description: 报警管理
+  - name: Recording Management
+    description: 录像管理
+  - name: Authentication
+    description: 用户认证和授权
+  - name: Network Management
+    description: 网络管理
+  - name: ONVIF Discovery
+    description: ONVIF设备发现
+  - name: Logs and Statistics
+    description: 日志和统计
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT认证令牌
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: "错误描述"
+        error_code:
+          type: integer
+          example: 400
+      required:
+        - success
+        - message
+
+    Success:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "操作成功"
+        data:
+          type: object
+      required:
+        - success
+        - message
+
+    SystemStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [running, stopped, error]
+          example: "running"
+        uptime:
+          type: integer
+          description: 系统运行时间(秒)
+          example: 3600
+        version:
+          type: string
+          example: "1.0.0"
+        cameras_active:
+          type: integer
+          example: 2
+        ai_backend:
+          type: string
+          enum: [RKNN, OpenCV, TensorRT]
+          example: "RKNN"
+
+    SystemInfo:
+      type: object
+      properties:
+        platform:
+          type: string
+          example: "RK3588"
+        os:
+          type: string
+          example: "Ubuntu 20.04"
+        cpu_cores:
+          type: integer
+          example: 8
+        memory_total:
+          type: string
+          example: "8GB"
+        npu_available:
+          type: boolean
+          example: true
+
+    Camera:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "camera_01"
+        name:
+          type: string
+          example: "前门摄像头"
+        rtsp_url:
+          type: string
+          example: "rtsp://admin:password@192.168.1.100:554/1/1"
+        enabled:
+          type: boolean
+          example: true
+        detection_enabled:
+          type: boolean
+          example: true
+        mjpeg_port:
+          type: integer
+          example: 8161
+        status:
+          type: string
+          enum: [connected, disconnected, error]
+          example: "connected"
+        resolution:
+          type: string
+          example: "1920x1080"
+        fps:
+          type: number
+          format: float
+          example: 25.0
+      required:
+        - id
+        - name
+        - rtsp_url
+
+    DetectionConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          example: true
+        confidence_threshold:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          example: 0.5
+        nms_threshold:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          example: 0.4
+        max_detections:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          example: 100
+
+    DetectionCategory:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 0
+        name:
+          type: string
+          example: "person"
+        enabled:
+          type: boolean
+          example: true
+        color:
+          type: string
+          example: "#FF0000"
+
+    PersonStats:
+      type: object
+      properties:
+        total_count:
+          type: integer
+          example: 150
+        male_count:
+          type: integer
+          example: 80
+        female_count:
+          type: integer
+          example: 70
+        age_groups:
+          type: object
+          properties:
+            child:
+              type: integer
+              example: 20
+            adult:
+              type: integer
+              example: 100
+            elderly:
+              type: integer
+              example: 30
+
+    LoginRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          example: "admin"
+        password:
+          type: string
+          example: "password123"
+        expiration_hours:
+          type: integer
+          default: 24
+          example: 24
+      required:
+        - username
+        - password
+
+    LoginResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "登录成功"
+        data:
+          type: object
+          properties:
+            token:
+              type: string
+              example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+            user_id:
+              type: string
+              example: "user_001"
+            username:
+              type: string
+              example: "admin"
+            role:
+              type: string
+              example: "administrator"
+            expires_at:
+              type: string
+              format: date-time
+              example: "2024-01-02T12:00:00Z"
+
+paths:
+  /api/system/status:
+    get:
+      tags:
+        - System Management
+      summary: 获取系统状态
+      description: 获取系统运行状态、版本信息和基本统计
+      responses:
+        '200':
+          description: 系统状态信息
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/SystemStatus'
+
+  /api/system/info:
+    get:
+      tags:
+        - System Management
+      summary: 获取系统信息
+      description: 获取硬件平台、操作系统等详细信息
+      responses:
+        '200':
+          description: 系统详细信息
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/SystemInfo'
+
+  /api/auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: 用户登录
+      description: 使用用户名和密码进行登录，返回JWT令牌
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: 认证失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/cameras:
+    get:
+      tags:
+        - Camera Management
+      summary: 获取摄像头列表
+      description: 获取所有已配置的摄像头信息
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: 摄像头列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Camera'
+    post:
+      tags:
+        - Camera Management
+      summary: 添加摄像头
+      description: 添加新的摄像头配置
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Camera'
+      responses:
+        '201':
+          description: 摄像头添加成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/cameras/{id}:
+    get:
+      tags:
+        - Camera Management
+      summary: 获取指定摄像头信息
+      description: 根据ID获取摄像头详细信息
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "camera_01"
+      responses:
+        '200':
+          description: 摄像头信息
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Camera'
+        '404':
+          description: 摄像头不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags:
+        - Camera Management
+      summary: 更新摄像头配置
+      description: 更新指定摄像头的配置信息
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "camera_01"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Camera'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '404':
+          description: 摄像头不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - Camera Management
+      summary: 删除摄像头
+      description: 删除指定的摄像头配置
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "camera_01"
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+        '404':
+          description: 摄像头不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/detection/config:
+    get:
+      tags:
+        - AI Detection
+      summary: 获取检测配置
+      description: 获取AI检测的全局配置参数
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: 检测配置信息
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DetectionConfig'
+    put:
+      tags:
+        - AI Detection
+      summary: 更新检测配置
+      description: 更新AI检测的全局配置参数
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DetectionConfig'
+      responses:
+        '200':
+          description: 配置更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+
+  /api/detection/categories:
+    get:
+      tags:
+        - AI Detection
+      summary: 获取检测类别
+      description: 获取当前启用的检测类别列表
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: 检测类别列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/DetectionCategory'
+    post:
+      tags:
+        - AI Detection
+      summary: 更新检测类别
+      description: 更新检测类别的启用状态
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/DetectionCategory'
+      responses:
+        '200':
+          description: 类别更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Success'
+
+  /api/person-stats:
+    get:
+      tags:
+        - Person Statistics
+      summary: 获取人员统计
+      description: 获取人员检测和分析的统计数据
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: camera_id
+          in: query
+          schema:
+            type: string
+          description: 指定摄像头ID，不指定则返回全部
+        - name: start_time
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: 统计开始时间
+        - name: end_time
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: 统计结束时间
+      responses:
+        '200':
+          description: 人员统计数据
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Success'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PersonStats'

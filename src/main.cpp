@@ -18,8 +18,17 @@ using json = nlohmann::json;
 std::atomic<bool> g_running{true};
 
 void signalHandler(int signal) {
-    LOG_INFO() << "\n[Main] Received signal " << signal << ", shutting down...";
+    static int signalCount = 0;
+    signalCount++;
+
+    LOG_INFO() << "\n[Main] Received signal " << signal << " (count: " << signalCount << "), shutting down...";
     g_running.store(false);
+
+    // Force exit after 3 signals
+    if (signalCount >= 3) {
+        LOG_ERROR() << "[Main] Force exit after multiple signals";
+        std::exit(1);
+    }
 }
 
 struct CameraConfig {
@@ -129,7 +138,7 @@ std::vector<CameraConfig> loadCameraConfigFromDatabase() {
 
                 camera.id = cameraId;
                 camera.name = config.value("name", cameraId);
-                camera.rtsp_url = config.value("url", "");
+                camera.rtsp_url = config.value("rtsp_url", config.value("url", ""));
                 camera.mjpeg_port = config.value("mjpeg_port", 8000);
                 camera.enabled = config.value("enabled", true);
                 camera.detection_enabled = config.value("detection_enabled", true);
@@ -361,6 +370,10 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
+        // Reload camera configurations in API service after clearing
+        LOG_INFO() << "[Main] Reloading camera configurations in API service...";
+        apiService.reloadCameraConfigurations();
+
         // Load cameras from database first, then config file as fallback
         std::vector<VideoSource> cameras;
 
@@ -525,7 +538,12 @@ int main(int argc, char* argv[]) {
         // Graceful shutdown
         LOG_INFO() << "[Main] Shutting down...";
 
+        // Stop API service first
+        LOG_INFO() << "[Main] Stopping API service...";
         apiService.stop();
+
+        // Stop task manager and all pipelines
+        LOG_INFO() << "[Main] Stopping task manager...";
         taskManager.stop();
 
         LOG_INFO() << "[Main] Shutdown complete";

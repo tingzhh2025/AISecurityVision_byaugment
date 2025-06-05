@@ -113,10 +113,67 @@ struct ROIRecord {
 };
 
 /**
+ * @brief User record structure for authentication (NEW - Phase 2)
+ */
+struct UserRecord {
+    int id = 0;
+    std::string user_id;
+    std::string username;
+    std::string password_hash;
+    std::string role = "user";
+    std::string created_at;
+    std::string last_login;
+    bool enabled = true;
+
+    UserRecord() = default;
+    UserRecord(const std::string& userId, const std::string& userName,
+               const std::string& passwordHash, const std::string& userRole = "user")
+        : user_id(userId), username(userName), password_hash(passwordHash), role(userRole) {
+        // Set current timestamp
+        auto now = std::chrono::system_clock::now();
+        auto time_t = std::chrono::system_clock::to_time_t(now);
+        auto tm = *std::localtime(&time_t);
+        char buffer[32];
+        std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &tm);
+        created_at = buffer;
+    }
+};
+
+/**
+ * @brief Session record structure for authentication (NEW - Phase 2)
+ */
+struct SessionRecord {
+    std::string session_id;
+    std::string user_id;
+    std::string created_at;
+    std::string expires_at;
+    bool active = true;
+
+    SessionRecord() = default;
+    SessionRecord(const std::string& sessionId, const std::string& userId, int expirationHours = 24)
+        : session_id(sessionId), user_id(userId) {
+        // Set current timestamp
+        auto now = std::chrono::system_clock::now();
+        auto time_t = std::chrono::system_clock::to_time_t(now);
+        auto tm = *std::localtime(&time_t);
+        char buffer[32];
+        std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &tm);
+        created_at = buffer;
+
+        // Set expiration time
+        auto expiry_time = now + std::chrono::hours(expirationHours);
+        auto expiry_time_t = std::chrono::system_clock::to_time_t(expiry_time);
+        auto expiry_tm = *std::localtime(&expiry_time_t);
+        std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &expiry_tm);
+        expires_at = buffer;
+    }
+};
+
+/**
  * @brief SQLite database manager with ORM-like functionality
  *
  * This class provides thread-safe database operations for the AI Security Vision System.
- * It manages event recordings, face recognition data, and license plate records.
+ * It manages event recordings, face recognition data, license plate records, and user authentication.
  */
 class DatabaseManager {
 public:
@@ -181,6 +238,24 @@ public:
     std::vector<std::string> getDetectionCategories();
     bool resetDetectionCategories();
 
+    // User authentication operations (NEW - Phase 2)
+    bool insertUser(const UserRecord& user);
+    UserRecord getUserById(const std::string& userId);
+    UserRecord getUserByUsername(const std::string& username);
+    bool updateUser(const UserRecord& user);
+    bool deleteUser(const std::string& userId);
+    bool updateUserLastLogin(const std::string& userId);
+    std::vector<UserRecord> getAllUsers();
+
+    // Session management operations (NEW - Phase 2)
+    bool insertSession(const SessionRecord& session);
+    SessionRecord getSessionById(const std::string& sessionId);
+    bool updateSession(const SessionRecord& session);
+    bool deleteSession(const std::string& sessionId);
+    bool deleteUserSessions(const std::string& userId);
+    bool deleteExpiredSessions();
+    std::vector<SessionRecord> getActiveSessions(const std::string& userId = "");
+
     // Utility operations
     bool executeQuery(const std::string& query);
     int getLastInsertId();
@@ -226,4 +301,20 @@ private:
     sqlite3_stmt* m_updateCameraConfigStmt;
     sqlite3_stmt* m_selectCameraConfigStmt;
     sqlite3_stmt* m_deleteCameraConfigStmt;
+
+    // User authentication prepared statements (NEW - Phase 2)
+    sqlite3_stmt* m_insertUserStmt;
+    sqlite3_stmt* m_selectUserByIdStmt;
+    sqlite3_stmt* m_selectUserByUsernameStmt;
+    sqlite3_stmt* m_updateUserStmt;
+    sqlite3_stmt* m_deleteUserStmt;
+    sqlite3_stmt* m_updateUserLastLoginStmt;
+
+    // Session management prepared statements (NEW - Phase 2)
+    sqlite3_stmt* m_insertSessionStmt;
+    sqlite3_stmt* m_selectSessionByIdStmt;
+    sqlite3_stmt* m_updateSessionStmt;
+    sqlite3_stmt* m_deleteSessionStmt;
+    sqlite3_stmt* m_deleteUserSessionsStmt;
+    sqlite3_stmt* m_deleteExpiredSessionsStmt;
 };

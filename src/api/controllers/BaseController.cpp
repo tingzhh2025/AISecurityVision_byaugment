@@ -152,7 +152,8 @@ bool BaseController::isValidCameraId(const std::string& cameraId) {
 
 bool BaseController::isValidJson(const std::string& json) {
     try {
-        nlohmann::json::parse(json);
+        auto parsed = nlohmann::json::parse(json);
+        (void)parsed; // Suppress unused variable warning
         return true;
     } catch (const std::exception&) {
         return false;

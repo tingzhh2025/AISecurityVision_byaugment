@@ -332,3 +332,87 @@ void AlertController::handleGetAlarmStatus(const std::string& request, std::stri
         response = createErrorResponse("Failed to get alarm status: " + std::string(e.what()), 500);
     }
 }
+
+void AlertController::handleGetAlert(const std::string& alertId, std::string& response) {
+    try {
+        if (alertId.empty()) {
+            response = createErrorResponse("Alert ID is required", 400);
+            return;
+        }
+
+        // For demonstration, return a sample alert based on ID
+        // In a real implementation, this would query the database
+        std::ostringstream json;
+        json << "{"
+             << "\"id\":" << alertId << ","
+             << "\"type\":\"intrusion\","
+             << "\"camera_id\":\"camera_1\","
+             << "\"message\":\"Person detected in restricted area\","
+             << "\"severity\":\"high\","
+             << "\"timestamp\":\"" << getCurrentTimestamp() << "\","
+             << "\"acknowledged\":false,"
+             << "\"details\":{"
+             << "\"detection_confidence\":0.95,"
+             << "\"object_count\":1,"
+             << "\"location\":\"entrance\""
+             << "}"
+             << "}";
+
+        response = createJsonResponse(json.str());
+        logInfo("Retrieved alert: " + alertId);
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to get alert: " + std::string(e.what()), 500);
+    }
+}
+
+void AlertController::handleDeleteAlert(const std::string& alertId, std::string& response) {
+    try {
+        if (alertId.empty()) {
+            response = createErrorResponse("Alert ID is required", 400);
+            return;
+        }
+
+        // In a real implementation, this would delete from database
+        // For now, simulate successful deletion
+        std::ostringstream json;
+        json << "{"
+             << "\"status\":\"success\","
+             << "\"message\":\"Alert deleted successfully\","
+             << "\"alert_id\":" << alertId << ","
+             << "\"deleted_at\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+        logInfo("Deleted alert: " + alertId);
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to delete alert: " + std::string(e.what()), 500);
+    }
+}
+
+void AlertController::handleMarkAlertAsRead(const std::string& alertId, std::string& response) {
+    try {
+        if (alertId.empty()) {
+            response = createErrorResponse("Alert ID is required", 400);
+            return;
+        }
+
+        // In a real implementation, this would update the database
+        // For now, simulate successful acknowledgment
+        std::ostringstream json;
+        json << "{"
+             << "\"status\":\"success\","
+             << "\"message\":\"Alert marked as read\","
+             << "\"alert_id\":" << alertId << ","
+             << "\"acknowledged\":true,"
+             << "\"acknowledged_at\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+        logInfo("Marked alert as read: " + alertId);
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to mark alert as read: " + std::string(e.what()), 500);
+    }
+}

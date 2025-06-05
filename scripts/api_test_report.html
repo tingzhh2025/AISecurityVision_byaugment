@@ -1,0 +1,585 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Security Vision API Test Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0; }
+        .stat-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px; text-align: center; }
+        .stat-number { font-size: 2em; font-weight: bold; }
+        .stat-label { font-size: 0.9em; opacity: 0.9; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #f8f9fa; font-weight: bold; }
+        .status-implemented { color: #27ae60; font-weight: bold; }
+        .status-not-implemented { color: #e74c3c; font-weight: bold; }
+        .status-unknown { color: #f39c12; font-weight: bold; }
+        .method-get { background-color: #e8f5e8; color: #2e7d32; }
+        .method-post { background-color: #fff3e0; color: #ef6c00; }
+        .method-put { background-color: #e3f2fd; color: #1976d2; }
+        .method-delete { background-color: #fce4ec; color: #c2185b; }
+        .category { font-size: 0.8em; background-color: #ecf0f1; padding: 4px 8px; border-radius: 4px; }
+        .response-time { font-family: monospace; }
+        .timestamp { color: #7f8c8d; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 AI Security Vision API Test Report</h1>
+        <p class="timestamp">Generated on: 2025-06-04 23:58:18</p>
+
+        <div class="summary">
+            <div class="stat-card">
+                <div class="stat-number">51</div>
+                <div class="stat-label">Total Endpoints</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">33</div>
+                <div class="stat-label">Implemented (64.7%)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">18</div>
+                <div class="stat-label">Not Implemented (35.3%)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">0</div>
+                <div class="stat-label">Unknown/Error (0.0%)</div>
+            </div>
+        </div>
+
+        <h2>📊 Detailed Results</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Method</th>
+                    <th>Endpoint</th>
+                    <th>Description</th>
+                    <th>Category</th>
+                    <th>Status</th>
+                    <th>Response Time</th>
+                    <th>Source</th>
+                </tr>
+            </thead>
+            <tbody>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/detection/categories</code></td>
+                    <td>Get detection categories</td>
+                    <td><span class="category">AI Detection</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.005s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-post">POST</span></td>
+                    <td><code>/api/detection/categories</code></td>
+                    <td>Update detection categories</td>
+                    <td><span class="category">AI Detection</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.046s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/detection/categories/available</code></td>
+                    <td>Get available categories</td>
+                    <td><span class="category">AI Detection</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.043s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/detection/config</code></td>
+                    <td>Get detection configuration</td>
+                    <td><span class="category">AI Detection</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.043s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-put">PUT</span></td>
+                    <td><code>/api/detection/config</code></td>
+                    <td>Update detection configuration</td>
+                    <td><span class="category">AI Detection</span></td>
+                    <td class="status-not-implemented">❌ Not Implemented</td>
+                    <td class="response-time">0.002s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/detection/stats</code></td>
+                    <td>Get detection statistics</td>
+                    <td><span class="category">AI Detection</span></td>
+                    <td class="status-not-implemented">❌ Not Implemented</td>
+                    <td class="response-time">0.002s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/alarms/config</code></td>
+                    <td>Get alarm configuration</td>
+                    <td><span class="category">Alarm Management</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.049s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-post">POST</span></td>
+                    <td><code>/api/alarms/config</code></td>
+                    <td>Save alarm configuration</td>
+                    <td><span class="category">Alarm Management</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.046s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/alarms/status</code></td>
+                    <td>Get alarm status</td>
+                    <td><span class="category">Alarm Management</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.046s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-post">POST</span></td>
+                    <td><code>/api/alarms/test</code></td>
+                    <td>Test alarm</td>
+                    <td><span class="category">Alarm Management</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.007s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/alerts</code></td>
+                    <td>Get alerts</td>
+                    <td><span class="category">Alert Management</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.005s</td>
+                    <td>frontend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-delete">DELETE</span></td>
+                    <td><code>/api/alerts/{id}</code></td>
+                    <td>Delete alert</td>
+                    <td><span class="category">Alert Management</span></td>
+                    <td class="status-not-implemented">❌ Not Implemented</td>
+                    <td class="response-time">0.008s</td>
+                    <td>frontend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/alerts/{id}</code></td>
+                    <td>Get specific alert</td>
+                    <td><span class="category">Alert Management</span></td>
+                    <td class="status-not-implemented">❌ Not Implemented</td>
+                    <td class="response-time">0.007s</td>
+                    <td>frontend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-put">PUT</span></td>
+                    <td><code>/api/alerts/{id}/read</code></td>
+                    <td>Mark alert as read</td>
+                    <td><span class="category">Alert Management</span></td>
+                    <td class="status-not-implemented">❌ Not Implemented</td>
+                    <td class="response-time">0.005s</td>
+                    <td>frontend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-post">POST</span></td>
+                    <td><code>/api/auth/login</code></td>
+                    <td>User login</td>
+                    <td><span class="category">Authentication</span></td>
+                    <td class="status-not-implemented">❌ Not Implemented</td>
+                    <td class="response-time">0.006s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-post">POST</span></td>
+                    <td><code>/api/auth/logout</code></td>
+                    <td>User logout</td>
+                    <td><span class="category">Authentication</span></td>
+                    <td class="status-not-implemented">❌ Not Implemented</td>
+                    <td class="response-time">0.005s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/auth/user</code></td>
+                    <td>Get current user</td>
+                    <td><span class="category">Authentication</span></td>
+                    <td class="status-not-implemented">❌ Not Implemented</td>
+                    <td class="response-time">0.046s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/cameras</code></td>
+                    <td>List all cameras</td>
+                    <td><span class="category">Camera Management</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.043s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-post">POST</span></td>
+                    <td><code>/api/cameras</code></td>
+                    <td>Add new camera</td>
+                    <td><span class="category">Camera Management</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.043s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/cameras/config</code></td>
+                    <td>Get camera configurations</td>
+                    <td><span class="category">Camera Management</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.019s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-post">POST</span></td>
+                    <td><code>/api/cameras/config</code></td>
+                    <td>Save camera configuration</td>
+                    <td><span class="category">Camera Management</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.006s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/cameras/test</code></td>
+                    <td>Test camera (frontend)</td>
+                    <td><span class="category">Camera Management</span></td>
+                    <td class="status-not-implemented">❌ Not Implemented</td>
+                    <td class="response-time">0.043s</td>
+                    <td>frontend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-post">POST</span></td>
+                    <td><code>/api/cameras/test-connection</code></td>
+                    <td>Test camera connection</td>
+                    <td><span class="category">Camera Management</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.046s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-delete">DELETE</span></td>
+                    <td><code>/api/cameras/{id}</code></td>
+                    <td>Delete camera</td>
+                    <td><span class="category">Camera Management</span></td>
+                    <td class="status-not-implemented">❌ Not Implemented</td>
+                    <td class="response-time">0.047s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/cameras/{id}</code></td>
+                    <td>Get specific camera</td>
+                    <td><span class="category">Camera Management</span></td>
+                    <td class="status-not-implemented">❌ Not Implemented</td>
+                    <td class="response-time">0.005s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-put">PUT</span></td>
+                    <td><code>/api/cameras/{id}</code></td>
+                    <td>Update camera</td>
+                    <td><span class="category">Camera Management</span></td>
+                    <td class="status-not-implemented">❌ Not Implemented</td>
+                    <td class="response-time">0.005s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-post">POST</span></td>
+                    <td><code>/api/source/add</code></td>
+                    <td>Add video source (legacy)</td>
+                    <td><span class="category">Legacy</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.046s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/source/list</code></td>
+                    <td>List video sources (legacy)</td>
+                    <td><span class="category">Legacy</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.049s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/logs</code></td>
+                    <td>Get system logs</td>
+                    <td><span class="category">Logging</span></td>
+                    <td class="status-not-implemented">❌ Not Implemented</td>
+                    <td class="response-time">0.043s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/network/interfaces</code></td>
+                    <td>Get network interfaces</td>
+                    <td><span class="category">Network Management</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.022s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/network/stats</code></td>
+                    <td>Get network statistics</td>
+                    <td><span class="category">Network Management</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.067s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-post">POST</span></td>
+                    <td><code>/api/network/test</code></td>
+                    <td>Test network connection</td>
+                    <td><span class="category">Network Management</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.083s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-post">POST</span></td>
+                    <td><code>/api/source/add-discovered</code></td>
+                    <td>Add discovered device</td>
+                    <td><span class="category">ONVIF</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.043s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/source/discover</code></td>
+                    <td>Discover ONVIF devices</td>
+                    <td><span class="category">ONVIF</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.046s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/cameras/{id}/person-stats</code></td>
+                    <td>Get person statistics</td>
+                    <td><span class="category">Person Statistics</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.005s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/cameras/{id}/person-stats/config</code></td>
+                    <td>Get person stats config</td>
+                    <td><span class="category">Person Statistics</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.004s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-post">POST</span></td>
+                    <td><code>/api/cameras/{id}/person-stats/config</code></td>
+                    <td>Update person stats config</td>
+                    <td><span class="category">Person Statistics</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.047s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-post">POST</span></td>
+                    <td><code>/api/cameras/{id}/person-stats/disable</code></td>
+                    <td>Disable person stats</td>
+                    <td><span class="category">Person Statistics</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.046s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-post">POST</span></td>
+                    <td><code>/api/cameras/{id}/person-stats/enable</code></td>
+                    <td>Enable person stats</td>
+                    <td><span class="category">Person Statistics</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.046s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/recordings</code></td>
+                    <td>Get recordings</td>
+                    <td><span class="category">Recording Management</span></td>
+                    <td class="status-not-implemented">❌ Not Implemented</td>
+                    <td class="response-time">0.005s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-delete">DELETE</span></td>
+                    <td><code>/api/recordings/{id}</code></td>
+                    <td>Delete recording</td>
+                    <td><span class="category">Recording Management</span></td>
+                    <td class="status-not-implemented">❌ Not Implemented</td>
+                    <td class="response-time">0.004s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/recordings/{id}</code></td>
+                    <td>Get specific recording</td>
+                    <td><span class="category">Recording Management</span></td>
+                    <td class="status-not-implemented">❌ Not Implemented</td>
+                    <td class="response-time">0.046s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/recordings/{id}/download</code></td>
+                    <td>Download recording</td>
+                    <td><span class="category">Recording Management</span></td>
+                    <td class="status-not-implemented">❌ Not Implemented</td>
+                    <td class="response-time">0.004s</td>
+                    <td>frontend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/statistics</code></td>
+                    <td>Get general statistics</td>
+                    <td><span class="category">Statistics</span></td>
+                    <td class="status-not-implemented">❌ Not Implemented</td>
+                    <td class="response-time">0.048s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/system/config</code></td>
+                    <td>Get system configuration</td>
+                    <td><span class="category">System Management</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.007s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-post">POST</span></td>
+                    <td><code>/api/system/config</code></td>
+                    <td>Update system configuration</td>
+                    <td><span class="category">System Management</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.005s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/system/info</code></td>
+                    <td>Get system information</td>
+                    <td><span class="category">System Management</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.053s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/system/metrics</code></td>
+                    <td>Get system metrics</td>
+                    <td><span class="category">System Management</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.046s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/system/pipeline-stats</code></td>
+                    <td>Get pipeline statistics</td>
+                    <td><span class="category">System Management</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.046s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/system/stats</code></td>
+                    <td>Get system statistics</td>
+                    <td><span class="category">System Management</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.002s</td>
+                    <td>backend</td>
+                </tr>
+
+                <tr>
+                    <td><span class="method-get">GET</span></td>
+                    <td><code>/api/system/status</code></td>
+                    <td>Get system status</td>
+                    <td><span class="category">System Management</span></td>
+                    <td class="status-implemented">✅ Implemented</td>
+                    <td class="response-time">0.002s</td>
+                    <td>backend</td>
+                </tr>
+
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

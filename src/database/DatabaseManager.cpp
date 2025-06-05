@@ -12,7 +12,13 @@ DatabaseManager::DatabaseManager()
       m_selectFacesStmt(nullptr), m_selectPlatesStmt(nullptr), m_selectROIsStmt(nullptr),
       m_insertConfigStmt(nullptr), m_updateConfigStmt(nullptr), m_selectConfigStmt(nullptr),
       m_deleteConfigStmt(nullptr), m_insertCameraConfigStmt(nullptr), m_updateCameraConfigStmt(nullptr),
-      m_selectCameraConfigStmt(nullptr), m_deleteCameraConfigStmt(nullptr) {
+      m_selectCameraConfigStmt(nullptr), m_deleteCameraConfigStmt(nullptr),
+      // User authentication statements (NEW - Phase 2)
+      m_insertUserStmt(nullptr), m_selectUserByIdStmt(nullptr), m_selectUserByUsernameStmt(nullptr),
+      m_updateUserStmt(nullptr), m_deleteUserStmt(nullptr), m_updateUserLastLoginStmt(nullptr),
+      // Session management statements (NEW - Phase 2)
+      m_insertSessionStmt(nullptr), m_selectSessionByIdStmt(nullptr), m_updateSessionStmt(nullptr),
+      m_deleteSessionStmt(nullptr), m_deleteUserSessionsStmt(nullptr), m_deleteExpiredSessionsStmt(nullptr) {
 }
 
 DatabaseManager::~DatabaseManager() {
@@ -140,6 +146,31 @@ bool DatabaseManager::createTables() {
         );
     )";
 
+    // User authentication tables (NEW - Phase 2)
+    const char* createUsersTable = R"(
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL UNIQUE,
+            username TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            role TEXT DEFAULT 'user',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_login DATETIME,
+            enabled BOOLEAN DEFAULT 1
+        );
+    )";
+
+    const char* createSessionsTable = R"(
+        CREATE TABLE IF NOT EXISTS sessions (
+            session_id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            expires_at DATETIME NOT NULL,
+            active BOOLEAN DEFAULT 1,
+            FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+        );
+    )";
+
     // Create indexes for better performance
     const char* createIndexes = R"(
         CREATE INDEX IF NOT EXISTS idx_events_camera_id ON events(camera_id);
@@ -155,6 +186,12 @@ bool DatabaseManager::createTables() {
         CREATE INDEX IF NOT EXISTS idx_config_key ON config(key);
         CREATE INDEX IF NOT EXISTS idx_camera_config_camera_id ON camera_config(camera_id);
         CREATE INDEX IF NOT EXISTS idx_camera_config_enabled ON camera_config(enabled);
+        CREATE INDEX IF NOT EXISTS idx_users_user_id ON users(user_id);
+        CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+        CREATE INDEX IF NOT EXISTS idx_users_enabled ON users(enabled);
+        CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+        CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
+        CREATE INDEX IF NOT EXISTS idx_sessions_active ON sessions(active);
     )";
 
     char* errMsg = nullptr;
@@ -192,6 +229,19 @@ bool DatabaseManager::createTables() {
 
     if (sqlite3_exec(m_db, createCameraConfigTable, nullptr, nullptr, &errMsg) != SQLITE_OK) {
         m_lastError = "Failed to create camera_config table: " + std::string(errMsg);
+        sqlite3_free(errMsg);
+        return false;
+    }
+
+    // Create user authentication tables (NEW - Phase 2)
+    if (sqlite3_exec(m_db, createUsersTable, nullptr, nullptr, &errMsg) != SQLITE_OK) {
+        m_lastError = "Failed to create users table: " + std::string(errMsg);
+        sqlite3_free(errMsg);
+        return false;
+    }
+
+    if (sqlite3_exec(m_db, createSessionsTable, nullptr, nullptr, &errMsg) != SQLITE_OK) {
+        m_lastError = "Failed to create sessions table: " + std::string(errMsg);
         sqlite3_free(errMsg);
         return false;
     }
@@ -308,6 +358,121 @@ bool DatabaseManager::prepareStatements() {
         return false;
     }
 
+    // Prepare user authentication statements (NEW - Phase 2)
+    const char* insertUserSql = R"(
+        INSERT INTO users (user_id, username, password_hash, role, created_at, enabled)
+        VALUES (?, ?, ?, ?, datetime('now'), ?);
+    )";
+
+    if (sqlite3_prepare_v2(m_db, insertUserSql, -1, &m_insertUserStmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare insert user statement: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    const char* selectUserByIdSql = R"(
+        SELECT id, user_id, username, password_hash, role, created_at, last_login, enabled
+        FROM users WHERE user_id = ? AND enabled = 1;
+    )";
+
+    if (sqlite3_prepare_v2(m_db, selectUserByIdSql, -1, &m_selectUserByIdStmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare select user by id statement: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    const char* selectUserByUsernameSql = R"(
+        SELECT id, user_id, username, password_hash, role, created_at, last_login, enabled
+        FROM users WHERE username = ? AND enabled = 1;
+    )";
+
+    if (sqlite3_prepare_v2(m_db, selectUserByUsernameSql, -1, &m_selectUserByUsernameStmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare select user by username statement: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    const char* updateUserSql = R"(
+        UPDATE users SET username = ?, password_hash = ?, role = ?, enabled = ? WHERE user_id = ?;
+    )";
+
+    if (sqlite3_prepare_v2(m_db, updateUserSql, -1, &m_updateUserStmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare update user statement: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    const char* deleteUserSql = R"(
+        UPDATE users SET enabled = 0 WHERE user_id = ?;
+    )";
+
+    if (sqlite3_prepare_v2(m_db, deleteUserSql, -1, &m_deleteUserStmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare delete user statement: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    const char* updateUserLastLoginSql = R"(
+        UPDATE users SET last_login = datetime('now') WHERE user_id = ?;
+    )";
+
+    if (sqlite3_prepare_v2(m_db, updateUserLastLoginSql, -1, &m_updateUserLastLoginStmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare update user last login statement: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    // Prepare session management statements (NEW - Phase 2)
+    const char* insertSessionSql = R"(
+        INSERT INTO sessions (session_id, user_id, created_at, expires_at, active)
+        VALUES (?, ?, datetime('now'), ?, ?);
+    )";
+
+    if (sqlite3_prepare_v2(m_db, insertSessionSql, -1, &m_insertSessionStmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare insert session statement: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    const char* selectSessionByIdSql = R"(
+        SELECT session_id, user_id, created_at, expires_at, active
+        FROM sessions WHERE session_id = ? AND active = 1 AND expires_at > datetime('now');
+    )";
+
+    if (sqlite3_prepare_v2(m_db, selectSessionByIdSql, -1, &m_selectSessionByIdStmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare select session by id statement: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    const char* updateSessionSql = R"(
+        UPDATE sessions SET expires_at = ?, active = ? WHERE session_id = ?;
+    )";
+
+    if (sqlite3_prepare_v2(m_db, updateSessionSql, -1, &m_updateSessionStmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare update session statement: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    const char* deleteSessionSql = R"(
+        UPDATE sessions SET active = 0 WHERE session_id = ?;
+    )";
+
+    if (sqlite3_prepare_v2(m_db, deleteSessionSql, -1, &m_deleteSessionStmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare delete session statement: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    const char* deleteUserSessionsSql = R"(
+        UPDATE sessions SET active = 0 WHERE user_id = ?;
+    )";
+
+    if (sqlite3_prepare_v2(m_db, deleteUserSessionsSql, -1, &m_deleteUserSessionsStmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare delete user sessions statement: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    const char* deleteExpiredSessionsSql = R"(
+        UPDATE sessions SET active = 0 WHERE expires_at <= datetime('now');
+    )";
+
+    if (sqlite3_prepare_v2(m_db, deleteExpiredSessionsSql, -1, &m_deleteExpiredSessionsStmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare delete expired sessions statement: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
     return true;
 }
 
@@ -377,6 +542,58 @@ void DatabaseManager::finalizeStatements() {
     if (m_deleteCameraConfigStmt) {
         sqlite3_finalize(m_deleteCameraConfigStmt);
         m_deleteCameraConfigStmt = nullptr;
+    }
+
+    // Finalize user authentication statements (NEW - Phase 2)
+    if (m_insertUserStmt) {
+        sqlite3_finalize(m_insertUserStmt);
+        m_insertUserStmt = nullptr;
+    }
+    if (m_selectUserByIdStmt) {
+        sqlite3_finalize(m_selectUserByIdStmt);
+        m_selectUserByIdStmt = nullptr;
+    }
+    if (m_selectUserByUsernameStmt) {
+        sqlite3_finalize(m_selectUserByUsernameStmt);
+        m_selectUserByUsernameStmt = nullptr;
+    }
+    if (m_updateUserStmt) {
+        sqlite3_finalize(m_updateUserStmt);
+        m_updateUserStmt = nullptr;
+    }
+    if (m_deleteUserStmt) {
+        sqlite3_finalize(m_deleteUserStmt);
+        m_deleteUserStmt = nullptr;
+    }
+    if (m_updateUserLastLoginStmt) {
+        sqlite3_finalize(m_updateUserLastLoginStmt);
+        m_updateUserLastLoginStmt = nullptr;
+    }
+
+    // Finalize session management statements (NEW - Phase 2)
+    if (m_insertSessionStmt) {
+        sqlite3_finalize(m_insertSessionStmt);
+        m_insertSessionStmt = nullptr;
+    }
+    if (m_selectSessionByIdStmt) {
+        sqlite3_finalize(m_selectSessionByIdStmt);
+        m_selectSessionByIdStmt = nullptr;
+    }
+    if (m_updateSessionStmt) {
+        sqlite3_finalize(m_updateSessionStmt);
+        m_updateSessionStmt = nullptr;
+    }
+    if (m_deleteSessionStmt) {
+        sqlite3_finalize(m_deleteSessionStmt);
+        m_deleteSessionStmt = nullptr;
+    }
+    if (m_deleteUserSessionsStmt) {
+        sqlite3_finalize(m_deleteUserSessionsStmt);
+        m_deleteUserSessionsStmt = nullptr;
+    }
+    if (m_deleteExpiredSessionsStmt) {
+        sqlite3_finalize(m_deleteExpiredSessionsStmt);
+        m_deleteExpiredSessionsStmt = nullptr;
     }
 }
 
@@ -1438,4 +1655,411 @@ bool DatabaseManager::resetDetectionCategories() {
     }
 
     return result;
+}
+
+// User authentication operations implementation (NEW - Phase 2)
+bool DatabaseManager::insertUser(const UserRecord& user) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_insertUserStmt) {
+        m_lastError = "Insert user statement not prepared";
+        return false;
+    }
+
+    // Reset statement
+    sqlite3_reset(m_insertUserStmt);
+
+    // Bind parameters
+    sqlite3_bind_text(m_insertUserStmt, 1, user.user_id.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(m_insertUserStmt, 2, user.username.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(m_insertUserStmt, 3, user.password_hash.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(m_insertUserStmt, 4, user.role.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int(m_insertUserStmt, 5, user.enabled ? 1 : 0);
+
+    // Execute
+    int rc = sqlite3_step(m_insertUserStmt);
+    if (rc != SQLITE_DONE) {
+        m_lastError = "Failed to insert user: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    return true;
+}
+
+UserRecord DatabaseManager::getUserById(const std::string& userId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    UserRecord user;
+
+    if (!m_selectUserByIdStmt) {
+        m_lastError = "Select user by id statement not prepared";
+        return user;
+    }
+
+    // Reset statement
+    sqlite3_reset(m_selectUserByIdStmt);
+
+    // Bind parameters
+    sqlite3_bind_text(m_selectUserByIdStmt, 1, userId.c_str(), -1, SQLITE_STATIC);
+
+    // Execute
+    if (sqlite3_step(m_selectUserByIdStmt) == SQLITE_ROW) {
+        user.id = sqlite3_column_int(m_selectUserByIdStmt, 0);
+        user.user_id = reinterpret_cast<const char*>(sqlite3_column_text(m_selectUserByIdStmt, 1));
+        user.username = reinterpret_cast<const char*>(sqlite3_column_text(m_selectUserByIdStmt, 2));
+        user.password_hash = reinterpret_cast<const char*>(sqlite3_column_text(m_selectUserByIdStmt, 3));
+        user.role = reinterpret_cast<const char*>(sqlite3_column_text(m_selectUserByIdStmt, 4));
+
+        const char* createdAt = reinterpret_cast<const char*>(sqlite3_column_text(m_selectUserByIdStmt, 5));
+        if (createdAt) user.created_at = createdAt;
+
+        const char* lastLogin = reinterpret_cast<const char*>(sqlite3_column_text(m_selectUserByIdStmt, 6));
+        if (lastLogin) user.last_login = lastLogin;
+
+        user.enabled = sqlite3_column_int(m_selectUserByIdStmt, 7) == 1;
+    }
+
+    return user;
+}
+
+UserRecord DatabaseManager::getUserByUsername(const std::string& username) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    UserRecord user;
+
+    if (!m_selectUserByUsernameStmt) {
+        m_lastError = "Select user by username statement not prepared";
+        return user;
+    }
+
+    // Reset statement
+    sqlite3_reset(m_selectUserByUsernameStmt);
+
+    // Bind parameters
+    sqlite3_bind_text(m_selectUserByUsernameStmt, 1, username.c_str(), -1, SQLITE_STATIC);
+
+    // Execute
+    if (sqlite3_step(m_selectUserByUsernameStmt) == SQLITE_ROW) {
+        user.id = sqlite3_column_int(m_selectUserByUsernameStmt, 0);
+        user.user_id = reinterpret_cast<const char*>(sqlite3_column_text(m_selectUserByUsernameStmt, 1));
+        user.username = reinterpret_cast<const char*>(sqlite3_column_text(m_selectUserByUsernameStmt, 2));
+        user.password_hash = reinterpret_cast<const char*>(sqlite3_column_text(m_selectUserByUsernameStmt, 3));
+        user.role = reinterpret_cast<const char*>(sqlite3_column_text(m_selectUserByUsernameStmt, 4));
+
+        const char* createdAt = reinterpret_cast<const char*>(sqlite3_column_text(m_selectUserByUsernameStmt, 5));
+        if (createdAt) user.created_at = createdAt;
+
+        const char* lastLogin = reinterpret_cast<const char*>(sqlite3_column_text(m_selectUserByUsernameStmt, 6));
+        if (lastLogin) user.last_login = lastLogin;
+
+        user.enabled = sqlite3_column_int(m_selectUserByUsernameStmt, 7) == 1;
+    }
+
+    return user;
+}
+
+bool DatabaseManager::updateUser(const UserRecord& user) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_updateUserStmt) {
+        m_lastError = "Update user statement not prepared";
+        return false;
+    }
+
+    // Reset statement
+    sqlite3_reset(m_updateUserStmt);
+
+    // Bind parameters
+    sqlite3_bind_text(m_updateUserStmt, 1, user.username.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(m_updateUserStmt, 2, user.password_hash.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(m_updateUserStmt, 3, user.role.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int(m_updateUserStmt, 4, user.enabled ? 1 : 0);
+    sqlite3_bind_text(m_updateUserStmt, 5, user.user_id.c_str(), -1, SQLITE_STATIC);
+
+    // Execute
+    int rc = sqlite3_step(m_updateUserStmt);
+    if (rc != SQLITE_DONE) {
+        m_lastError = "Failed to update user: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    return true;
+}
+
+bool DatabaseManager::deleteUser(const std::string& userId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_deleteUserStmt) {
+        m_lastError = "Delete user statement not prepared";
+        return false;
+    }
+
+    // Reset statement
+    sqlite3_reset(m_deleteUserStmt);
+
+    // Bind parameters
+    sqlite3_bind_text(m_deleteUserStmt, 1, userId.c_str(), -1, SQLITE_STATIC);
+
+    // Execute
+    int rc = sqlite3_step(m_deleteUserStmt);
+    if (rc != SQLITE_DONE) {
+        m_lastError = "Failed to delete user: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    return true;
+}
+
+bool DatabaseManager::updateUserLastLogin(const std::string& userId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_updateUserLastLoginStmt) {
+        m_lastError = "Update user last login statement not prepared";
+        return false;
+    }
+
+    // Reset statement
+    sqlite3_reset(m_updateUserLastLoginStmt);
+
+    // Bind parameters
+    sqlite3_bind_text(m_updateUserLastLoginStmt, 1, userId.c_str(), -1, SQLITE_STATIC);
+
+    // Execute
+    int rc = sqlite3_step(m_updateUserLastLoginStmt);
+    if (rc != SQLITE_DONE) {
+        m_lastError = "Failed to update user last login: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    return true;
+}
+
+std::vector<UserRecord> DatabaseManager::getAllUsers() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    std::vector<UserRecord> users;
+
+    const char* query = R"(
+        SELECT id, user_id, username, password_hash, role, created_at, last_login, enabled
+        FROM users WHERE enabled = 1 ORDER BY created_at DESC
+    )";
+
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(m_db, query, -1, &stmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare select all users query: " + std::string(sqlite3_errmsg(m_db));
+        return users;
+    }
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        UserRecord user;
+        user.id = sqlite3_column_int(stmt, 0);
+        user.user_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+        user.username = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+        user.password_hash = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+        user.role = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
+
+        const char* createdAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
+        if (createdAt) user.created_at = createdAt;
+
+        const char* lastLogin = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6));
+        if (lastLogin) user.last_login = lastLogin;
+
+        user.enabled = sqlite3_column_int(stmt, 7) == 1;
+        users.push_back(user);
+    }
+
+    sqlite3_finalize(stmt);
+    return users;
+}
+
+// Session management operations implementation (NEW - Phase 2)
+bool DatabaseManager::insertSession(const SessionRecord& session) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_insertSessionStmt) {
+        m_lastError = "Insert session statement not prepared";
+        return false;
+    }
+
+    // Reset statement
+    sqlite3_reset(m_insertSessionStmt);
+
+    // Bind parameters
+    sqlite3_bind_text(m_insertSessionStmt, 1, session.session_id.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(m_insertSessionStmt, 2, session.user_id.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(m_insertSessionStmt, 3, session.expires_at.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int(m_insertSessionStmt, 4, session.active ? 1 : 0);
+
+    // Execute
+    int rc = sqlite3_step(m_insertSessionStmt);
+    if (rc != SQLITE_DONE) {
+        m_lastError = "Failed to insert session: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    return true;
+}
+
+SessionRecord DatabaseManager::getSessionById(const std::string& sessionId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    SessionRecord session;
+
+    if (!m_selectSessionByIdStmt) {
+        m_lastError = "Select session by id statement not prepared";
+        return session;
+    }
+
+    // Reset statement
+    sqlite3_reset(m_selectSessionByIdStmt);
+
+    // Bind parameters
+    sqlite3_bind_text(m_selectSessionByIdStmt, 1, sessionId.c_str(), -1, SQLITE_STATIC);
+
+    // Execute
+    if (sqlite3_step(m_selectSessionByIdStmt) == SQLITE_ROW) {
+        session.session_id = reinterpret_cast<const char*>(sqlite3_column_text(m_selectSessionByIdStmt, 0));
+        session.user_id = reinterpret_cast<const char*>(sqlite3_column_text(m_selectSessionByIdStmt, 1));
+
+        const char* createdAt = reinterpret_cast<const char*>(sqlite3_column_text(m_selectSessionByIdStmt, 2));
+        if (createdAt) session.created_at = createdAt;
+
+        const char* expiresAt = reinterpret_cast<const char*>(sqlite3_column_text(m_selectSessionByIdStmt, 3));
+        if (expiresAt) session.expires_at = expiresAt;
+
+        session.active = sqlite3_column_int(m_selectSessionByIdStmt, 4) == 1;
+    }
+
+    return session;
+}
+
+bool DatabaseManager::updateSession(const SessionRecord& session) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_updateSessionStmt) {
+        m_lastError = "Update session statement not prepared";
+        return false;
+    }
+
+    // Reset statement
+    sqlite3_reset(m_updateSessionStmt);
+
+    // Bind parameters
+    sqlite3_bind_text(m_updateSessionStmt, 1, session.expires_at.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int(m_updateSessionStmt, 2, session.active ? 1 : 0);
+    sqlite3_bind_text(m_updateSessionStmt, 3, session.session_id.c_str(), -1, SQLITE_STATIC);
+
+    // Execute
+    int rc = sqlite3_step(m_updateSessionStmt);
+    if (rc != SQLITE_DONE) {
+        m_lastError = "Failed to update session: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    return true;
+}
+
+bool DatabaseManager::deleteSession(const std::string& sessionId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_deleteSessionStmt) {
+        m_lastError = "Delete session statement not prepared";
+        return false;
+    }
+
+    // Reset statement
+    sqlite3_reset(m_deleteSessionStmt);
+
+    // Bind parameters
+    sqlite3_bind_text(m_deleteSessionStmt, 1, sessionId.c_str(), -1, SQLITE_STATIC);
+
+    // Execute
+    int rc = sqlite3_step(m_deleteSessionStmt);
+    if (rc != SQLITE_DONE) {
+        m_lastError = "Failed to delete session: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    return true;
+}
+
+bool DatabaseManager::deleteUserSessions(const std::string& userId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_deleteUserSessionsStmt) {
+        m_lastError = "Delete user sessions statement not prepared";
+        return false;
+    }
+
+    // Reset statement
+    sqlite3_reset(m_deleteUserSessionsStmt);
+
+    // Bind parameters
+    sqlite3_bind_text(m_deleteUserSessionsStmt, 1, userId.c_str(), -1, SQLITE_STATIC);
+
+    // Execute
+    int rc = sqlite3_step(m_deleteUserSessionsStmt);
+    if (rc != SQLITE_DONE) {
+        m_lastError = "Failed to delete user sessions: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    return true;
+}
+
+bool DatabaseManager::deleteExpiredSessions() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (!m_deleteExpiredSessionsStmt) {
+        m_lastError = "Delete expired sessions statement not prepared";
+        return false;
+    }
+
+    // Reset statement
+    sqlite3_reset(m_deleteExpiredSessionsStmt);
+
+    // Execute
+    int rc = sqlite3_step(m_deleteExpiredSessionsStmt);
+    if (rc != SQLITE_DONE) {
+        m_lastError = "Failed to delete expired sessions: " + std::string(sqlite3_errmsg(m_db));
+        return false;
+    }
+
+    return true;
+}
+
+std::vector<SessionRecord> DatabaseManager::getActiveSessions(const std::string& userId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    std::vector<SessionRecord> sessions;
+
+    std::string query = R"(
+        SELECT session_id, user_id, created_at, expires_at, active
+        FROM sessions WHERE active = 1 AND expires_at > datetime('now')
+    )";
+
+    if (!userId.empty()) {
+        query += " AND user_id = '" + userId + "'";
+    }
+
+    query += " ORDER BY created_at DESC";
+
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(m_db, query.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+        m_lastError = "Failed to prepare select active sessions query: " + std::string(sqlite3_errmsg(m_db));
+        return sessions;
+    }
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        SessionRecord session;
+        session.session_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+        session.user_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+
+        const char* createdAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+        if (createdAt) session.created_at = createdAt;
+
+        const char* expiresAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+        if (expiresAt) session.expires_at = expiresAt;
+
+        session.active = sqlite3_column_int(stmt, 4) == 1;
+        sessions.push_back(session);
+    }
+
+    sqlite3_finalize(stmt);
+    return sessions;
 }

@@ -35,6 +35,9 @@ public:
 
     // Alert retrieval handlers
     void handleGetAlerts(const std::string& request, std::string& response);
+    void handleGetAlert(const std::string& alertId, std::string& response);
+    void handleDeleteAlert(const std::string& alertId, std::string& response);
+    void handleMarkAlertAsRead(const std::string& alertId, std::string& response);
 
 private:
     std::string getControllerName() const override { return "AlertController"; }

@@ -273,6 +273,13 @@ std::string SystemController::createFileResponse(const std::string& content, con
 
 void SystemController::handleGetSystemConfig(const std::string& request, std::string& response) {
     try {
+        // Initialize database
+        DatabaseManager dbManager;
+        if (!dbManager.initialize()) {
+            response = createErrorResponse("Failed to initialize database", 500);
+            return;
+        }
+
         std::ostringstream json;
         json << "{"
              << "\"system_name\":\"AI Security Vision System\","
@@ -280,33 +287,213 @@ void SystemController::handleGetSystemConfig(const std::string& request, std::st
              << "\"debug_mode\":false,"
              << "\"log_level\":\"INFO\","
              << "\"max_pipelines\":10,"
-             << "\"monitoring_interval\":1000,"
-             << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
+             << "\"monitoring_interval\":1000,";
+
+        // Add AI configuration
+        json << "\"ai\":{";
+
+        // Load AI config from database with defaults
+        std::string confidenceThreshold = dbManager.getConfig("ai", "confidence_threshold", "0.25");
+        std::string nmsThreshold = dbManager.getConfig("ai", "nms_threshold", "0.45");
+        std::string maxDetections = dbManager.getConfig("ai", "max_detections", "100");
+        std::string detectionInterval = dbManager.getConfig("ai", "detection_interval", "1.0");
+        std::string enabled = dbManager.getConfig("ai", "enabled", "true");
+
+        json << "\"confidenceThreshold\":" << confidenceThreshold << ","
+             << "\"nmsThreshold\":" << nmsThreshold << ","
+             << "\"maxDetections\":" << maxDetections << ","
+             << "\"detectionInterval\":" << detectionInterval << ","
+             << "\"enabled\":" << (enabled == "true" ? "true" : "false");
+
+        json << "},";
+
+        // Add person statistics configuration
+        json << "\"personStats\":{";
+
+        std::string personEnabled = dbManager.getConfig("person_stats", "enabled", "false");
+        std::string genderThreshold = dbManager.getConfig("person_stats", "gender_threshold", "0.7");
+        std::string ageThreshold = dbManager.getConfig("person_stats", "age_threshold", "0.7");
+        std::string batchSize = dbManager.getConfig("person_stats", "batch_size", "10");
+        std::string enableCaching = dbManager.getConfig("person_stats", "enable_caching", "true");
+
+        json << "\"enabled\":" << (personEnabled == "true" ? "true" : "false") << ","
+             << "\"genderThreshold\":" << genderThreshold << ","
+             << "\"ageThreshold\":" << ageThreshold << ","
+             << "\"batchSize\":" << batchSize << ","
+             << "\"enableCaching\":" << (enableCaching == "true" ? "true" : "false");
+
+        json << "},";
+
+        json << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
              << "}";
 
         response = createJsonResponse(json.str());
-        logInfo("Returned system configuration");
+        logInfo("Returned system configuration with AI and person stats config");
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to get system config: " + std::string(e.what()), 500);
+        logError("Exception in handleGetSystemConfig: " + std::string(e.what()));
     }
 }
 
 void SystemController::handlePostSystemConfig(const std::string& request, std::string& response) {
     try {
-        // TODO: Parse and apply system configuration changes
+        logInfo("Received system config update request: " + request);
+
+        // Parse JSON request
+        nlohmann::json configJson;
+        try {
+            configJson = nlohmann::json::parse(request);
+        } catch (const std::exception& e) {
+            response = createErrorResponse("Invalid JSON format: " + std::string(e.what()), 400);
+            return;
+        }
+
+        // Initialize database
+        DatabaseManager dbManager;
+        if (!dbManager.initialize()) {
+            response = createErrorResponse("Failed to initialize database", 500);
+            return;
+        }
+
+        bool hasUpdates = false;
+        std::vector<std::string> updatedSections;
+
+        // Handle AI configuration
+        if (configJson.contains("ai")) {
+            const auto& aiConfig = configJson["ai"];
+
+            if (aiConfig.contains("confidenceThreshold")) {
+                double threshold = aiConfig["confidenceThreshold"];
+                dbManager.saveConfig("ai", "confidence_threshold", std::to_string(threshold));
+                hasUpdates = true;
+            }
+
+            if (aiConfig.contains("nmsThreshold")) {
+                double threshold = aiConfig["nmsThreshold"];
+                dbManager.saveConfig("ai", "nms_threshold", std::to_string(threshold));
+                hasUpdates = true;
+            }
+
+            if (aiConfig.contains("maxDetections")) {
+                int maxDet = aiConfig["maxDetections"];
+                dbManager.saveConfig("ai", "max_detections", std::to_string(maxDet));
+                hasUpdates = true;
+            }
+
+            if (aiConfig.contains("detectionInterval")) {
+                double interval = aiConfig["detectionInterval"];
+                dbManager.saveConfig("ai", "detection_interval", std::to_string(interval));
+                hasUpdates = true;
+            }
+
+            if (aiConfig.contains("enabled")) {
+                bool enabled = aiConfig["enabled"];
+                dbManager.saveConfig("ai", "enabled", enabled ? "true" : "false");
+                hasUpdates = true;
+            }
+
+            if (hasUpdates) {
+                updatedSections.push_back("AI");
+                logInfo("Updated AI configuration");
+            }
+        }
+
+        // Handle person statistics configuration
+        if (configJson.contains("personStats")) {
+            const auto& personConfig = configJson["personStats"];
+
+            if (personConfig.contains("enabled")) {
+                bool enabled = personConfig["enabled"];
+                dbManager.saveConfig("person_stats", "enabled", enabled ? "true" : "false");
+                hasUpdates = true;
+            }
+
+            if (personConfig.contains("genderThreshold")) {
+                double threshold = personConfig["genderThreshold"];
+                dbManager.saveConfig("person_stats", "gender_threshold", std::to_string(threshold));
+                hasUpdates = true;
+            }
+
+            if (personConfig.contains("ageThreshold")) {
+                double threshold = personConfig["ageThreshold"];
+                dbManager.saveConfig("person_stats", "age_threshold", std::to_string(threshold));
+                hasUpdates = true;
+            }
+
+            if (personConfig.contains("batchSize")) {
+                int batchSize = personConfig["batchSize"];
+                dbManager.saveConfig("person_stats", "batch_size", std::to_string(batchSize));
+                hasUpdates = true;
+            }
+
+            if (personConfig.contains("enableCaching")) {
+                bool caching = personConfig["enableCaching"];
+                dbManager.saveConfig("person_stats", "enable_caching", caching ? "true" : "false");
+                hasUpdates = true;
+            }
+
+            if (hasUpdates) {
+                updatedSections.push_back("Person Statistics");
+                logInfo("Updated person statistics configuration");
+            }
+        }
+
+        // Handle system configuration
+        if (configJson.contains("system")) {
+            const auto& sysConfig = configJson["system"];
+
+            if (sysConfig.contains("systemName")) {
+                std::string name = sysConfig["systemName"];
+                dbManager.saveConfig("system", "system_name", name);
+                hasUpdates = true;
+            }
+
+            if (sysConfig.contains("debugMode")) {
+                bool debug = sysConfig["debugMode"];
+                dbManager.saveConfig("system", "debug_mode", debug ? "true" : "false");
+                hasUpdates = true;
+            }
+
+            if (sysConfig.contains("logLevel")) {
+                std::string level = sysConfig["logLevel"];
+                dbManager.saveConfig("system", "log_level", level);
+                hasUpdates = true;
+            }
+
+            if (hasUpdates) {
+                updatedSections.push_back("System");
+                logInfo("Updated system configuration");
+            }
+        }
+
+        if (!hasUpdates) {
+            response = createErrorResponse("No valid configuration updates found", 400);
+            return;
+        }
+
+        // Create success response
         std::ostringstream json;
         json << "{"
              << "\"status\":\"success\","
-             << "\"message\":\"System configuration updated\","
+             << "\"message\":\"Configuration updated successfully\","
+             << "\"updated_sections\":[";
+
+        for (size_t i = 0; i < updatedSections.size(); ++i) {
+            if (i > 0) json << ",";
+            json << "\"" << updatedSections[i] << "\"";
+        }
+
+        json << "],"
              << "\"updated_at\":\"" << getCurrentTimestamp() << "\""
              << "}";
 
         response = createJsonResponse(json.str());
-        logInfo("System configuration updated");
+        logInfo("System configuration updated successfully");
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to update system config: " + std::string(e.what()), 500);
+        logError("Exception in handlePostSystemConfig: " + std::string(e.what()));
     }
 }
 

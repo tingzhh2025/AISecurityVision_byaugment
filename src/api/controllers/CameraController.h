@@ -59,11 +59,20 @@ public:
     void handleGetDiscoverDevices(const std::string& request, std::string& response);
     void handlePostAddDiscoveredDevice(const std::string& request, std::string& response);
 
+    // Camera CRUD operations (NEW - Phase 1)
+    void handleGetCamera(const std::string& cameraId, std::string& response);
+    void handleUpdateCamera(const std::string& cameraId, const std::string& request, std::string& response);
+    void handleDeleteCamera(const std::string& cameraId, std::string& response);
+    void handleTestCamera(const std::string& request, std::string& response);
+
     // Detection category filtering endpoints
     void handleGetDetectionCategories(const std::string& request, std::string& response);
     void handlePostDetectionCategories(const std::string& request, std::string& response);
     void handleGetAvailableCategories(const std::string& request, std::string& response);
     void handleGetDetectionConfig(const std::string& request, std::string& response);
+    void handlePostDetectionConfig(const std::string& request, std::string& response);
+    void handlePutDetectionConfig(const std::string& request, std::string& response);
+    void handleGetDetectionStats(const std::string& request, std::string& response);
 
     // Streaming configuration endpoints
     void handlePostStreamConfig(const std::string& request, std::string& response);
@@ -118,6 +127,7 @@ public:
 
     // Configuration management
     void clearInMemoryConfigurations();
+    void loadCameraConfigsFromDatabase();
     const std::vector<CameraConfig>& getCameraConfigs() const { return m_cameraConfigs; }
 
 private:
@@ -130,6 +140,9 @@ private:
     std::string serializeCameraConfig(const CameraConfig& config);
     std::string serializeCameraConfigList(const std::vector<CameraConfig>& configs);
     bool deserializeCameraConfig(const std::string& json, CameraConfig& config);
+
+    // Helper methods
+    std::string extractIpFromUrl(const std::string& url);
 };
 
 } // namespace AISecurityVision

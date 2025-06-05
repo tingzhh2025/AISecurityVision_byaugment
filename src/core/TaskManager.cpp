@@ -88,7 +88,8 @@ bool TaskManager::addVideoSource(const VideoSource& source) {
         return false;
     }
 
-    std::lock_guard<std::mutex> lock(m_mutex);
+    // Use a separate mutex for pipeline initialization to avoid blocking other operations
+    std::unique_lock<std::mutex> lock(m_mutex);
 
     if (m_pipelines.size() >= MAX_PIPELINES) {
         LOG_ERROR() << "[TaskManager] Maximum pipeline limit reached: " << MAX_PIPELINES;
@@ -101,19 +102,38 @@ bool TaskManager::addVideoSource(const VideoSource& source) {
     }
 
     try {
-        auto pipeline = std::make_shared<VideoPipeline>(source);
-        if (pipeline->initialize()) {
-            m_pipelines[source.id] = pipeline;
-            pipeline->start();
+        LOG_INFO() << "[TaskManager] Creating pipeline for: " << source.id;
 
+        // Create pipeline object first
+        auto pipeline = std::make_shared<VideoPipeline>(source);
+
+        // Add to pipelines map immediately to prevent duplicate additions
+        m_pipelines[source.id] = pipeline;
+
+        // Release lock before expensive initialization
+        lock.unlock();
+
+        // Initialize pipeline (this may take time)
+        if (pipeline->initialize()) {
+            pipeline->start();
             LOG_INFO() << "[TaskManager] Added video source: " << source.id
                       << " (" << source.protocol << ")";
             return true;
         } else {
+            // Remove from map if initialization failed
+            lock.lock();
+            m_pipelines.erase(source.id);
+            lock.unlock();
+
             LOG_ERROR() << "[TaskManager] Failed to initialize pipeline for: " << source.id;
             return false;
         }
     } catch (const std::exception& e) {
+        // Remove from map if exception occurred
+        lock.lock();
+        m_pipelines.erase(source.id);
+        lock.unlock();
+
         LOG_ERROR() << "[TaskManager] Exception creating pipeline: " << e.what();
         return false;
     }

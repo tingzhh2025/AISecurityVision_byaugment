@@ -4,10 +4,15 @@
 #include "controllers/PersonStatsController.h"
 #include "controllers/AlertController.h"
 #include "controllers/NetworkController.h"
+#include "controllers/AuthController.h"
+#include "controllers/RecordingController.h"
+#include "controllers/LogController.h"
+#include "controllers/StatisticsController.h"
 #include "../core/TaskManager.h"
 #include "../onvif/ONVIFDiscovery.h"
 #include "../network/NetworkManager.h"
 #include "../core/Logger.h"
+#include "../database/DatabaseManager.h"
 #include <sstream>
 #include <nlohmann/json.hpp>
 
@@ -15,6 +20,10 @@ using namespace AISecurityVision;
 
 APIService::APIService(int port) : m_port(port), m_httpServer(std::make_unique<httplib::Server>()) {
     LOG_INFO() << "[APIService] Initializing API service on port " << port;
+
+    // Configure server timeouts for video stream operations
+    m_httpServer->set_read_timeout(30, 0);  // 30 seconds read timeout
+    m_httpServer->set_write_timeout(30, 0); // 30 seconds write timeout
 
     // Initialize shared system components
     // Note: TaskManager is a singleton, we'll access it via getInstance() when needed
@@ -43,6 +52,10 @@ APIService::APIService(int port) : m_port(port), m_httpServer(std::make_unique<h
     m_personStatsController = std::make_unique<PersonStatsController>();
     m_alertController = std::make_unique<AlertController>();
     m_networkController = std::make_unique<NetworkController>();
+    m_authController = std::make_unique<AuthController>(); // NEW - Phase 2
+    m_recordingController = std::make_unique<RecordingController>(); // NEW - Phase 3
+    m_logController = std::make_unique<LogController>(); // NEW - Phase 3
+    m_statisticsController = std::make_unique<StatisticsController>(); // NEW - Phase 3
 
     // Initialize controllers with shared components
     // TaskManager is a singleton, pass reference to the instance
@@ -52,6 +65,19 @@ APIService::APIService(int port) : m_port(port), m_httpServer(std::make_unique<h
     m_personStatsController->initialize(&taskManager, m_onvifManager.get(), m_networkManager.get());
     m_alertController->initialize(&taskManager, m_onvifManager.get(), m_networkManager.get());
     m_networkController->initialize(&taskManager, m_onvifManager.get(), m_networkManager.get());
+    m_recordingController->initialize(&taskManager, m_onvifManager.get(), m_networkManager.get());
+    m_logController->initialize(&taskManager, m_onvifManager.get(), m_networkManager.get());
+    m_statisticsController->initialize(&taskManager, m_onvifManager.get(), m_networkManager.get());
+
+    // Initialize authentication controller (NEW - Phase 2)
+    auto dbManager = std::make_shared<DatabaseManager>();
+    if (!dbManager->initialize()) {
+        LOG_ERROR() << "[APIService] Failed to initialize database for authentication";
+    } else if (!m_authController->initialize(dbManager)) {
+        LOG_ERROR() << "[APIService] Failed to initialize authentication controller";
+    } else {
+        LOG_INFO() << "[APIService] Authentication controller initialized";
+    }
 
     LOG_INFO() << "[APIService] All controllers initialized";
 
@@ -120,6 +146,14 @@ void APIService::clearInMemoryConfigurations() {
         m_cameraController->clearInMemoryConfigurations();
     }
     LOG_INFO() << "[APIService] In-memory camera configurations cleared";
+}
+
+void APIService::reloadCameraConfigurations() {
+    LOG_INFO() << "[APIService] Reloading camera configurations from database";
+    if (m_cameraController) {
+        m_cameraController->loadCameraConfigsFromDatabase();
+    }
+    LOG_INFO() << "[APIService] Camera configurations reloaded";
 }
 
 void APIService::serverThread() {
@@ -229,6 +263,22 @@ void APIService::setupRoutes() {
         addCorsHeaders(res);
     });
 
+    // Save camera configuration to database
+    m_httpServer->Post("/api/cameras/config", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        m_cameraController->handlePostCameraConfig(req.body, response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    // Get camera configurations from database
+    m_httpServer->Get("/api/cameras/config", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        m_cameraController->handleGetCameraConfigs("", response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
     // Test camera connection
     m_httpServer->Post("/api/cameras/test-connection", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
         std::string response;
@@ -237,10 +287,30 @@ void APIService::setupRoutes() {
         addCorsHeaders(res);
     });
 
-    // Test camera (alias for compatibility)
+    // Test camera (enhanced for frontend compatibility)
     m_httpServer->Post("/api/cameras/test", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
         std::string response;
-        m_cameraController->handleTestCameraConnection(req.body, response);
+        m_cameraController->handleTestCamera(req.body, response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    // Test camera (GET version for frontend compatibility)
+    m_httpServer->Get("/api/cameras/test", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        // Extract query parameters for testing
+        std::string cameraId = req.get_param_value("camera_id");
+        std::string rtspUrl = req.get_param_value("rtsp_url");
+
+        nlohmann::json testRequest;
+        if (!cameraId.empty()) {
+            testRequest["camera_id"] = cameraId;
+        }
+        if (!rtspUrl.empty()) {
+            testRequest["rtsp_url"] = rtspUrl;
+        }
+
+        std::string response;
+        m_cameraController->handleTestCamera(testRequest.dump(), response);
         res.set_content(stripHttpHeaders(response), "application/json");
         addCorsHeaders(res);
     });
@@ -390,6 +460,31 @@ void APIService::setupRoutes() {
         addCorsHeaders(res);
     });
 
+    // Alert management endpoints (NEW - Phase 3)
+    m_httpServer->Get(R"(/api/alerts/([^/]+)$)", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string alertId = req.matches[1];
+        std::string response;
+        m_alertController->handleGetAlert(alertId, response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    m_httpServer->Delete(R"(/api/alerts/([^/]+)$)", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string alertId = req.matches[1];
+        std::string response;
+        m_alertController->handleDeleteAlert(alertId, response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    m_httpServer->Put(R"(/api/alerts/([^/]+)/read$)", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string alertId = req.matches[1];
+        std::string response;
+        m_alertController->handleMarkAlertAsRead(alertId, response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
     // ========== Network management ==========
     m_httpServer->Get("/api/network/interfaces", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
         std::string response;
@@ -424,31 +519,188 @@ void APIService::setupRoutes() {
         res.status = 501; // Not Implemented
     };
 
-    // Camera CRUD operations (placeholders)
-    m_httpServer->Get(R"(/api/cameras/([^/]+)$)", notImplementedHandler);
-    m_httpServer->Put(R"(/api/cameras/([^/]+)$)", notImplementedHandler);
-    m_httpServer->Delete(R"(/api/cameras/([^/]+)$)", notImplementedHandler);
+    // Camera CRUD operations (Phase 1 Implementation)
+    // Get specific camera
+    m_httpServer->Get(R"(/api/cameras/([^/]+)$)", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string cameraId = req.matches[1];
+        std::string response;
+        m_cameraController->handleGetCamera(cameraId, response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
 
-    // Detection config and stats (placeholders)
-    m_httpServer->Put("/api/detection/config", notImplementedHandler);
-    m_httpServer->Get("/api/detection/stats", notImplementedHandler);
+    // Update specific camera
+    m_httpServer->Put(R"(/api/cameras/([^/]+)$)", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string cameraId = req.matches[1];
+        std::string response;
+        m_cameraController->handleUpdateCamera(cameraId, req.body, response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
 
-    // Recording management (placeholders)
-    m_httpServer->Get("/api/recordings", notImplementedHandler);
-    m_httpServer->Get(R"(/api/recordings/([^/]+))", notImplementedHandler);
-    m_httpServer->Delete(R"(/api/recordings/([^/]+))", notImplementedHandler);
+    // Delete specific camera
+    m_httpServer->Delete(R"(/api/cameras/([^/]+)$)", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string cameraId = req.matches[1];
+        std::string response;
+        m_cameraController->handleDeleteCamera(cameraId, response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
 
-    // Logs and statistics (placeholders)
-    m_httpServer->Get("/api/logs", notImplementedHandler);
-    m_httpServer->Get("/api/statistics", notImplementedHandler);
+    // Detection config and stats (Phase 1 Implementation)
+    // Update detection configuration
+    m_httpServer->Put("/api/detection/config", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        m_cameraController->handlePutDetectionConfig(req.body, response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
 
-    // Authentication (placeholders)
-    m_httpServer->Post("/api/auth/login", notImplementedHandler);
-    m_httpServer->Post("/api/auth/logout", notImplementedHandler);
-    m_httpServer->Get("/api/auth/user", notImplementedHandler);
+    // Get detection statistics
+    m_httpServer->Get("/api/detection/stats", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        m_cameraController->handleGetDetectionStats("", response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    // ========== Recording management endpoints (NEW - Phase 3) ==========
+    m_httpServer->Get("/api/recordings", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        m_recordingController->handleGetRecordings("", response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    m_httpServer->Get(R"(/api/recordings/([^/]+)$)", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string recordingId = req.matches[1];
+        std::string response;
+        m_recordingController->handleGetRecording(recordingId, response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    m_httpServer->Delete(R"(/api/recordings/([^/]+)$)", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string recordingId = req.matches[1];
+        std::string response;
+        m_recordingController->handleDeleteRecording(recordingId, response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    m_httpServer->Get(R"(/api/recordings/([^/]+)/download$)", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string recordingId = req.matches[1];
+        std::string response;
+        m_recordingController->handleDownloadRecording(recordingId, response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    // ========== Log management endpoints (NEW - Phase 3) ==========
+    m_httpServer->Get("/api/logs", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        m_logController->handleGetLogs("", response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    // ========== Statistics endpoints (NEW - Phase 3) ==========
+    m_httpServer->Get("/api/statistics", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        m_statisticsController->handleGetStatistics("", response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    // ========== Authentication endpoints (NEW - Phase 2) ==========
+    // User login
+    m_httpServer->Post("/api/auth/login", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        m_authController->handleLogin(req.body, response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    // User logout
+    m_httpServer->Post("/api/auth/logout", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        m_authController->handleLogout(req.body, response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    // Get current user information
+    m_httpServer->Get("/api/auth/user", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string authHeader = req.get_header_value("Authorization");
+        std::string response;
+        m_authController->handleGetCurrentUser(authHeader, response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    // Token validation
+    m_httpServer->Post("/api/auth/validate", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        m_authController->handleValidateToken(req.body, response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    // Token refresh
+    m_httpServer->Post("/api/auth/refresh", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string response;
+        m_authController->handleRefreshToken(req.body, response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    // User registration (admin only)
+    m_httpServer->Post("/api/auth/register", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string authHeader = req.get_header_value("Authorization");
+        std::string response;
+        m_authController->handleRegisterUser(req.body, authHeader, response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    // Change password
+    m_httpServer->Put("/api/auth/password", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string authHeader = req.get_header_value("Authorization");
+        std::string response;
+        m_authController->handleChangePassword(req.body, authHeader, response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    // Get all users (admin only)
+    m_httpServer->Get("/api/auth/users", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string authHeader = req.get_header_value("Authorization");
+        std::string response;
+        m_authController->handleGetAllUsers(authHeader, response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    // Update user role (admin only)
+    m_httpServer->Put("/api/auth/users/role", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string authHeader = req.get_header_value("Authorization");
+        std::string response;
+        m_authController->handleUpdateUserRole(req.body, authHeader, response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    // Enable/disable user (admin only)
+    m_httpServer->Put("/api/auth/users/status", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string authHeader = req.get_header_value("Authorization");
+        std::string response;
+        m_authController->handleSetUserEnabled(req.body, authHeader, response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
 
     LOG_INFO() << "[APIService] HTTP routes configured successfully";
-    LOG_INFO() << "[APIService] Added support for person statistics, detection config, and placeholder routes";
+    LOG_INFO() << "[APIService] Added support for person statistics, detection config, alerts, recordings, logs, and statistics";
 }
 
 std::string APIService::stripHttpHeaders(const std::string& response) {

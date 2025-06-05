@@ -1,0 +1,170 @@
+version: '3.8'
+
+services:
+  # AI Security Vision Backend
+  aibox-backend:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: aibox-backend
+    restart: unless-stopped
+    environment:
+      - AI_SECURITY_VISION_ENV=production
+      - DATABASE_PATH=/opt/aibox/data/aibox.db
+      - LOG_LEVEL=INFO
+      - LOG_PATH=/opt/aibox/logs
+      - ENABLE_RKNN=true
+      - ENABLE_SECURITY=true
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key-here}
+      - API_RATE_LIMIT=100
+      - MAX_CONNECTIONS=10
+    ports:
+      - "8080:8080"     # API端口
+      - "8161:8161"     # MJPEG流端口1
+      - "8162:8162"     # MJPEG流端口2
+      - "8163:8163"     # MJPEG流端口3
+      - "8164:8164"     # MJPEG流端口4
+    volumes:
+      - aibox-data:/opt/aibox/data
+      - aibox-logs:/opt/aibox/logs
+      - aibox-config:/opt/aibox/config
+      - /dev:/dev:ro    # 设备访问（用于NPU）
+    devices:
+      - /dev/dri:/dev/dri  # GPU/NPU设备
+    privileged: false
+    cap_add:
+      - SYS_NICE        # 进程优先级调整
+    networks:
+      - aibox-network
+    healthcheck:
+      test: ["CMD", "/opt/aibox/healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Redis Cache (Optional)
+  aibox-redis:
+    image: redis:7-alpine
+    container_name: aibox-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - aibox-redis-data:/data
+    networks:
+      - aibox-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  # Nginx Reverse Proxy
+  aibox-nginx:
+    image: nginx:alpine
+    container_name: aibox-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - aibox-logs:/var/log/nginx
+    depends_on:
+      - aibox-backend
+    networks:
+      - aibox-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  # Monitoring (Prometheus)
+  aibox-prometheus:
+    image: prom/prometheus:latest
+    container_name: aibox-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - aibox-prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    networks:
+      - aibox-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  # Monitoring (Grafana)
+  aibox-grafana:
+    image: grafana/grafana:latest
+    container_name: aibox-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin123}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - aibox-grafana-data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    depends_on:
+      - aibox-prometheus
+    networks:
+      - aibox-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+networks:
+  aibox-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  aibox-data:
+    driver: local
+  aibox-logs:
+    driver: local
+  aibox-config:
+    driver: local
+  aibox-redis-data:
+    driver: local
+  aibox-prometheus-data:
+    driver: local
+  aibox-grafana-data:
+    driver: local

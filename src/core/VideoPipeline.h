@@ -92,6 +92,10 @@ public:
     // Detection category filtering
     bool updateDetectionCategories(const std::vector<std::string>& enabledCategories);
     bool updateDetectionCategoriesInternal(const std::vector<std::string>& enabledCategories);
+    void setEnabledCategories(const std::vector<std::string>& enabledCategories);
+
+    // Detection threshold configuration
+    void setDetectionThresholds(float confidenceThreshold, float nmsThreshold);
 
     // Streaming configuration
     bool configureStreaming(const StreamConfig& config);
@@ -132,6 +136,16 @@ public:
     };
 
     PersonStats getCurrentPersonStats() const;
+
+    // Detection statistics structure
+    struct DetectionStats {
+        int total_detections = 0;
+        float avg_processing_time = 0.0f;
+        std::map<std::string, int> detections_by_class;
+    };
+
+    // Detection statistics
+    DetectionStats getDetectionStats() const;
 
     // Statistics
     double getFrameRate() const;

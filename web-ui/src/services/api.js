@@ -92,6 +92,7 @@ export const apiService = {
   getSystemInfo: () => api.get('/system/info'),
   getSystemConfig: () => api.get('/system/config'),
   updateSystemConfig: (config) => api.post('/system/config', config),
+  saveSystemConfig: (config) => api.post('/system/config', config),
   getSystemMetrics: () => api.get('/system/metrics'),
   getSystemStats: () => api.get('/system/stats'),
   getPipelineStats: () => api.get('/system/pipeline-stats'),

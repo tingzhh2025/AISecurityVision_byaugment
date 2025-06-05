@@ -1,0 +1,70 @@
+{
+  "summary": {
+    "total_tests": 8,
+    "passed_tests": 3,
+    "failed_tests": 5,
+    "success_rate": 37.5,
+    "test_time": "2025-06-05T10:26:56.246749"
+  },
+  "results": [
+    {
+      "test_name": "API Connectivity",
+      "success": false,
+      "message": "Connection error: HTTPConnectionPool(host='localhost', port=8080): Max retries exceeded with url: /api/system/status (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f8d6619d0>: Failed to establish a new connection: [Errno 111] Connection refused'))",
+      "details": {},
+      "timestamp": "2025-06-05T10:26:56.204459"
+    },
+    {
+      "test_name": "Rate Limiting",
+      "success": false,
+      "message": "Blocked 0/50 requests",
+      "details": {
+        "blocked_count": 0,
+        "total_requests": 50
+      },
+      "timestamp": "2025-06-05T10:26:56.242555"
+    },
+    {
+      "test_name": "Input Validation",
+      "success": false,
+      "message": "Test error: HTTPConnectionPool(host='localhost', port=8080): Max retries exceeded with url: /api/cameras (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f8d64ec70>: Failed to establish a new connection: [Errno 111] Connection refused'))",
+      "details": {},
+      "timestamp": "2025-06-05T10:26:56.243429"
+    },
+    {
+      "test_name": "API Documentation",
+      "success": true,
+      "message": "OpenAPI file: True, Swagger UI: False",
+      "details": {},
+      "timestamp": "2025-06-05T10:26:56.244220"
+    },
+    {
+      "test_name": "Performance Monitoring",
+      "success": false,
+      "message": "Test error: HTTPConnectionPool(host='localhost', port=8080): Max retries exceeded with url: /api/system/metrics (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f8d5f37c0>: Failed to establish a new connection: [Errno 111] Connection refused'))",
+      "details": {},
+      "timestamp": "2025-06-05T10:26:56.244972"
+    },
+    {
+      "test_name": "Docker Configuration",
+      "success": true,
+      "message": "Dockerfile: True, Compose: True, Healthcheck: True",
+      "details": {},
+      "timestamp": "2025-06-05T10:26:56.245039"
+    },
+    {
+      "test_name": "Security Features",
+      "success": true,
+      "message": "Components exist: True, Auth endpoint: False",
+      "details": {},
+      "timestamp": "2025-06-05T10:26:56.245897"
+    },
+    {
+      "test_name": "Database Optimization",
+      "success": false,
+      "message": "Test error: HTTPConnectionPool(host='localhost', port=8080): Max retries exceeded with url: /api/system/info (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7f8d5fd070>: Failed to establish a new connection: [Errno 111] Connection refused'))",
+      "details": {},
+      "timestamp": "2025-06-05T10:26:56.246679"
+    }
+  ]
+}

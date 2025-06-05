@@ -19,6 +19,7 @@
 #include <chrono>
 #include <sstream>
 #include <functional>
+#include <future>
 
 #include "../core/Logger.h"
 using namespace AISecurityVision;
@@ -205,8 +206,24 @@ void VideoPipeline::stop() {
 
     m_running.store(false);
 
+    // Stop streaming first
+    if (m_streamingEnabled.load()) {
+        stopStreaming();
+    }
+
+    // Wait for processing thread with timeout
     if (m_processingThread.joinable()) {
-        m_processingThread.join();
+        LOG_INFO() << "[VideoPipeline] Waiting for processing thread to finish: " << m_source.id;
+
+        // Try to join with timeout
+        auto future = std::async(std::launch::async, [this]() {
+            m_processingThread.join();
+        });
+
+        if (future.wait_for(std::chrono::seconds(5)) == std::future_status::timeout) {
+            LOG_WARN() << "[VideoPipeline] Processing thread did not finish within timeout, detaching: " << m_source.id;
+            m_processingThread.detach();
+        }
     }
 
     LOG_INFO() << "[VideoPipeline] Pipeline stopped: " << m_source.id;
@@ -1083,4 +1100,65 @@ void VideoPipeline::setPersonStatsConfig(float genderThreshold, float ageThresho
 VideoPipeline::PersonStats VideoPipeline::getCurrentPersonStats() const {
     std::lock_guard<std::mutex> lock(m_personStatsMutex);
     return m_currentPersonStats;
+}
+
+// Wrapper method for API compatibility
+void VideoPipeline::setEnabledCategories(const std::vector<std::string>& enabledCategories) {
+    updateDetectionCategories(enabledCategories);
+}
+
+// Detection threshold configuration
+void VideoPipeline::setDetectionThresholds(float confidenceThreshold, float nmsThreshold) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    // Update standard detector if available
+    if (m_detector) {
+        m_detector->setConfidenceThreshold(confidenceThreshold);
+        m_detector->setNMSThreshold(nmsThreshold);
+        LOG_INFO() << "[VideoPipeline] Updated standard detector thresholds for " << m_source.id
+                   << " (confidence=" << confidenceThreshold << ", nms=" << nmsThreshold << ")";
+    }
+
+    // Update optimized detector if available
+    if (m_optimizedDetector) {
+        m_optimizedDetector->setConfidenceThreshold(confidenceThreshold);
+        m_optimizedDetector->setNMSThreshold(nmsThreshold);
+        LOG_INFO() << "[VideoPipeline] Updated optimized detector thresholds for " << m_source.id
+                   << " (confidence=" << confidenceThreshold << ", nms=" << nmsThreshold << ")";
+    }
+
+    if (!m_detector && !m_optimizedDetector) {
+        LOG_WARN() << "[VideoPipeline] No detectors available to update thresholds for " << m_source.id;
+    }
+}
+
+// Detection statistics
+VideoPipeline::DetectionStats VideoPipeline::getDetectionStats() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    DetectionStats stats;
+
+    // Get statistics from active detector
+    if (m_optimizedDetector && m_optimizedDetectionEnabled.load()) {
+        stats.total_detections = static_cast<int>(m_optimizedDetector->getDetectionCount());
+        stats.avg_processing_time = static_cast<float>(m_optimizedDetector->getAverageInferenceTime());
+
+        // Get detection counts by class (simplified implementation)
+        // In a real implementation, this would track detections per class over time
+        auto availableCategories = m_optimizedDetector->getAvailableCategories();
+        for (const auto& category : availableCategories) {
+            stats.detections_by_class[category] = 0; // Would be actual counts in real implementation
+        }
+    } else if (m_detector) {
+        stats.total_detections = static_cast<int>(m_detector->getDetectionCount());
+        stats.avg_processing_time = static_cast<float>(m_detector->getAverageInferenceTime());
+
+        // Get detection counts by class (simplified implementation)
+        auto availableCategories = m_detector->getAvailableCategories();
+        for (const auto& category : availableCategories) {
+            stats.detections_by_class[category] = 0; // Would be actual counts in real implementation
+        }
+    }
+
+    return stats;
 }
