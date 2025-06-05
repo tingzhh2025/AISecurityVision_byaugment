@@ -46,7 +46,7 @@ TaskManager::~TaskManager() {
 }
 
 void TaskManager::start() {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::TASK_MANAGER, "TaskManager::m_mutex");
     if (m_running.load()) {
         LOG_INFO() << "[TaskManager] Already running";
         return;
@@ -68,7 +68,7 @@ void TaskManager::stop() {
     }
 
     // Stop all pipelines
-    std::lock_guard<std::mutex> lock(m_mutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::TASK_MANAGER, "TaskManager::m_mutex");
     for (auto& [id, pipeline] : m_pipelines) {
         if (pipeline) {
             pipeline->stop();
@@ -115,10 +115,15 @@ bool TaskManager::addVideoSource(const VideoSource& source) {
         // Mark pipeline as being initialized to prevent concurrent attempts
         m_initializingPipelines.insert(source.id);
 
-        // Allocate MJPEG port dynamically
+        // Release TaskManager lock before calling MJPEGPortManager to respect lock hierarchy
+        lock.unlock();
+
+        // Allocate MJPEG port dynamically (outside TaskManager lock)
         auto& portManager = AISecurityVision::MJPEGPortManager::getInstance();
         int allocatedPort = portManager.allocatePort(source.id);
         if (allocatedPort == -1) {
+            // Reacquire lock to clean up initializing set
+            AISecurityVision::HierarchicalMutexLock cleanupLock(m_mutex, AISecurityVision::LockLevel::TASK_MANAGER, "TaskManager::m_mutex");
             m_initializingPipelines.erase(source.id);
             LOG_ERROR() << "[TaskManager] Failed to allocate MJPEG port for camera: " << source.id;
             return false;
@@ -132,9 +137,6 @@ bool TaskManager::addVideoSource(const VideoSource& source) {
 
         // Create pipeline object with dynamically allocated port
         auto pipeline = std::make_shared<VideoPipeline>(modifiedSource);
-
-        // Release lock before expensive initialization to avoid blocking other operations
-        lock.unlock();
 
         // Initialize pipeline (this may take time) - done outside lock
         bool initSuccess = false;
@@ -185,21 +187,29 @@ bool TaskManager::addVideoSource(const VideoSource& source) {
 }
 
 bool TaskManager::removeVideoSource(const std::string& sourceId) {
-    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::TASK_MANAGER, "TaskManager::m_mutex");
+    std::shared_ptr<VideoPipeline> pipeline;
 
-    auto it = m_pipelines.find(sourceId);
-    if (it == m_pipelines.end()) {
-        LOG_ERROR() << "[TaskManager] Pipeline not found: " << sourceId;
-        return false;
+    // First phase: find and remove pipeline from map
+    {
+        AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::TASK_MANAGER, "TaskManager::m_mutex");
+
+        auto it = m_pipelines.find(sourceId);
+        if (it == m_pipelines.end()) {
+            LOG_ERROR() << "[TaskManager] Pipeline not found: " << sourceId;
+            return false;
+        }
+
+        // Store pipeline reference and remove from map
+        pipeline = it->second;
+        m_pipelines.erase(it);
     }
 
-    // Stop and cleanup pipeline
-    if (it->second) {
-        it->second->stop();
+    // Second phase: cleanup pipeline and release port (outside TaskManager lock)
+    if (pipeline) {
+        pipeline->stop();
     }
-    m_pipelines.erase(it);
 
-    // Release MJPEG port
+    // Release MJPEG port (respecting lock hierarchy)
     auto& portManager = AISecurityVision::MJPEGPortManager::getInstance();
     portManager.releasePort(sourceId);
 
@@ -208,7 +218,7 @@ bool TaskManager::removeVideoSource(const std::string& sourceId) {
 }
 
 std::vector<std::string> TaskManager::getActivePipelines() const {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::TASK_MANAGER, "TaskManager::m_mutex");
 
     std::vector<std::string> active;
     for (const auto& [id, pipeline] : m_pipelines) {
@@ -220,7 +230,7 @@ std::vector<std::string> TaskManager::getActivePipelines() const {
 }
 
 size_t TaskManager::getActivePipelineCount() const {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::TASK_MANAGER, "TaskManager::m_mutex");
     return m_pipelines.size();
 }
 
@@ -229,7 +239,7 @@ double TaskManager::getCpuUsage() const {
 }
 
 std::string TaskManager::getGpuMemoryUsage() const {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::TASK_MANAGER, "TaskManager::m_mutex");
     return m_gpuMemUsage;
 }
 
@@ -290,7 +300,7 @@ void TaskManager::monitoringThread() {
             // Check pipeline health
             std::vector<std::string> failedPipelines;
             {
-                std::lock_guard<std::mutex> lock(m_mutex);
+                AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::TASK_MANAGER, "TaskManager::m_mutex");
                 for (const auto& [id, pipeline] : m_pipelines) {
                     if (pipeline && !pipeline->isHealthy()) {
                         failedPipelines.push_back(id);
@@ -306,7 +316,7 @@ void TaskManager::monitoringThread() {
 
             // Task 75: Periodic cross-camera tracking cleanup
             if (m_crossCameraTrackingEnabled.load()) {
-                std::lock_guard<std::mutex> crossCameraLock(m_crossCameraMutex);
+                AISecurityVision::HierarchicalMutexLock crossCameraLock(m_crossCameraMutex, AISecurityVision::LockLevel::CROSS_CAMERA_TRACKING, "TaskManager::m_crossCameraMutex");
                 cleanupExpiredTracks();
                 updateCrossCameraTrackingStats();
             }
@@ -489,7 +499,7 @@ bool TaskManager::updateGpuMetrics() {
 #ifdef HAVE_NVML
     if (!m_nvmlInitialized || !m_gpuDevice) {
         // Fallback to placeholder values
-        std::lock_guard<std::mutex> lock(m_mutex);
+        AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::TASK_MANAGER, "TaskManager::m_mutex");
         m_gpuMemUsage = "N/A";
         m_gpuUtilization.store(0.0);
         m_gpuTemperature.store(0.0);
@@ -503,7 +513,7 @@ bool TaskManager::updateGpuMetrics() {
     nvmlMemory_t memInfo;
     result = nvmlDeviceGetMemoryInfo(device, &memInfo);
     if (result == NVML_SUCCESS) {
-        std::lock_guard<std::mutex> lock(m_mutex);
+        AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::TASK_MANAGER, "TaskManager::m_mutex");
 
         // Convert bytes to MB
         unsigned long long usedMB = memInfo.used / (1024 * 1024);
@@ -513,7 +523,7 @@ bool TaskManager::updateGpuMetrics() {
         oss << usedMB << "MB / " << totalMB << "MB";
         m_gpuMemUsage = oss.str();
     } else {
-        std::lock_guard<std::mutex> lock(m_mutex);
+        AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::TASK_MANAGER, "TaskManager::m_mutex");
         m_gpuMemUsage = "Error";
     }
 
@@ -538,7 +548,7 @@ bool TaskManager::updateGpuMetrics() {
     return true;
 #else
     // Fallback when NVML is not available
-    std::lock_guard<std::mutex> lock(m_mutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::TASK_MANAGER, "TaskManager::m_mutex");
     m_gpuMemUsage = "NVML N/A";
     m_gpuUtilization.store(0.0);
     m_gpuTemperature.store(0.0);
@@ -548,7 +558,7 @@ bool TaskManager::updateGpuMetrics() {
 
 // Enhanced pipeline statistics implementation
 std::vector<TaskManager::PipelineStats> TaskManager::getAllPipelineStats() const {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::TASK_MANAGER, "TaskManager::m_mutex");
     std::vector<PipelineStats> stats;
 
     auto now = std::chrono::steady_clock::now();
@@ -579,7 +589,7 @@ std::vector<TaskManager::PipelineStats> TaskManager::getAllPipelineStats() const
 }
 
 TaskManager::PipelineStats TaskManager::getPipelineStats(const std::string& sourceId) const {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::TASK_MANAGER, "TaskManager::m_mutex");
 
     auto it = m_pipelines.find(sourceId);
     if (it == m_pipelines.end() || !it->second) {
@@ -610,7 +620,7 @@ TaskManager::PipelineStats TaskManager::getPipelineStats(const std::string& sour
 }
 
 TaskManager::SystemStats TaskManager::getSystemStats() const {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::TASK_MANAGER, "TaskManager::m_mutex");
 
     SystemStats stats;
     auto now = std::chrono::steady_clock::now();
@@ -737,7 +747,7 @@ int TaskManager::getGlobalTrackId(const std::string& cameraId, int localTrackId)
 }
 
 std::vector<CrossCameraTrack> TaskManager::getActiveCrossCameraTracks() const {
-    std::lock_guard<std::mutex> lock(m_crossCameraMutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_crossCameraMutex, AISecurityVision::LockLevel::CROSS_CAMERA_TRACKING, "TaskManager::m_crossCameraMutex");
 
     std::vector<CrossCameraTrack> activeTracks;
     for (const auto& [globalId, track] : m_globalTracks) {
@@ -750,7 +760,7 @@ std::vector<CrossCameraTrack> TaskManager::getActiveCrossCameraTracks() const {
 
 std::vector<ReIDMatch> TaskManager::findReIDMatches(const std::vector<float>& features,
                                                    const std::string& excludeCameraId) const {
-    std::lock_guard<std::mutex> lock(m_crossCameraMutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_crossCameraMutex, AISecurityVision::LockLevel::CROSS_CAMERA_TRACKING, "TaskManager::m_crossCameraMutex");
 
     std::vector<ReIDMatch> matches;
     float threshold = m_reidSimilarityThreshold.load();
@@ -825,12 +835,12 @@ double TaskManager::getMaxTrackAge() const {
 
 // Cross-camera tracking statistics methods
 size_t TaskManager::getGlobalTrackCount() const {
-    std::lock_guard<std::mutex> lock(m_crossCameraMutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_crossCameraMutex, AISecurityVision::LockLevel::CROSS_CAMERA_TRACKING, "TaskManager::m_crossCameraMutex");
     return m_globalTracks.size();
 }
 
 size_t TaskManager::getActiveCrossCameraTrackCount() const {
-    std::lock_guard<std::mutex> lock(m_crossCameraMutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_crossCameraMutex, AISecurityVision::LockLevel::CROSS_CAMERA_TRACKING, "TaskManager::m_crossCameraMutex");
 
     size_t activeCount = 0;
     double maxAge = m_maxTrackAge.load();
@@ -847,7 +857,7 @@ size_t TaskManager::getCrossCameraMatchCount() const {
 }
 
 void TaskManager::resetCrossCameraTrackingStats() {
-    std::lock_guard<std::mutex> lock(m_crossCameraMutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_crossCameraMutex, AISecurityVision::LockLevel::CROSS_CAMERA_TRACKING, "TaskManager::m_crossCameraMutex");
     m_totalCrossCameraMatches.store(0);
     m_activeCrossCameraTracks.store(0);
     LOG_INFO() << "[TaskManager] Cross-camera tracking statistics reset";
@@ -1017,13 +1027,21 @@ void TaskManager::updateCrossCameraTrackingStats() {
     // This method can be called periodically to update statistics
     // Currently, statistics are updated in real-time, but this provides
     // a hook for future batch updates if needed
-    size_t activeCount = getActiveCrossCameraTrackCount();
+
+    // Count active tracks directly without acquiring lock again
+    size_t activeCount = 0;
+    double maxAge = m_maxTrackAge.load();
+    for (const auto& [globalId, track] : m_globalTracks) {
+        if (track && track->isActive && !track->isExpired(maxAge)) {
+            activeCount++;
+        }
+    }
     m_activeCrossCameraTracks.store(activeCount);
 }
 
 // Detection category filtering implementation
 void TaskManager::updateDetectionCategories(const std::vector<std::string>& enabledCategories) {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::TASK_MANAGER, "TaskManager::m_mutex");
 
     LOG_INFO() << "[TaskManager] Updating detection categories for " << m_pipelines.size() << " pipelines";
 

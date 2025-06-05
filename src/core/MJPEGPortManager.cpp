@@ -54,7 +54,7 @@ int MJPEGPortManager::allocatePort(const std::string& cameraId) {
     m_allocatedPorts.insert(port);
 
     LOG_INFO() << "[MJPEGPortManager] Allocated port " << port << " to camera " << cameraId
-               << " (" << getAllocatedPortCount() << "/" << MAX_CAMERAS << " ports used)";
+               << " (" << m_allocatedPorts.size() << "/" << MAX_CAMERAS << " ports used)";
 
     return port;
 }
@@ -80,45 +80,45 @@ bool MJPEGPortManager::releasePort(const std::string& cameraId) {
     returnPortToPool(port);
 
     LOG_INFO() << "[MJPEGPortManager] Released port " << port << " from camera " << cameraId
-               << " (" << getAllocatedPortCount() << "/" << MAX_CAMERAS << " ports used)";
+               << " (" << m_allocatedPorts.size() << "/" << MAX_CAMERAS << " ports used)";
 
     return true;
 }
 
 int MJPEGPortManager::getPort(const std::string& cameraId) const {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::MJPEG_PORT_MANAGER, "MJPEGPortManager::m_mutex");
 
     auto it = m_cameraToPort.find(cameraId);
     return (it != m_cameraToPort.end()) ? it->second : -1;
 }
 
 bool MJPEGPortManager::hasPort(const std::string& cameraId) const {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::MJPEG_PORT_MANAGER, "MJPEGPortManager::m_mutex");
     return m_cameraToPort.find(cameraId) != m_cameraToPort.end();
 }
 
 std::unordered_map<std::string, int> MJPEGPortManager::getAllAllocations() const {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::MJPEG_PORT_MANAGER, "MJPEGPortManager::m_mutex");
     return m_cameraToPort;
 }
 
 int MJPEGPortManager::getAvailablePortCount() const {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::MJPEG_PORT_MANAGER, "MJPEGPortManager::m_mutex");
     return static_cast<int>(m_availablePorts.size());
 }
 
 int MJPEGPortManager::getAllocatedPortCount() const {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::MJPEG_PORT_MANAGER, "MJPEGPortManager::m_mutex");
     return static_cast<int>(m_allocatedPorts.size());
 }
 
 bool MJPEGPortManager::isFull() const {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::MJPEG_PORT_MANAGER, "MJPEGPortManager::m_mutex");
     return m_allocatedPorts.size() >= MAX_CAMERAS;
 }
 
 void MJPEGPortManager::clearAllAllocations() {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::MJPEG_PORT_MANAGER, "MJPEGPortManager::m_mutex");
 
     LOG_INFO() << "[MJPEGPortManager] Clearing all port allocations";
 
@@ -134,11 +134,11 @@ void MJPEGPortManager::clearAllAllocations() {
 }
 
 std::vector<int> MJPEGPortManager::getAvailablePorts() const {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::MJPEG_PORT_MANAGER, "MJPEGPortManager::m_mutex");
 
     std::vector<int> available;
     std::queue<int> tempQueue = m_availablePorts;
-    
+
     while (!tempQueue.empty()) {
         available.push_back(tempQueue.front());
         tempQueue.pop();
@@ -148,7 +148,7 @@ std::vector<int> MJPEGPortManager::getAvailablePorts() const {
 }
 
 bool MJPEGPortManager::reserveSpecificPort(const std::string& cameraId, int port) {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::MJPEG_PORT_MANAGER, "MJPEGPortManager::m_mutex");
 
     if (!isValidPort(port)) {
         LOG_ERROR() << "[MJPEGPortManager] Invalid port " << port << " for camera " << cameraId;

@@ -5,6 +5,7 @@
 #include <sstream>
 #include <iomanip>
 #include <chrono>
+#include <thread>
 #include <cstring>
 #include <algorithm>
 #include <mutex>
@@ -243,23 +244,47 @@ bool Streamer::setupHttpServer() {
         return false;
     }
 
-    // Set socket options
+    // Set socket options for reuse
     int opt = 1;
     if (setsockopt(m_serverSocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-        LOG_ERROR() << "[Streamer] Failed to set socket options: " << strerror(errno);
+        LOG_ERROR() << "[Streamer] Failed to set SO_REUSEADDR: " << strerror(errno);
         close(m_serverSocket);
         return false;
     }
 
-    // Bind socket
+    // Set SO_REUSEPORT to allow multiple binds to same port
+    if (setsockopt(m_serverSocket, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt)) < 0) {
+        LOG_WARN() << "[Streamer] Failed to set SO_REUSEPORT (may not be supported): " << strerror(errno);
+        // Continue anyway, this is not critical
+    }
+
+    // Bind socket with retry mechanism
     struct sockaddr_in address;
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(m_config.port);
 
-    if (bind(m_serverSocket, (struct sockaddr*)&address, sizeof(address)) < 0) {
+    int retryCount = 0;
+    const int maxRetries = 3;
+    const int retryDelayMs = 1000;
+
+    while (retryCount < maxRetries) {
+        if (bind(m_serverSocket, (struct sockaddr*)&address, sizeof(address)) == 0) {
+            break; // Success
+        }
+
+        retryCount++;
+        LOG_WARN() << "[Streamer] Failed to bind socket to port " << m_config.port
+                  << " (attempt " << retryCount << "/" << maxRetries << "): " << strerror(errno);
+
+        if (retryCount < maxRetries) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(retryDelayMs));
+        }
+    }
+
+    if (retryCount >= maxRetries) {
         LOG_ERROR() << "[Streamer] Failed to bind socket to port " << m_config.port
-                  << ": " << strerror(errno);
+                  << " after " << maxRetries << " attempts: " << strerror(errno);
         close(m_serverSocket);
         return false;
     }
@@ -271,6 +296,7 @@ bool Streamer::setupHttpServer() {
         return false;
     }
 
+    LOG_INFO() << "[Streamer] Successfully bound to port " << m_config.port;
     return true;
 }
 

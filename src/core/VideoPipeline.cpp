@@ -2,7 +2,10 @@
 #include "TaskManager.h"
 #include "../video/FFmpegDecoder.h"
 #include "../ai/YOLOv8Detector.h"
+#include "../ai/YOLOv8DetectorFactory.h"
+#ifdef ENABLE_RKNN_NPU
 #include "../ai/YOLOv8RKNNDetector.h"
+#endif
 #include "../ai/ByteTracker.h"
 #include "../ai/ReIDExtractor.h"
 #include "../recognition/FaceRecognizer.h"
@@ -52,6 +55,7 @@ bool VideoPipeline::initialize() {
         }
 
         // Initialize AI modules - choose between optimized and standard detector
+#ifdef ENABLE_RKNN_NPU
         if (m_optimizedDetectionEnabled.load()) {
             LOG_INFO() << "[VideoPipeline] Initializing RKNN YOLOv8 detector...";
 
@@ -80,6 +84,15 @@ bool VideoPipeline::initialize() {
                 return false;
             }
         }
+#else
+        // Use YOLOv8DetectorFactory for non-RKNN builds
+        LOG_INFO() << "[VideoPipeline] Initializing YOLOv8 detector using factory...";
+        m_detector = AISecurityVision::YOLOv8DetectorFactory::createDetector(AISecurityVision::InferenceBackend::TENSORRT);
+        if (!m_detector || !m_detector->initialize("models/yolov8n.onnx")) {
+            handleError("Failed to initialize YOLOv8 detector");
+            return false;
+        }
+#endif
 
         // Load saved detection categories from database
         try {
@@ -313,6 +326,7 @@ void VideoPipeline::processFrame(const cv::Mat& frame, int64_t timestamp) {
     if (m_detectionEnabled.load()) {
         std::vector<AISecurityVision::Detection> detectionResults;
 
+#ifdef ENABLE_RKNN_NPU
         if (m_optimizedDetectionEnabled.load() && m_optimizedDetector) {
             // Use optimized RKNN detector
             detectionResults = m_optimizedDetector->detectObjects(frame);
@@ -320,6 +334,12 @@ void VideoPipeline::processFrame(const cv::Mat& frame, int64_t timestamp) {
             // Use standard detector
             detectionResults = m_detector->detectObjects(frame);
         }
+#else
+        if (m_detector) {
+            // Use standard detector
+            detectionResults = m_detector->detectObjects(frame);
+        }
+#endif
 
         // Extract bounding boxes and class information
         for (const auto& detection : detectionResults) {
@@ -545,7 +565,7 @@ void VideoPipeline::processPersonStatistics(FrameResult& result) {
 }
 
 void VideoPipeline::handleError(const std::string& error) {
-    AISecurityVision::HierarchicalMutexLock lock(m_mutex, AISecurityVision::LockLevel::VIDEO_PIPELINE, "VideoPipeline::m_mutex");
+    // Use atomic operations to avoid lock conflicts
     m_lastError = error;
     m_healthy.store(false);
     LOG_ERROR() << "[VideoPipeline] Error in " << m_source.id << ": " << error;
@@ -633,6 +653,7 @@ bool VideoPipeline::updateDetectionCategoriesInternal(const std::vector<std::str
     }
 
     // Update optimized detector if available
+#ifdef ENABLE_RKNN_NPU
     if (m_optimizedDetector) {
         LOG_INFO() << "[VideoPipeline] Updating optimized detector categories...";
         m_optimizedDetector->setEnabledCategories(enabledCategories);
@@ -645,6 +666,12 @@ bool VideoPipeline::updateDetectionCategoriesInternal(const std::vector<std::str
         LOG_WARN() << "[VideoPipeline] No detectors available to update for " << m_source.id;
         success = false;
     }
+#else
+    if (!m_detector) {
+        LOG_WARN() << "[VideoPipeline] No detectors available to update for " << m_source.id;
+        success = false;
+    }
+#endif
 
     return success;
 }
@@ -667,6 +694,7 @@ bool VideoPipeline::updateDetectionCategories(const std::vector<std::string>& en
     }
 
     // Update optimized detector if available
+#ifdef ENABLE_RKNN_NPU
     if (m_optimizedDetector) {
         LOG_INFO() << "[VideoPipeline] Updating optimized detector categories...";
         m_optimizedDetector->setEnabledCategories(enabledCategories);
@@ -679,6 +707,12 @@ bool VideoPipeline::updateDetectionCategories(const std::vector<std::string>& en
         LOG_WARN() << "[VideoPipeline] No detectors available to update for " << m_source.id;
         success = false;
     }
+#else
+    if (!m_detector) {
+        LOG_WARN() << "[VideoPipeline] No detectors available to update for " << m_source.id;
+        success = false;
+    }
+#endif
 
     return success;
 }
@@ -1120,6 +1154,7 @@ void VideoPipeline::setDetectionThresholds(float confidenceThreshold, float nmsT
     }
 
     // Update optimized detector if available
+#ifdef ENABLE_RKNN_NPU
     if (m_optimizedDetector) {
         m_optimizedDetector->setConfidenceThreshold(confidenceThreshold);
         m_optimizedDetector->setNMSThreshold(nmsThreshold);
@@ -1130,6 +1165,11 @@ void VideoPipeline::setDetectionThresholds(float confidenceThreshold, float nmsT
     if (!m_detector && !m_optimizedDetector) {
         LOG_WARN() << "[VideoPipeline] No detectors available to update thresholds for " << m_source.id;
     }
+#else
+    if (!m_detector) {
+        LOG_WARN() << "[VideoPipeline] No detectors available to update thresholds for " << m_source.id;
+    }
+#endif
 }
 
 // Detection statistics
@@ -1139,6 +1179,7 @@ VideoPipeline::DetectionStats VideoPipeline::getDetectionStats() const {
     DetectionStats stats;
 
     // Get statistics from active detector
+#ifdef ENABLE_RKNN_NPU
     if (m_optimizedDetector && m_optimizedDetectionEnabled.load()) {
         stats.total_detections = static_cast<int>(m_optimizedDetector->getDetectionCount());
         stats.avg_processing_time = static_cast<float>(m_optimizedDetector->getAverageInferenceTime());
@@ -1150,6 +1191,9 @@ VideoPipeline::DetectionStats VideoPipeline::getDetectionStats() const {
             stats.detections_by_class[category] = 0; // Would be actual counts in real implementation
         }
     } else if (m_detector) {
+#else
+    if (m_detector) {
+#endif
         stats.total_detections = static_cast<int>(m_detector->getDetectionCount());
         stats.avg_processing_time = static_cast<float>(m_detector->getAverageInferenceTime());
 
