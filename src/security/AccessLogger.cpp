@@ -362,7 +362,9 @@ void AccessLogger::cleanupOldLogFiles() {
         for (const auto& entry : std::filesystem::directory_iterator(m_config.logDirectory)) {
             if (entry.is_regular_file()) {
                 std::string filename = entry.path().filename().string();
-                if (filename.find(m_config.logFilePrefix) == 0 && filename.ends_with(".log")) {
+                if (filename.find(m_config.logFilePrefix) == 0 &&
+                    filename.length() >= 4 &&
+                    filename.substr(filename.length() - 4) == ".log") {
                     logFiles.push_back(entry.path());
                 }
             }

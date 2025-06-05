@@ -1,5 +1,6 @@
 #include "TaskManager.h"
 #include "VideoPipeline.h"
+#include "MJPEGPortManager.h"
 #include <iostream>
 #include <sstream>
 #include <fstream>
@@ -104,8 +105,22 @@ bool TaskManager::addVideoSource(const VideoSource& source) {
     try {
         LOG_INFO() << "[TaskManager] Creating pipeline for: " << source.id;
 
-        // Create pipeline object first
-        auto pipeline = std::make_shared<VideoPipeline>(source);
+        // Allocate MJPEG port dynamically
+        auto& portManager = AISecurityVision::MJPEGPortManager::getInstance();
+        int allocatedPort = portManager.allocatePort(source.id);
+        if (allocatedPort == -1) {
+            LOG_ERROR() << "[TaskManager] Failed to allocate MJPEG port for camera: " << source.id;
+            return false;
+        }
+
+        // Create modified source with allocated port
+        VideoSource modifiedSource = source;
+        modifiedSource.mjpeg_port = allocatedPort;
+
+        LOG_INFO() << "[TaskManager] Allocated MJPEG port " << allocatedPort << " for camera: " << source.id;
+
+        // Create pipeline object with dynamically allocated port
+        auto pipeline = std::make_shared<VideoPipeline>(modifiedSource);
 
         // Add to pipelines map immediately to prevent duplicate additions
         m_pipelines[source.id] = pipeline;
@@ -117,23 +132,26 @@ bool TaskManager::addVideoSource(const VideoSource& source) {
         if (pipeline->initialize()) {
             pipeline->start();
             LOG_INFO() << "[TaskManager] Added video source: " << source.id
-                      << " (" << source.protocol << ")";
+                      << " (" << source.protocol << ") on MJPEG port " << allocatedPort;
             return true;
         } else {
-            // Remove from map if initialization failed
+            // Remove from map and release port if initialization failed
             lock.lock();
             m_pipelines.erase(source.id);
             lock.unlock();
 
+            portManager.releasePort(source.id);
             LOG_ERROR() << "[TaskManager] Failed to initialize pipeline for: " << source.id;
             return false;
         }
     } catch (const std::exception& e) {
-        // Remove from map if exception occurred
+        // Remove from map and release port if exception occurred
         lock.lock();
         m_pipelines.erase(source.id);
         lock.unlock();
 
+        auto& portManager = AISecurityVision::MJPEGPortManager::getInstance();
+        portManager.releasePort(source.id);
         LOG_ERROR() << "[TaskManager] Exception creating pipeline: " << e.what();
         return false;
     }
@@ -153,6 +171,10 @@ bool TaskManager::removeVideoSource(const std::string& sourceId) {
         it->second->stop();
     }
     m_pipelines.erase(it);
+
+    // Release MJPEG port
+    auto& portManager = AISecurityVision::MJPEGPortManager::getInstance();
+    portManager.releasePort(sourceId);
 
     LOG_INFO() << "[TaskManager] Removed video source: " << sourceId;
     return true;
@@ -990,4 +1012,25 @@ void TaskManager::updateDetectionCategories(const std::vector<std::string>& enab
 
     LOG_INFO() << "[TaskManager] Updated detection categories for " << updatedPipelines
                << " out of " << m_pipelines.size() << " pipelines";
+}
+
+// MJPEG Port Management implementation
+int TaskManager::allocateMJPEGPort(const std::string& cameraId) {
+    auto& portManager = AISecurityVision::MJPEGPortManager::getInstance();
+    return portManager.allocatePort(cameraId);
+}
+
+bool TaskManager::releaseMJPEGPort(const std::string& cameraId) {
+    auto& portManager = AISecurityVision::MJPEGPortManager::getInstance();
+    return portManager.releasePort(cameraId);
+}
+
+int TaskManager::getMJPEGPort(const std::string& cameraId) const {
+    auto& portManager = AISecurityVision::MJPEGPortManager::getInstance();
+    return portManager.getPort(cameraId);
+}
+
+std::unordered_map<std::string, int> TaskManager::getAllMJPEGPortAllocations() const {
+    auto& portManager = AISecurityVision::MJPEGPortManager::getInstance();
+    return portManager.getAllAllocations();
 }

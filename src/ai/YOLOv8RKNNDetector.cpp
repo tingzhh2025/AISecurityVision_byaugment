@@ -17,6 +17,7 @@
 #include <numeric>
 #include <set>
 #include <map>
+#include <sstream>
 
 using namespace AISecurityVision;
 
@@ -294,7 +295,7 @@ bool YOLOv8RKNNDetector::initialize(const std::string& modelPath) {
     LOG_INFO() << "[YOLOv8RKNNDetector] RKNN model inputs: " << m_ioNum.n_input << ", outputs: " << m_ioNum.n_output;
 
     // Print detailed model information like reference implementation
-    std::cout << "model input num: " << m_ioNum.n_input << ", output num: " << m_ioNum.n_output << std::endl;
+    LOG_INFO() << "[YOLOv8RKNNDetector] Model input num: " << m_ioNum.n_input << ", output num: " << m_ioNum.n_output;
 
     // Allocate and query input attributes
     m_inputAttrs = new rknn_tensor_attr[m_ioNum.n_input];
@@ -310,23 +311,27 @@ bool YOLOv8RKNNDetector::initialize(const std::string& modelPath) {
     }
 
     // Print input tensors information like reference implementation
-    std::cout << "input tensors:" << std::endl;
+    LOG_INFO() << "[YOLOv8RKNNDetector] Input tensors:";
 
     // Update input dimensions from model
     if (m_ioNum.n_input > 0) {
         // Print detailed input tensor info
-        std::cout << "  index=0, name=" << m_inputAttrs[0].name
-                  << ", n_dims=" << m_inputAttrs[0].n_dims << ", dims=[";
+        std::ostringstream dims_str;
+        dims_str << "[";
         for (uint32_t i = 0; i < m_inputAttrs[0].n_dims; i++) {
-            std::cout << m_inputAttrs[0].dims[i];
-            if (i < m_inputAttrs[0].n_dims - 1) std::cout << ", ";
+            dims_str << m_inputAttrs[0].dims[i];
+            if (i < m_inputAttrs[0].n_dims - 1) dims_str << ", ";
         }
-        std::cout << "], n_elems=" << m_inputAttrs[0].n_elems
-                  << ", size=" << m_inputAttrs[0].size
-                  << ", fmt=" << (m_inputAttrs[0].fmt == RKNN_TENSOR_NHWC ? "NHWC" : "NCHW")
-                  << ", type=" << get_type_string(m_inputAttrs[0].type)
-                  << ", qnt_type=AFFINE, zp=" << m_inputAttrs[0].zp
-                  << ", scale=" << std::fixed << std::setprecision(6) << m_inputAttrs[0].scale << std::endl;
+        dims_str << "]";
+
+        LOG_DEBUG() << "[YOLOv8RKNNDetector] Input tensor - index=0, name=" << m_inputAttrs[0].name
+                   << ", n_dims=" << m_inputAttrs[0].n_dims << ", dims=" << dims_str.str()
+                   << ", n_elems=" << m_inputAttrs[0].n_elems
+                   << ", size=" << m_inputAttrs[0].size
+                   << ", fmt=" << (m_inputAttrs[0].fmt == RKNN_TENSOR_NHWC ? "NHWC" : "NCHW")
+                   << ", type=" << get_type_string(m_inputAttrs[0].type)
+                   << ", qnt_type=AFFINE, zp=" << m_inputAttrs[0].zp
+                   << ", scale=" << std::fixed << std::setprecision(6) << m_inputAttrs[0].scale;
 
         // RKNN input format is typically NHWC: [batch, height, width, channels]
         if (m_inputAttrs[0].n_dims == 4) {
@@ -341,7 +346,7 @@ bool YOLOv8RKNNDetector::initialize(const std::string& modelPath) {
 
     // Allocate and query output attributes
     m_outputAttrs = new rknn_tensor_attr[m_ioNum.n_output];
-    std::cout << "output tensors:" << std::endl;
+    LOG_INFO() << "[YOLOv8RKNNDetector] Output tensors:";
     for (uint32_t i = 0; i < m_ioNum.n_output; i++) {
         m_outputAttrs[i].index = i;
         ret = rknn_query(m_rknnContext, RKNN_QUERY_OUTPUT_ATTR, &(m_outputAttrs[i]), sizeof(rknn_tensor_attr));
@@ -352,18 +357,22 @@ bool YOLOv8RKNNDetector::initialize(const std::string& modelPath) {
         }
 
         // Print detailed output tensor info
-        std::cout << "  index=" << i << ", name=" << m_outputAttrs[i].name
-                  << ", n_dims=" << m_outputAttrs[i].n_dims << ", dims=[";
+        std::ostringstream dims_str;
+        dims_str << "[";
         for (uint32_t j = 0; j < m_outputAttrs[i].n_dims; j++) {
-            std::cout << m_outputAttrs[i].dims[j];
-            if (j < m_outputAttrs[i].n_dims - 1) std::cout << ", ";
+            dims_str << m_outputAttrs[i].dims[j];
+            if (j < m_outputAttrs[i].n_dims - 1) dims_str << ", ";
         }
-        std::cout << "], n_elems=" << m_outputAttrs[i].n_elems
-                  << ", size=" << m_outputAttrs[i].size
-                  << ", fmt=" << (m_outputAttrs[i].fmt == RKNN_TENSOR_NHWC ? "NHWC" : "NCHW")
-                  << ", type=" << get_type_string(m_outputAttrs[i].type)
-                  << ", qnt_type=AFFINE, zp=" << m_outputAttrs[i].zp
-                  << ", scale=" << std::fixed << std::setprecision(6) << m_outputAttrs[i].scale << std::endl;
+        dims_str << "]";
+
+        LOG_DEBUG() << "[YOLOv8RKNNDetector] Output tensor - index=" << i << ", name=" << m_outputAttrs[i].name
+                   << ", n_dims=" << m_outputAttrs[i].n_dims << ", dims=" << dims_str.str()
+                   << ", n_elems=" << m_outputAttrs[i].n_elems
+                   << ", size=" << m_outputAttrs[i].size
+                   << ", fmt=" << (m_outputAttrs[i].fmt == RKNN_TENSOR_NHWC ? "NHWC" : "NCHW")
+                   << ", type=" << get_type_string(m_outputAttrs[i].type)
+                   << ", qnt_type=AFFINE, zp=" << m_outputAttrs[i].zp
+                   << ", scale=" << std::fixed << std::setprecision(6) << m_outputAttrs[i].scale;
     }
 
     // Check if model is quantized
@@ -495,7 +504,7 @@ std::vector<Detection> YOLOv8RKNNDetector::detectObjects(const cv::Mat& frame) {
     }
 
     // Run inference
-    std::cout << "rknn_run" << std::endl;
+    LOG_DEBUG() << "[YOLOv8RKNNDetector] Running RKNN inference...";
     auto inference_start = std::chrono::high_resolution_clock::now();
     ret = rknn_run(m_rknnContext, nullptr);
     auto inference_end = std::chrono::high_resolution_clock::now();
@@ -507,8 +516,8 @@ std::vector<Detection> YOLOv8RKNNDetector::detectObjects(const cv::Mat& frame) {
 
     // Calculate and print inference time like reference implementation
     double inference_time = std::chrono::duration<double, std::milli>(inference_end - inference_start).count();
-    std::cout << "rknn_run time=" << std::fixed << std::setprecision(2) << inference_time
-              << "ms, FPS = " << std::setprecision(2) << (1000.0 / inference_time) << std::endl;
+    LOG_INFO() << "[YOLOv8RKNNDetector] RKNN inference time=" << std::fixed << std::setprecision(2) << inference_time
+               << "ms, FPS=" << std::setprecision(2) << (1000.0 / inference_time);
 
     // Get outputs
     rknn_output outputs[m_ioNum.n_output];
@@ -529,8 +538,8 @@ std::vector<Detection> YOLOv8RKNNDetector::detectObjects(const cv::Mat& frame) {
     auto postprocess_end = std::chrono::high_resolution_clock::now();
 
     double postprocess_time = std::chrono::duration<double, std::milli>(postprocess_end - postprocess_start).count();
-    std::cout << "post_process time=" << std::fixed << std::setprecision(2) << postprocess_time
-              << "ms, FPS = " << std::setprecision(2) << (1000.0 / postprocess_time) << std::endl;
+    LOG_INFO() << "[YOLOv8RKNNDetector] Post-process time=" << std::fixed << std::setprecision(2) << postprocess_time
+               << "ms, FPS=" << std::setprecision(2) << (1000.0 / postprocess_time);
 
     // Release outputs
     rknn_outputs_release(m_rknnContext, m_ioNum.n_output, outputs);
@@ -668,11 +677,11 @@ std::vector<Detection> YOLOv8RKNNDetector::postprocessResults(rknn_output* outpu
         detections.push_back(detection);
 
         // Print detection like reference implementation
-        std::cout << detection.className << " @ ("
-                  << detection.bbox.x << " " << detection.bbox.y << " "
-                  << (detection.bbox.x + detection.bbox.width) << " "
-                  << (detection.bbox.y + detection.bbox.height) << ") "
-                  << std::fixed << std::setprecision(3) << detection.confidence << std::endl;
+        LOG_DEBUG() << "[YOLOv8RKNNDetector] Detection: " << detection.className << " @ ("
+                   << detection.bbox.x << " " << detection.bbox.y << " "
+                   << (detection.bbox.x + detection.bbox.width) << " "
+                   << (detection.bbox.y + detection.bbox.height) << ") "
+                   << std::fixed << std::setprecision(3) << detection.confidence;
     }
 
     // Print class summary like our test program
@@ -681,9 +690,9 @@ std::vector<Detection> YOLOv8RKNNDetector::postprocessResults(rknn_output* outpu
         classCounts[det.className]++;
     }
 
-    std::cout << std::endl << "Class summary:" << std::endl;
+    LOG_DEBUG() << "[YOLOv8RKNNDetector] Class summary:";
     for (const auto& pair : classCounts) {
-        std::cout << "  " << pair.first << ": " << pair.second << std::endl;
+        LOG_DEBUG() << "[YOLOv8RKNNDetector]   " << pair.first << ": " << pair.second;
     }
 
 #endif

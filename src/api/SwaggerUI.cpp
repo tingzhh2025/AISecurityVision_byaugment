@@ -1,5 +1,5 @@
 #include "SwaggerUI.h"
-#include <nlohmann/json.hpp>
+#include "../third_party/nlohmann/json.hpp"
 #include <sstream>
 #include <algorithm>
 
@@ -99,7 +99,8 @@ std::string SwaggerUI::generateOpenAPISpec() const {
         nlohmann::json operation;
         operation["summary"] = endpoint.summary;
         operation["description"] = endpoint.description;
-        operation["tags"] = nlohmann::json::array({endpoint.tag});
+        operation["tags"] = nlohmann::json::array();
+        operation["tags"].push_back(endpoint.tag);
         
         // 认证要求
         if (endpoint.requiresAuth && m_authEnabled) {
@@ -299,7 +300,7 @@ void SwaggerUI::loadBuiltinSchemas() {
     systemStatus.description = "系统状态信息";
     systemStatus.properties = R"({
         "status": {"type": "string", "enum": ["running", "stopped", "error"]},
-        "uptime": {"type": "integer", "description": "系统运行时间(秒)"},
+        "uptime": {"type": "integer", "description": "System uptime in seconds"},
         "version": {"type": "string"},
         "cameras_active": {"type": "integer"},
         "ai_backend": {"type": "string", "enum": ["RKNN", "OpenCV", "TensorRT"]}

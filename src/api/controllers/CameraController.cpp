@@ -105,10 +105,13 @@ void CameraController::handleGetCameras(const std::string& request, std::string&
 
             // Determine camera status based on pipeline state
             std::string status = "offline";
+            int dynamicMjpegPort = 0;
             if (m_taskManager) {
                 auto pipeline = m_taskManager->getPipeline(config.id);
                 if (pipeline && pipeline->isRunning()) {
                     status = pipeline->isHealthy() ? "online" : "error";
+                    // Get dynamically allocated MJPEG port
+                    dynamicMjpegPort = m_taskManager->getMJPEGPort(config.id);
                 } else if (config.enabled) {
                     status = "configured";
                 }
@@ -124,7 +127,7 @@ void CameraController::handleGetCameras(const std::string& request, std::string&
                  << "\"width\":" << config.width << ","
                  << "\"height\":" << config.height << ","
                  << "\"fps\":" << config.fps << ","
-                 << "\"mjpeg_port\":" << config.mjpeg_port << ","
+                 << "\"mjpeg_port\":" << dynamicMjpegPort << ","
                  << "\"enabled\":" << (config.enabled ? "true" : "false") << ","
                  << "\"status\":\"" << status << "\","
                  << "\"ip\":\"" << extractIpFromUrl(config.url) << "\""
@@ -153,10 +156,9 @@ void CameraController::handlePostVideoSource(const std::string& request, std::st
             config.id = "camera_" + std::to_string(std::time(nullptr));
         }
 
-        // Assign MJPEG port if not set
-        if (config.mjpeg_port == 0) {
-            config.mjpeg_port = 8161 + static_cast<int>(m_cameraConfigs.size());
-        }
+        // MJPEG port will be dynamically allocated by TaskManager
+        // Remove manual port assignment to prevent conflicts
+        config.mjpeg_port = 0;
 
         // Add or update camera configuration in memory
         auto it = std::find_if(m_cameraConfigs.begin(), m_cameraConfigs.end(),
@@ -184,7 +186,8 @@ void CameraController::handlePostVideoSource(const std::string& request, std::st
             configJson["width"] = config.width;
             configJson["height"] = config.height;
             configJson["fps"] = config.fps;
-            configJson["mjpeg_port"] = config.mjpeg_port;
+            // MJPEG port is dynamically allocated, don't store in database
+            // configJson["mjpeg_port"] = config.mjpeg_port;
             configJson["enabled"] = config.enabled;
             configJson["detection_enabled"] = true;
             configJson["recording_enabled"] = false;
@@ -220,7 +223,7 @@ void CameraController::handlePostVideoSource(const std::string& request, std::st
             source.width = config.width;
             source.height = config.height;
             source.fps = config.fps;
-            source.mjpeg_port = config.mjpeg_port;
+            source.mjpeg_port = 0; // Will be dynamically allocated by TaskManager
             source.enabled = config.enabled;
 
             // Start pipeline initialization in a separate thread to avoid blocking API

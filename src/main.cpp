@@ -139,7 +139,8 @@ std::vector<CameraConfig> loadCameraConfigFromDatabase() {
                 camera.id = cameraId;
                 camera.name = config.value("name", cameraId);
                 camera.rtsp_url = config.value("rtsp_url", config.value("url", ""));
-                camera.mjpeg_port = config.value("mjpeg_port", 8000);
+                // MJPEG port will be dynamically allocated by TaskManager
+                camera.mjpeg_port = 0;
                 camera.enabled = config.value("enabled", true);
                 camera.detection_enabled = config.value("detection_enabled", true);
                 camera.recording_enabled = config.value("recording_enabled", false);
@@ -399,13 +400,13 @@ int main(int argc, char* argv[]) {
                 camera.width = camConfig.stream_config.max_width;
                 camera.height = camConfig.stream_config.max_height;
                 camera.fps = camConfig.stream_config.fps;
-                camera.mjpeg_port = camConfig.mjpeg_port;
+                camera.mjpeg_port = 0; // Will be dynamically allocated
                 camera.enabled = camConfig.enabled;
 
                 cameras.push_back(camera);
 
                 LOG_INFO() << "[Main] Configured camera from database: " << camera.id
-                          << " -> MJPEG port: " << camConfig.mjpeg_port;
+                          << " (MJPEG port will be dynamically allocated)";
             }
 
         } else if (!configFile.empty()) {
@@ -430,44 +431,53 @@ int main(int argc, char* argv[]) {
                     camera.width = camConfig.stream_config.max_width;
                     camera.height = camConfig.stream_config.max_height;
                     camera.fps = camConfig.stream_config.fps;
-                    camera.mjpeg_port = camConfig.mjpeg_port;
+                    camera.mjpeg_port = 0; // Will be dynamically allocated
                     camera.enabled = camConfig.enabled;
 
                     cameras.push_back(camera);
 
                     LOG_INFO() << "[Main] Configured camera from file: " << camera.id
-                              << " -> MJPEG port: " << camConfig.mjpeg_port;
+                              << " (MJPEG port will be dynamically allocated)";
                 }
             }
         } else {
             LOG_INFO() << "[Main] No cameras configured in database or config file";
         }
 
-        // Add cameras to TaskManager
+        // Add cameras to TaskManager asynchronously to avoid blocking startup
         if (!cameras.empty()) {
-            for (const auto& camera : cameras) {
-                LOG_INFO() << "[Main] Adding camera: " << camera.id << " (" << camera.url << ")";
+            LOG_INFO() << "[Main] Starting asynchronous camera initialization for " << cameras.size() << " cameras...";
 
-                if (taskManager.addVideoSource(camera)) {
-                    LOG_INFO() << "[Main] Camera added successfully: " << camera.id;
+            // Start camera initialization in a separate thread
+            std::thread cameraInitThread([cameras, &taskManager, systemConfig]() {
+                for (const auto& camera : cameras) {
+                    LOG_INFO() << "[Main] Adding camera: " << camera.id << " (" << camera.url << ")";
 
-                    // Configure optimized detection if enabled in system config
-                    if (systemConfig.optimized_detection) {
-                        auto pipeline = taskManager.getPipeline(camera.id);
-                        if (pipeline) {
-                            pipeline->setOptimizedDetectionEnabled(true);
-                            pipeline->setDetectionThreads(systemConfig.detection_threads);
-                            LOG_INFO() << "[Main] Optimized detection enabled for " << camera.id
-                                      << " with " << systemConfig.detection_threads << " threads";
+                    if (taskManager.addVideoSource(camera)) {
+                        LOG_INFO() << "[Main] Camera added successfully: " << camera.id;
+
+                        // Configure optimized detection if enabled in system config
+                        if (systemConfig.optimized_detection) {
+                            auto pipeline = taskManager.getPipeline(camera.id);
+                            if (pipeline) {
+                                pipeline->setOptimizedDetectionEnabled(true);
+                                pipeline->setDetectionThreads(systemConfig.detection_threads);
+                                LOG_INFO() << "[Main] Optimized detection enabled for " << camera.id
+                                          << " with " << systemConfig.detection_threads << " threads";
+                            }
                         }
-                    }
 
-                    // Load person statistics configuration from database
-                    loadPersonStatsConfig(camera.id, taskManager);
-                } else {
-                    LOG_ERROR() << "[Main] Failed to add camera: " << camera.id;
+                        // Load person statistics configuration from database
+                        loadPersonStatsConfig(camera.id, taskManager);
+                    } else {
+                        LOG_ERROR() << "[Main] Failed to add camera: " << camera.id;
+                    }
                 }
-            }
+                LOG_INFO() << "[Main] Camera initialization thread completed";
+            });
+            cameraInitThread.detach(); // Let it run in background
+
+            LOG_INFO() << "[Main] Camera initialization started in background thread";
         } else {
             LOG_INFO() << "[Main] No cameras configured. System running in API-only mode.";
         }

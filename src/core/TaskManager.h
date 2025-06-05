@@ -12,6 +12,7 @@
 
 // Forward declarations
 class VideoPipeline;
+class MJPEGPortManager;
 
 // VideoSource is now defined in VideoPipeline.h
 struct VideoSource;
@@ -176,6 +177,12 @@ public:
 
     // Detection category filtering
     void updateDetectionCategories(const std::vector<std::string>& enabledCategories);
+
+    // MJPEG Port Management
+    int allocateMJPEGPort(const std::string& cameraId);
+    bool releaseMJPEGPort(const std::string& cameraId);
+    int getMJPEGPort(const std::string& cameraId) const;
+    std::unordered_map<std::string, int> getAllMJPEGPortAllocations() const;
 
     // Configuration constants
     static constexpr size_t MAX_PIPELINES = 16;
