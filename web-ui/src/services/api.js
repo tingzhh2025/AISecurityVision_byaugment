@@ -130,27 +130,30 @@ export const apiService = {
       const camera = cameras.find(cam => cam.id === cameraId)
 
       if (camera && camera.mjpeg_port) {
-        // 直接访问MJPEG流，不通过Vite代理
-        return `http://127.0.0.1:${camera.mjpeg_port}/stream.mjpg`
+        // 使用当前页面的hostname，确保与前端访问地址一致
+        const hostname = window.location.hostname
+        return `http://${hostname}:${camera.mjpeg_port}/stream.mjpg`
       }
 
       // 如果API调用失败，回退到静态映射
+      const hostname = window.location.hostname
       const streamMapping = {
-        'camera_01': 'http://127.0.0.1:8161/stream.mjpg',
-        'camera_02': 'http://127.0.0.1:8162/stream.mjpg',
-        'camera_03': 'http://127.0.0.1:8163/stream.mjpg',
-        'camera_04': 'http://127.0.0.1:8164/stream.mjpg',
-        'camera_05': 'http://127.0.0.1:8165/stream.mjpg',
-        'camera_06': 'http://127.0.0.1:8166/stream.mjpg',
-        'camera_07': 'http://127.0.0.1:8167/stream.mjpg',
-        'camera_08': 'http://127.0.0.1:8168/stream.mjpg',
-        'test_camera': 'http://127.0.0.1:8161/stream.mjpg'
+        'camera_01': `http://${hostname}:8161/stream.mjpg`,
+        'camera_02': `http://${hostname}:8162/stream.mjpg`,
+        'camera_03': `http://${hostname}:8163/stream.mjpg`,
+        'camera_04': `http://${hostname}:8164/stream.mjpg`,
+        'camera_05': `http://${hostname}:8165/stream.mjpg`,
+        'camera_06': `http://${hostname}:8166/stream.mjpg`,
+        'camera_07': `http://${hostname}:8167/stream.mjpg`,
+        'camera_08': `http://${hostname}:8168/stream.mjpg`,
+        'test_camera': `http://${hostname}:8161/stream.mjpg`
       }
 
-      return streamMapping[cameraId] || 'http://127.0.0.1:8161/stream.mjpg'
+      return streamMapping[cameraId] || `http://${hostname}:8161/stream.mjpg`
     } catch (error) {
       console.error('Failed to get camera info for stream URL:', error)
-      return 'http://127.0.0.1:8161/stream.mjpg'
+      const hostname = window.location.hostname
+      return `http://${hostname}:8161/stream.mjpg`
     }
   },
 

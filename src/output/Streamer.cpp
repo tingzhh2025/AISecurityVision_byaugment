@@ -1047,6 +1047,11 @@ void Streamer::drawROIs(cv::Mat& frame, const FrameResult& result) {
             continue; // Skip invalid polygons
         }
 
+        // Skip default ROI from display
+        if (roi.id == "default_roi" || roi.name == "Default Intrusion Zone") {
+            continue;
+        }
+
         // Get priority-based color (BGR format for OpenCV)
         cv::Scalar borderColor, fillColor;
         std::string priorityText;

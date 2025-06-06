@@ -26,30 +26,9 @@ if(OpenCV_VERSION VERSION_LESS "4.5.5")
     message(FATAL_ERROR "OpenCV 4.5.5 or higher is required, found ${OpenCV_VERSION}")
 endif()
 
-# Force specific OpenCV library paths to ensure 4.5.5 is used
-set(OpenCV_LIBS_OVERRIDE
-    /usr/lib/aarch64-linux-gnu/libopencv_core.so.4.5.5
-    /usr/lib/aarch64-linux-gnu/libopencv_imgproc.so.4.5.5
-    /usr/lib/aarch64-linux-gnu/libopencv_imgcodecs.so.4.5.5
-    /usr/lib/aarch64-linux-gnu/libopencv_videoio.so.4.5.5
-    /usr/lib/aarch64-linux-gnu/libopencv_video.so.4.5.5
-    /usr/lib/aarch64-linux-gnu/libopencv_calib3d.so.4.5.5
-    /usr/lib/aarch64-linux-gnu/libopencv_features2d.so.4.5.5
-    /usr/lib/aarch64-linux-gnu/libopencv_flann.so.4.5.5
-    /usr/lib/aarch64-linux-gnu/libopencv_highgui.so.4.5.5
-    /usr/lib/aarch64-linux-gnu/libopencv_photo.so.4.5.5
-    /usr/lib/aarch64-linux-gnu/libopencv_stitching.so.4.5.5
-)
-
-# Check if all required 4.5.5 libraries exist
-foreach(lib ${OpenCV_LIBS_OVERRIDE})
-    if(NOT EXISTS ${lib})
-        message(WARNING "OpenCV 4.5.5 library not found: ${lib}")
-    endif()
-endforeach()
-
-# Override OpenCV_LIBS with our specific 4.5.5 libraries
-set(OpenCV_LIBS ${OpenCV_LIBS_OVERRIDE})
+# Use system OpenCV libraries instead of hardcoded paths
+# This allows the build to work on different architectures
+set(OpenCV_LIBS ${OpenCV_LIBS})
 
 # Find or download httplib
 find_path(HTTPLIB_INCLUDE_DIR httplib.h
@@ -117,21 +96,8 @@ if(NVML_LIBRARIES)
 endif()
 
 # Find RKNN libraries for Rockchip NPU support
-find_library(RKNN_API_LIBRARY rknn_api
-    PATHS
-    /usr/lib
-    /usr/local/lib
-    /usr/lib/aarch64-linux-gnu
-    /usr/lib/arm-linux-gnueabihf
-    /opt/rknn/lib
-    /opt/rknn/lib64
-    ${CMAKE_SOURCE_DIR}/build/models/rknn_model_zoo/3rdparty/rknpu2/Linux/aarch64
-    ${CMAKE_SOURCE_DIR}/build/models/rknn_model_zoo/3rdparty/rknpu1/Linux/aarch64
-)
-
-# Also try to find librknnrt.so (RKNPU2 runtime library)
-if(NOT RKNN_API_LIBRARY)
-    find_library(RKNN_API_LIBRARY rknnrt
+if(ENABLE_RKNN_NPU)
+    find_library(RKNN_API_LIBRARY rknn_api
         PATHS
         /usr/lib
         /usr/local/lib
@@ -141,74 +107,171 @@ if(NOT RKNN_API_LIBRARY)
         /opt/rknn/lib64
         ${CMAKE_SOURCE_DIR}/build/models/rknn_model_zoo/3rdparty/rknpu2/Linux/aarch64
         ${CMAKE_SOURCE_DIR}/build/models/rknn_model_zoo/3rdparty/rknpu1/Linux/aarch64
+        ${RKNN_ROOT}/lib
     )
-endif()
 
-find_path(RKNN_API_INCLUDE_DIR rknn_api.h
-    PATHS
-    /usr/include
-    /usr/local/include
-    /opt/rknn/include
-    ${CMAKE_SOURCE_DIR}/build/models/rknn_model_zoo/3rdparty/rknpu2/include
-    ${CMAKE_SOURCE_DIR}/build/models/rknn_model_zoo/3rdparty/rknpu1/include
-)
+    # Also try to find librknnrt.so (RKNPU2 runtime library)
+    if(NOT RKNN_API_LIBRARY)
+        find_library(RKNN_API_LIBRARY rknnrt
+            PATHS
+            /usr/lib
+            /usr/local/lib
+            /usr/lib/aarch64-linux-gnu
+            /usr/lib/arm-linux-gnueabihf
+            /opt/rknn/lib
+            /opt/rknn/lib64
+            ${CMAKE_SOURCE_DIR}/build/models/rknn_model_zoo/3rdparty/rknpu2/Linux/aarch64
+            ${CMAKE_SOURCE_DIR}/build/models/rknn_model_zoo/3rdparty/rknpu1/Linux/aarch64
+            ${RKNN_ROOT}/lib
+        )
+    endif()
 
-if(RKNN_API_LIBRARY AND RKNN_API_INCLUDE_DIR)
-    set(RKNN_FOUND TRUE)
-    set(RKNN_LIBRARIES ${RKNN_API_LIBRARY})
-    set(RKNN_INCLUDE_DIRS ${RKNN_API_INCLUDE_DIR})
-    message(STATUS "Found RKNN API: ${RKNN_API_LIBRARY}")
+    find_path(RKNN_API_INCLUDE_DIR rknn_api.h
+        PATHS
+        /usr/include
+        /usr/local/include
+        /opt/rknn/include
+        ${CMAKE_SOURCE_DIR}/build/models/rknn_model_zoo/3rdparty/rknpu2/include
+        ${CMAKE_SOURCE_DIR}/build/models/rknn_model_zoo/3rdparty/rknpu1/include
+        ${RKNN_ROOT}/include
+    )
+
+    if(RKNN_API_LIBRARY AND RKNN_API_INCLUDE_DIR)
+        set(RKNN_FOUND TRUE)
+        set(RKNN_LIBRARIES ${RKNN_API_LIBRARY})
+        set(RKNN_INCLUDE_DIRS ${RKNN_API_INCLUDE_DIR})
+        message(STATUS "Found RKNN API: ${RKNN_API_LIBRARY}")
+        message(STATUS "RKNN include: ${RKNN_API_INCLUDE_DIR}")
+    else()
+        set(RKNN_FOUND FALSE)
+        message(STATUS "RKNN API not found - NPU acceleration will not be available")
+    endif()
 else()
     set(RKNN_FOUND FALSE)
-    message(STATUS "RKNN API not found - NPU acceleration will not be available")
+    message(STATUS "RKNN NPU support disabled by user")
+endif()
+
+# Platform-specific acceleration options - Make them mutually exclusive
+option(ENABLE_CUDA_TENSORRT "Enable CUDA TensorRT acceleration for x86_64/Jetson" OFF)
+option(ENABLE_RKNN_NPU "Enable RKNN NPU acceleration for Rockchip platforms" ON)
+option(FORCE_BACKEND "Force specific backend: AUTO, RKNN, TENSORRT, CPU" "AUTO")
+
+# Ensure CUDA TensorRT and RKNN NPU are mutually exclusive
+if(ENABLE_CUDA_TENSORRT AND ENABLE_RKNN_NPU)
+    message(WARNING "Both CUDA TensorRT and RKNN NPU are enabled. Making them mutually exclusive...")
+    message(STATUS "Disabling RKNN NPU to prioritize CUDA TensorRT")
+    set(ENABLE_RKNN_NPU OFF)
+endif()
+
+# Detect platform architecture
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
+    set(IS_ARM64 TRUE)
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+    set(IS_X86_64 TRUE)
 endif()
 
 # Find TensorRT libraries for NVIDIA GPU support (optional)
-find_library(TENSORRT_LIBRARY nvinfer
-    PATHS
-    /usr/lib/x86_64-linux-gnu
-    /usr/lib/aarch64-linux-gnu
-    /usr/local/lib
-    /usr/local/cuda/lib64
-    /opt/tensorrt/lib
-    /usr/lib/tensorrt
-)
-
-find_library(TENSORRT_ONNX_LIBRARY nvonnxparser
-    PATHS
-    /usr/lib/x86_64-linux-gnu
-    /usr/lib/aarch64-linux-gnu
-    /usr/local/lib
-    /usr/local/cuda/lib64
-    /opt/tensorrt/lib
-    /usr/lib/tensorrt
-)
-
-find_path(TENSORRT_INCLUDE_DIR NvInfer.h
-    PATHS
-    /usr/include
-    /usr/local/include
-    /usr/local/cuda/include
-    /opt/tensorrt/include
-    /usr/include/tensorrt
-)
-
-if(TENSORRT_LIBRARY AND TENSORRT_ONNX_LIBRARY AND TENSORRT_INCLUDE_DIR)
-    set(TENSORRT_FOUND TRUE)
-    set(TENSORRT_LIBRARIES ${TENSORRT_LIBRARY} ${TENSORRT_ONNX_LIBRARY})
-    set(TENSORRT_INCLUDE_DIRS ${TENSORRT_INCLUDE_DIR})
-    message(STATUS "Found TensorRT: ${TENSORRT_LIBRARIES}")
-
-    # Also find CUDA runtime
+if(ENABLE_CUDA_TENSORRT)
+    # First try to find CUDA
     find_package(CUDA QUIET)
+    
     if(CUDA_FOUND)
-        list(APPEND TENSORRT_LIBRARIES ${CUDA_LIBRARIES})
-        list(APPEND TENSORRT_INCLUDE_DIRS ${CUDA_INCLUDE_DIRS})
-        message(STATUS "Found CUDA: ${CUDA_LIBRARIES}")
+        message(STATUS "CUDA version: ${CUDA_VERSION}")
+        
+        # Find TensorRT components
+        find_library(TENSORRT_LIBRARY nvinfer
+            PATHS
+            /usr/lib/x86_64-linux-gnu
+            /usr/lib/aarch64-linux-gnu
+            /usr/local/lib
+            /usr/local/cuda/lib64
+            /opt/tensorrt/lib
+            /usr/lib/tensorrt
+            ${TENSORRT_ROOT}/lib
+        )
+
+        find_library(TENSORRT_ONNX_LIBRARY nvonnxparser
+            PATHS
+            /usr/lib/x86_64-linux-gnu
+            /usr/lib/aarch64-linux-gnu
+            /usr/local/lib
+            /usr/local/cuda/lib64
+            /opt/tensorrt/lib
+            /usr/lib/tensorrt
+            ${TENSORRT_ROOT}/lib
+        )
+        
+        # Additional TensorRT libraries for complete support
+        find_library(TENSORRT_PLUGIN_LIBRARY nvinfer_plugin
+            PATHS
+            /usr/lib/x86_64-linux-gnu
+            /usr/lib/aarch64-linux-gnu
+            /usr/local/lib
+            /usr/local/cuda/lib64
+            /opt/tensorrt/lib
+            /usr/lib/tensorrt
+            ${TENSORRT_ROOT}/lib
+        )
+
+        find_path(TENSORRT_INCLUDE_DIR NvInfer.h
+            PATHS
+            /usr/include
+            /usr/local/include
+            /usr/local/cuda/include
+            /opt/tensorrt/include
+            /usr/include/tensorrt
+            ${TENSORRT_ROOT}/include
+        )
+
+        if(TENSORRT_LIBRARY AND TENSORRT_ONNX_LIBRARY AND TENSORRT_INCLUDE_DIR)
+            set(TENSORRT_FOUND TRUE)
+            set(TENSORRT_LIBRARIES ${TENSORRT_LIBRARY} ${TENSORRT_ONNX_LIBRARY})
+            
+            # Add plugin library if found
+            if(TENSORRT_PLUGIN_LIBRARY)
+                list(APPEND TENSORRT_LIBRARIES ${TENSORRT_PLUGIN_LIBRARY})
+            endif()
+            
+            # Add CUDA libraries
+            list(APPEND TENSORRT_LIBRARIES ${CUDA_LIBRARIES} ${CUDA_CUDART_LIBRARY})
+            
+            # Add cuDNN if available
+            find_library(CUDNN_LIBRARY cudnn
+                PATHS
+                /usr/lib/x86_64-linux-gnu
+                /usr/lib/aarch64-linux-gnu
+                /usr/local/cuda/lib64
+                ${CUDA_TOOLKIT_ROOT_DIR}/lib64
+            )
+            if(CUDNN_LIBRARY)
+                list(APPEND TENSORRT_LIBRARIES ${CUDNN_LIBRARY})
+                message(STATUS "Found cuDNN: ${CUDNN_LIBRARY}")
+            endif()
+            
+            set(TENSORRT_INCLUDE_DIRS ${TENSORRT_INCLUDE_DIR} ${CUDA_INCLUDE_DIRS})
+            message(STATUS "Found TensorRT: ${TENSORRT_LIBRARIES}")
+            message(STATUS "TensorRT include: ${TENSORRT_INCLUDE_DIRS}")
+            
+            # Print TensorRT version if available
+            if(EXISTS "${TENSORRT_INCLUDE_DIR}/NvInferVersion.h")
+                file(READ "${TENSORRT_INCLUDE_DIR}/NvInferVersion.h" VERSION_FILE_CONTENT)
+                string(REGEX MATCH "NV_TENSORRT_MAJOR[ ]+([0-9]+)" _ ${VERSION_FILE_CONTENT})
+                set(TENSORRT_VERSION_MAJOR ${CMAKE_MATCH_1})
+                string(REGEX MATCH "NV_TENSORRT_MINOR[ ]+([0-9]+)" _ ${VERSION_FILE_CONTENT})
+                set(TENSORRT_VERSION_MINOR ${CMAKE_MATCH_1})
+                message(STATUS "TensorRT version: ${TENSORRT_VERSION_MAJOR}.${TENSORRT_VERSION_MINOR}")
+            endif()
+        else()
+            set(TENSORRT_FOUND FALSE)
+            message(STATUS "TensorRT not found - GPU acceleration will not be available")
+        endif()
+    else()
+        set(TENSORRT_FOUND FALSE)
+        message(STATUS "CUDA not found - TensorRT GPU acceleration will not be available")
     endif()
 else()
     set(TENSORRT_FOUND FALSE)
-    message(STATUS "TensorRT not found - GPU acceleration will not be available")
+    message(STATUS "CUDA TensorRT support disabled by user")
 endif()
 
 # Find libcurl for HTTP alarm delivery
@@ -405,9 +468,21 @@ list(REMOVE_ITEM SOURCES "${CMAKE_SOURCE_DIR}/src/core/LoggerExample.cpp")
 # Remove YOLOv8DetectorExample.cpp from sources as it contains a main function
 list(REMOVE_ITEM SOURCES "${CMAKE_SOURCE_DIR}/src/ai/YOLOv8DetectorExample.cpp")
 
+# Remove TensorRT implementation if not available
+if(NOT TENSORRT_FOUND)
+    list(REMOVE_ITEM SOURCES "${CMAKE_SOURCE_DIR}/src/ai/YOLOv8TensorRTDetector.cpp")
+endif()
+
+# Remove RKNN implementation if not available
+if(NOT RKNN_FOUND)
+    list(REMOVE_ITEM SOURCES "${CMAKE_SOURCE_DIR}/src/ai/YOLOv8RKNNDetector.cpp")
+endif()
+
 # AI-only sources for simple tests
 file(GLOB AI_SOURCES
     "src/ai/YOLOv8Detector.cpp"
+    "src/ai/YOLOv8DetectorFactory.cpp"
+    "src/ai/YOLOv8CPUDetector.cpp"
     "src/core/TaskManager.cpp"
 )
 
@@ -547,38 +622,72 @@ target_link_libraries(${PROJECT_NAME} ${LINK_LIBRARIES})
 # Compiler-specific options
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_17)
 
+# Add tests subdirectory
+option(BUILD_TESTS "Build test programs" ON)
+if(BUILD_TESTS)
+    add_subdirectory(tests)
+endif()
+
 # Install targets
 install(TARGETS ${PROJECT_NAME} DESTINATION bin)
 install(DIRECTORY models/ DESTINATION share/${PROJECT_NAME}/models OPTIONAL)
 install(DIRECTORY config/ DESTINATION share/${PROJECT_NAME}/config OPTIONAL)
 install(FILES scripts/convert_yolov8_to_rknn.py DESTINATION share/${PROJECT_NAME}/scripts
         PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+install(FILES scripts/convert_yolov8_to_tensorrt.py DESTINATION share/${PROJECT_NAME}/scripts
+        PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
 install(FILES docs/RKNN_SETUP_GUIDE.md DESTINATION share/${PROJECT_NAME}/docs)
+install(FILES docs/TENSORRT_SETUP_GUIDE.md DESTINATION share/${PROJECT_NAME}/docs)
 
 
 
 # Print configuration summary
+message(STATUS "========================================")
+message(STATUS "AISecurityVision Configuration Summary")
+message(STATUS "========================================")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
-message(STATUS "OpenCV version: ${OpenCV_VERSION}")
-message(STATUS "SQLite3 found: ${SQLITE3_FOUND}")
-message(STATUS "FFmpeg found: ${LIBAV_FOUND}")
-message(STATUS "NVML found: ${NVML_FOUND}")
-message(STATUS "RKNN found: ${RKNN_FOUND}")
-message(STATUS "TensorRT found: ${TENSORRT_FOUND}")
-message(STATUS "libcurl found: ${CURL_FOUND}")
+message(STATUS "System processor: ${CMAKE_SYSTEM_PROCESSOR}")
 message(STATUS "")
-message(STATUS "YOLOv8 Detector Backends Available:")
+message(STATUS "Core Dependencies:")
+message(STATUS "  OpenCV version: ${OpenCV_VERSION}")
+message(STATUS "  SQLite3: ${SQLITE3_FOUND}")
+message(STATUS "  FFmpeg: ${LIBAV_FOUND}")
+message(STATUS "  libcurl: ${CURL_FOUND}")
+message(STATUS "  OpenSSL: ${OpenSSL_FOUND}")
+message(STATUS "")
+message(STATUS "AI Acceleration Backends:")
 if(RKNN_FOUND)
-    message(STATUS "  - RKNN NPU (RK3588): YES")
+    message(STATUS "  RKNN NPU (RK3588): ENABLED")
+    message(STATUS "    - Library: ${RKNN_LIBRARIES}")
+    message(STATUS "    - Include: ${RKNN_INCLUDE_DIRS}")
 else()
-    message(STATUS "  - RKNN NPU (RK3588): NO")
+    message(STATUS "  RKNN NPU (RK3588): DISABLED")
 endif()
 if(TENSORRT_FOUND)
-    message(STATUS "  - TensorRT GPU: YES")
+    message(STATUS "  TensorRT GPU: ENABLED")
+    message(STATUS "    - CUDA version: ${CUDA_VERSION}")
+    message(STATUS "    - Libraries: ${TENSORRT_LIBRARIES}")
+    if(DEFINED TENSORRT_VERSION_MAJOR)
+        message(STATUS "    - TensorRT version: ${TENSORRT_VERSION_MAJOR}.${TENSORRT_VERSION_MINOR}")
+    endif()
 else()
-    message(STATUS "  - TensorRT GPU: NO")
+    message(STATUS "  TensorRT GPU: DISABLED")
 endif()
+message(STATUS "  CPU Fallback: ALWAYS AVAILABLE")
+message(STATUS "")
+message(STATUS "Platform Options:")
+message(STATUS "  ENABLE_CUDA_TENSORRT: ${ENABLE_CUDA_TENSORRT}")
+message(STATUS "  ENABLE_RKNN_NPU: ${ENABLE_RKNN_NPU}")
+message(STATUS "  FORCE_BACKEND: ${FORCE_BACKEND}")
+message(STATUS "")
+message(STATUS "Additional Features:")
+message(STATUS "  NVML (GPU monitoring): ${NVML_FOUND}")
+message(STATUS "  WebSocket support: ${WEBSOCKETPP_INCLUDE_DIR}")
+message(STATUS "  MQTT support: ${PAHO_MQTT_CPP_FOUND}")
+message(STATUS "  InsightFace: ${INSIGHTFACE_LIB}")
+message(STATUS "========================================")
+message(STATUS "")
 
 # InsightFace Integration (Optional)
 # Use local third_party installation

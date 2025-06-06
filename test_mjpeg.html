@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MJPEG Stream Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .stream-container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .stream-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .stream-url {
+            font-family: monospace;
+            background: #f5f5f5;
+            padding: 8px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            word-break: break-all;
+        }
+        .stream-image {
+            max-width: 100%;
+            height: auto;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+        .success {
+            color: green;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MJPEG Stream Test</h1>
+        
+        <div class="stream-container">
+            <div class="stream-title">Camera 1 - ch1 (Port 8091)</div>
+            <div class="stream-url">http://192.168.1.226:8091/stream.mjpg</div>
+            <img id="stream1" class="stream-image" src="http://192.168.1.226:8091/stream.mjpg"
+                 onerror="handleError('stream1')" onload="handleSuccess('stream1')" />
+            <div id="status1"></div>
+        </div>
+
+        <div class="stream-container">
+            <div class="stream-title">Camera 2 - ch2 (Port 8092)</div>
+            <div class="stream-url">http://192.168.1.226:8092/stream.mjpg</div>
+            <img id="stream2" class="stream-image" src="http://192.168.1.226:8092/stream.mjpg"
+                 onerror="handleError('stream2')" onload="handleSuccess('stream2')" />
+            <div id="status2"></div>
+        </div>
+
+        <div class="stream-container">
+            <div class="stream-title">Camera 3 - ch3 (Port 8093)</div>
+            <div class="stream-url">http://192.168.1.226:8093/stream.mjpg</div>
+            <img id="stream3" class="stream-image" src="http://192.168.1.226:8093/stream.mjpg"
+                 onerror="handleError('stream3')" onload="handleSuccess('stream3')" />
+            <div id="status3"></div>
+        </div>
+    </div>
+
+    <script>
+        function handleError(streamId) {
+            const statusElement = document.getElementById('status' + streamId.slice(-1));
+            statusElement.innerHTML = '<span class="error">❌ Stream failed to load</span>';
+            console.error('Failed to load stream:', streamId);
+        }
+        
+        function handleSuccess(streamId) {
+            const statusElement = document.getElementById('status' + streamId.slice(-1));
+            statusElement.innerHTML = '<span class="success">✅ Stream loaded successfully</span>';
+            console.log('Stream loaded successfully:', streamId);
+        }
+        
+        // Test API endpoint
+        fetch('http://192.168.1.226:8080/api/cameras')
+            .then(response => response.json())
+            .then(data => {
+                console.log('Camera API response:', data);
+
+                // Update stream URLs based on API response
+                if (data.cameras) {
+                    data.cameras.forEach((camera, index) => {
+                        const streamElement = document.getElementById(`stream${index + 1}`);
+                        const urlElement = streamElement.parentElement.querySelector('.stream-url');
+                        const newUrl = `http://192.168.1.226:${camera.mjpeg_port}/stream.mjpg`;
+
+                        if (streamElement && urlElement) {
+                            streamElement.src = newUrl;
+                            urlElement.textContent = newUrl;
+                        }
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('API error:', error);
+            });
+    </script>
+</body>
+</html>

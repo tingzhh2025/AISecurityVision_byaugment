@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frontend Debug - Camera Streams</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .debug-section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .camera-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            background: #f9f9f9;
+        }
+        .stream-url {
+            font-family: monospace;
+            background: #e8e8e8;
+            padding: 8px;
+            border-radius: 4px;
+            margin: 10px 0;
+            word-break: break-all;
+        }
+        .stream-image {
+            max-width: 400px;
+            height: auto;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .status {
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            margin: 5px 0;
+        }
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .status.loading { background: #d1ecf1; color: #0c5460; }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Frontend Debug - Camera Streams</h1>
+        
+        <div class="debug-section">
+            <h2>API Response</h2>
+            <div id="api-response" class="log">Loading...</div>
+        </div>
+        
+        <div class="debug-section">
+            <h2>Camera Streams</h2>
+            <div id="cameras-container">Loading cameras...</div>
+        </div>
+        
+        <div class="debug-section">
+            <h2>Debug Log</h2>
+            <div id="debug-log" class="log"></div>
+        </div>
+    </div>
+
+    <script>
+        const debugLog = document.getElementById('debug-log');
+        const apiResponse = document.getElementById('api-response');
+        const camerasContainer = document.getElementById('cameras-container');
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            debugLog.innerHTML += `[${timestamp}] ${message}\n`;
+            debugLog.scrollTop = debugLog.scrollHeight;
+            console.log(message);
+        }
+        
+        function getStreamUrl(camera) {
+            const hostname = window.location.hostname;
+            const url = `http://${hostname}:${camera.mjpeg_port}/stream.mjpg`;
+            log(`Generated stream URL for ${camera.name}: ${url}`);
+            return url;
+        }
+        
+        function handleImageLoad(cameraName) {
+            log(`✅ Stream loaded successfully for ${cameraName}`);
+            const statusElement = document.getElementById(`status-${cameraName}`);
+            if (statusElement) {
+                statusElement.className = 'status success';
+                statusElement.textContent = '✅ Stream loaded successfully';
+            }
+        }
+        
+        function handleImageError(cameraName, url) {
+            log(`❌ Stream failed to load for ${cameraName}: ${url}`);
+            const statusElement = document.getElementById(`status-${cameraName}`);
+            if (statusElement) {
+                statusElement.className = 'status error';
+                statusElement.textContent = '❌ Stream failed to load';
+            }
+        }
+        
+        function createCameraCard(camera) {
+            const streamUrl = getStreamUrl(camera);
+            
+            return `
+                <div class="camera-card">
+                    <h3>${camera.name} (${camera.id})</h3>
+                    <p><strong>Status:</strong> ${camera.status}</p>
+                    <p><strong>MJPEG Port:</strong> ${camera.mjpeg_port}</p>
+                    <p><strong>Resolution:</strong> ${camera.width}x${camera.height}</p>
+                    <p><strong>RTSP URL:</strong> ${camera.url}</p>
+                    
+                    <div class="stream-url">Stream URL: ${streamUrl}</div>
+                    
+                    <div id="status-${camera.name}" class="status loading">🔄 Loading stream...</div>
+                    
+                    <img 
+                        class="stream-image" 
+                        src="${streamUrl}" 
+                        alt="${camera.name} stream"
+                        onload="handleImageLoad('${camera.name}')"
+                        onerror="handleImageError('${camera.name}', '${streamUrl}')"
+                    />
+                </div>
+            `;
+        }
+        
+        async function loadCameras() {
+            try {
+                log('🔄 Fetching camera data from API...');
+                
+                const response = await fetch('http://192.168.1.226:8080/api/cameras');
+                const data = await response.json();
+                
+                log(`✅ API response received: ${data.cameras.length} cameras found`);
+                apiResponse.textContent = JSON.stringify(data, null, 2);
+                
+                if (data.cameras && data.cameras.length > 0) {
+                    camerasContainer.innerHTML = data.cameras.map(createCameraCard).join('');
+                    
+                    // Test each stream URL with fetch
+                    for (const camera of data.cameras) {
+                        const streamUrl = getStreamUrl(camera);
+                        try {
+                            log(`🔍 Testing stream URL: ${streamUrl}`);
+                            const streamResponse = await fetch(streamUrl, { 
+                                method: 'HEAD',
+                                mode: 'no-cors'
+                            });
+                            log(`📡 Stream response for ${camera.name}: ${streamResponse.status || 'no-cors mode'}`);
+                        } catch (error) {
+                            log(`❌ Stream test failed for ${camera.name}: ${error.message}`);
+                        }
+                    }
+                } else {
+                    camerasContainer.innerHTML = '<p>No cameras found</p>';
+                }
+                
+            } catch (error) {
+                log(`❌ Error loading cameras: ${error.message}`);
+                apiResponse.textContent = `Error: ${error.message}`;
+                camerasContainer.innerHTML = `<p>Error loading cameras: ${error.message}</p>`;
+            }
+        }
+        
+        // Start loading
+        log('🚀 Starting camera debug page...');
+        log(`🌐 Current hostname: ${window.location.hostname}`);
+        loadCameras();
+    </script>
+</body>
+</html>

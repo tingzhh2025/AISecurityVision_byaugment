@@ -257,9 +257,19 @@ private:
     std::atomic<bool> m_webSocketRunning{false};
 
     // MQTT client
+#ifdef HAVE_MQTT
+#ifdef USE_SIMPLE_MQTT
     std::unique_ptr<class SimpleMQTTClient> m_mqttClient;
+#else
+    // Forward declaration for Paho MQTT with custom deleter
+    struct MQTTClientDeleter {
+        void operator()(void* ptr) const;
+    };
+    std::unique_ptr<void, MQTTClientDeleter> m_mqttClient;  // Will be cast to mqtt::async_client*
+#endif
     std::atomic<bool> m_mqttConnected{false};
     MQTTAlarmConfig m_currentMQTTConfig;
+#endif
 
     // Constants
     static constexpr size_t MAX_QUEUE_SIZE = 1000;

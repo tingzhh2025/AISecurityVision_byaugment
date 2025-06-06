@@ -1,0 +1,72 @@
+--- a/src/core/TaskManager.cpp
++++ b/src/core/TaskManager.cpp
+@@ -90,7 +90,7 @@ bool TaskManager::addVideoSource(const VideoSource& source) {
+         return false;
+     }
+ 
+-    // Use a separate mutex for pipeline initialization to avoid blocking other operations
++    // First phase: validation
+     std::unique_lock<std::mutex> lock(m_mutex);
+ 
+     if (m_pipelines.size() >= MAX_PIPELINES) {
+@@ -103,17 +103,19 @@ bool TaskManager::addVideoSource(const VideoSource& source) {
+         LOG_ERROR() << "[TaskManager] Pipeline already exists for source: " << source.id;
+         return false;
+     }
++    
++    // Reserve the slot to prevent duplicate additions
++    m_pipelines[source.id] = nullptr;
++    lock.unlock();
+ 
+     try {
+         LOG_INFO() << "[TaskManager] Creating pipeline for: " << source.id;
+ 
+         // Allocate MJPEG port dynamically
+         auto& portManager = AISecurityVision::MJPEGPortManager::getInstance();
+         int allocatedPort = portManager.allocatePort(source.id);
+         if (allocatedPort == -1) {
+             LOG_ERROR() << "[TaskManager] Failed to allocate MJPEG port for camera: " << source.id;
++            // Clean up the reserved slot
++            lock.lock();
++            m_pipelines.erase(source.id);
+             return false;
+         }
+ 
+@@ -126,13 +128,14 @@ bool TaskManager::addVideoSource(const VideoSource& source) {
+         // Create pipeline object with dynamically allocated port
+         auto pipeline = std::make_shared<VideoPipeline>(modifiedSource);
+ 
+-        // Add to pipelines map immediately to prevent duplicate additions
+-        m_pipelines[source.id] = pipeline;
+-
+-        // Release lock before expensive initialization
+-        lock.unlock();
+-
+-        // Initialize pipeline (this may take time)
++        // Initialize pipeline without holding the main lock
+         if (pipeline->initialize()) {
++            // Atomic update of the pipeline
++            lock.lock();
++            m_pipelines[source.id] = pipeline;
++            lock.unlock();
++            
++            // Start the pipeline
+             pipeline->start();
+             LOG_INFO() << "[TaskManager] Added video source: " << source.id
+                       << " (" << source.protocol << ") on MJPEG port " << allocatedPort;
+@@ -141,7 +144,6 @@ bool TaskManager::addVideoSource(const VideoSource& source) {
+             // Remove from map and release port if initialization failed
+             lock.lock();
+             m_pipelines.erase(source.id);
+-            lock.unlock();
+ 
+             portManager.releasePort(source.id);
+             LOG_ERROR() << "[TaskManager] Failed to initialize pipeline for: " << source.id;
+@@ -151,7 +153,6 @@ bool TaskManager::addVideoSource(const VideoSource& source) {
+         // Remove from map and release port if exception occurred
+         lock.lock();
+         m_pipelines.erase(source.id);
+-        lock.unlock();
+ 
+         auto& portManager = AISecurityVision::MJPEGPortManager::getInstance();
+         portManager.releasePort(source.id);

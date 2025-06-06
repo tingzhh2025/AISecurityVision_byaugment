@@ -41,13 +41,18 @@
         <el-card>
           <!-- 摄像头预览 -->
           <div class="camera-preview">
-            <img 
-              v-if="camera.status === 'online'"
-              :src="getStreamUrl(camera.id)"
+            <img
+              v-if="camera.status === 'online' && camera.streamUrl"
+              :src="camera.streamUrl"
               :alt="camera.name"
               @error="handleImageError"
             />
-            
+
+            <div v-else-if="camera.status === 'online'" class="camera-loading">
+              <el-icon><Loading /></el-icon>
+              <span>加载中...</span>
+            </div>
+
             <div v-else class="camera-offline">
               <el-icon><VideoCamera /></el-icon>
               <span>摄像头离线</span>
@@ -145,89 +150,69 @@
         ref="formRef"
         :model="cameraForm"
         :rules="formRules"
-        label-width="100px"
+        label-width="120px"
       >
         <el-form-item label="摄像头名称" prop="name">
-          <el-input v-model="cameraForm.name" placeholder="请输入摄像头名称" />
+          <el-input
+            v-model="cameraForm.name"
+            placeholder="请输入摄像头名称"
+          />
         </el-form-item>
-        
-        <el-form-item label="RTSP地址" prop="rtspUrl">
-          <el-input 
-            v-model="cameraForm.rtspUrl" 
+
+        <el-form-item label="协议类型" prop="protocol">
+          <el-select v-model="cameraForm.protocol" placeholder="请选择协议">
+            <el-option label="RTSP" value="rtsp" />
+            <el-option label="RTMP" value="rtmp" />
+            <el-option label="HTTP" value="http" />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="RTSP地址" prop="url">
+          <el-input
+            v-model="cameraForm.url"
             placeholder="rtsp://username:password@ip:port/path"
           />
+          <div class="form-tip">
+            示例: rtsp://admin:password@192.168.1.100:554/stream1
+          </div>
         </el-form-item>
-        
-        <el-form-item label="IP地址" prop="ip">
-          <el-input v-model="cameraForm.ip" placeholder="192.168.1.100" />
-        </el-form-item>
-        
-        <el-form-item label="端口" prop="port">
-          <el-input-number 
-            v-model="cameraForm.port" 
-            :min="1" 
-            :max="65535" 
-            placeholder="554"
+
+        <el-form-item label="用户名">
+          <el-input
+            v-model="cameraForm.username"
+            placeholder="摄像头用户名（可选）"
           />
         </el-form-item>
-        
-        <el-form-item label="用户名">
-          <el-input v-model="cameraForm.username" placeholder="用户名" />
-        </el-form-item>
-        
+
         <el-form-item label="密码">
-          <el-input 
-            v-model="cameraForm.password" 
-            type="password" 
-            placeholder="密码"
+          <el-input
+            v-model="cameraForm.password"
+            type="password"
+            placeholder="摄像头密码（可选）"
             show-password
           />
         </el-form-item>
-        
-        <el-form-item label="分辨率" prop="resolution">
-          <el-select v-model="cameraForm.resolution" placeholder="选择分辨率">
-            <el-option label="1920x1080" value="1920x1080" />
-            <el-option label="1280x720" value="1280x720" />
-            <el-option label="640x480" value="640x480" />
+
+        <el-form-item label="分辨率">
+          <el-select v-model="cameraForm.resolution">
+            <el-option label="1920x1080 (Full HD)" value="1920x1080" />
+            <el-option label="1280x720 (HD)" value="1280x720" />
+            <el-option label="640x480 (VGA)" value="640x480" />
           </el-select>
         </el-form-item>
-        
-        <el-form-item label="帧率" prop="fps">
-          <el-input-number 
-            v-model="cameraForm.fps" 
-            :min="1" 
-            :max="30" 
-            placeholder="25"
+
+        <el-form-item label="帧率">
+          <el-input-number
+            v-model="cameraForm.fps"
+            :min="1"
+            :max="30"
+            controls-position="right"
           />
+          <span class="form-tip">fps</span>
         </el-form-item>
-        
+
         <el-form-item label="启用AI检测">
           <el-switch v-model="cameraForm.aiEnabled" />
-        </el-form-item>
-        
-        <el-form-item label="检测类型" v-if="cameraForm.aiEnabled">
-          <el-checkbox-group v-model="cameraForm.detectionTypes">
-            <el-checkbox label="person">人员检测</el-checkbox>
-            <el-checkbox label="vehicle">车辆检测</el-checkbox>
-            <el-checkbox label="intrusion">入侵检测</el-checkbox>
-            <el-checkbox label="loitering">徘徊检测</el-checkbox>
-          </el-checkbox-group>
-        </el-form-item>
-        
-        <el-form-item label="检测区域" v-if="cameraForm.aiEnabled">
-          <el-input 
-            v-model="cameraForm.detectionRegion" 
-            type="textarea" 
-            placeholder="检测区域坐标 (可选)"
-          />
-        </el-form-item>
-        
-        <el-form-item label="描述">
-          <el-input 
-            v-model="cameraForm.description" 
-            type="textarea" 
-            placeholder="摄像头描述信息"
-          />
         </el-form-item>
       </el-form>
       
@@ -275,43 +260,31 @@ const formRef = ref(null)
 const cameraForm = reactive({
   id: null,
   name: '',
-  rtspUrl: '',
-  ip: '',
-  port: 554,
+  protocol: 'rtsp',
+  url: '',
   username: '',
   password: '',
   resolution: '1920x1080',
   fps: 25,
-  aiEnabled: false,
-  detectionTypes: [],
-  detectionRegion: '',
-  description: ''
+  aiEnabled: true
 })
 
 // 表单验证规则
 const formRules = {
   name: [
-    { required: true, message: '请输入摄像头名称', trigger: 'blur' }
+    { required: true, message: '请输入摄像头名称', trigger: 'blur' },
+    { min: 2, max: 50, message: '长度在 2 到 50 个字符', trigger: 'blur' }
   ],
-  rtspUrl: [
-    { required: true, message: '请输入RTSP地址', trigger: 'blur' }
+  protocol: [
+    { required: true, message: '请选择协议类型', trigger: 'change' }
   ],
-  ip: [
-    { required: true, message: '请输入IP地址', trigger: 'blur' },
-    { 
-      pattern: /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/,
-      message: '请输入有效的IP地址',
+  url: [
+    { required: true, message: '请输入RTSP地址', trigger: 'blur' },
+    {
+      pattern: /^(rtsp|rtmp|http):\/\/.+/,
+      message: '请输入有效的URL地址',
       trigger: 'blur'
     }
-  ],
-  port: [
-    { required: true, message: '请输入端口号', trigger: 'blur' }
-  ],
-  resolution: [
-    { required: true, message: '请选择分辨率', trigger: 'change' }
-  ],
-  fps: [
-    { required: true, message: '请输入帧率', trigger: 'blur' }
   ]
 }
 
@@ -330,7 +303,30 @@ const filteredCameras = computed(() => {
 // 方法
 const refreshCameras = async () => {
   await systemStore.fetchCameras()
+  // 为每个在线摄像头获取流URL
+  await loadStreamUrls()
   ElMessage.success('摄像头列表已刷新')
+}
+
+const loadStreamUrls = async () => {
+  for (const camera of systemStore.cameras) {
+    // 添加计算属性
+    if (!camera.resolution) {
+      camera.resolution = `${camera.width || 1920}x${camera.height || 1080}`
+    }
+    if (!camera.aiEnabled) {
+      camera.aiEnabled = camera.enabled || false
+    }
+
+    if (camera.status === 'online') {
+      try {
+        camera.streamUrl = await apiService.getStreamUrl(camera.id)
+        console.log(`[Cameras] Stream URL for ${camera.id}: ${camera.streamUrl}`)
+      } catch (error) {
+        console.error(`Failed to get stream URL for camera ${camera.id}:`, error)
+      }
+    }
+  }
 }
 
 const filterCameras = () => {
@@ -362,44 +358,30 @@ const saveCamera = async () => {
     await formRef.value.validate()
     saving.value = true
 
-    // 构建摄像头配置对象
-    const cameraConfig = {
-      camera_id: cameraForm.id || `camera_${Date.now()}`,
+    // 解析分辨率
+    const [width, height] = cameraForm.resolution.split('x').map(Number)
+
+    // 构建摄像头数据
+    const cameraData = {
+      id: cameraForm.id || `camera_${Date.now()}`,
       name: cameraForm.name,
-      url: cameraForm.rtspUrl,
-      protocol: 'rtsp',
+      url: cameraForm.url,
+      protocol: cameraForm.protocol,
       username: cameraForm.username,
       password: cameraForm.password,
-      width: parseInt(cameraForm.resolution.split('x')[0]),
-      height: parseInt(cameraForm.resolution.split('x')[1]),
+      width,
+      height,
       fps: cameraForm.fps,
-      mjpeg_port: 8161 + (systemStore.cameras.length), // 自动分配端口
-      enabled: true,
-      detection_enabled: cameraForm.aiEnabled,
-      recording_enabled: false,
-      detection_config: {
-        confidence_threshold: 0.5,
-        nms_threshold: 0.4,
-        backend: 'RKNN',
-        model_path: 'models/yolov8n.rknn'
-      },
-      stream_config: {
-        fps: cameraForm.fps,
-        quality: 80,
-        max_width: parseInt(cameraForm.resolution.split('x')[0]),
-        max_height: parseInt(cameraForm.resolution.split('x')[1])
-      }
+      enabled: true
     }
 
     if (isEditing.value) {
       // 更新摄像头
-      await apiService.updateCamera(cameraForm.id, cameraForm)
-      // 同时保存到配置数据库
-      await apiService.saveCameraConfig(cameraConfig)
+      await apiService.updateCamera(cameraForm.id, cameraData)
       ElMessage.success('摄像头更新成功')
     } else {
-      // 添加摄像头 - 只调用一个API，后端会处理所有逻辑
-      await apiService.addCamera(cameraForm)
+      // 添加摄像头
+      await apiService.addCamera(cameraData)
       ElMessage.success('摄像头添加成功')
     }
 
@@ -459,13 +441,31 @@ const testCamera = async (camera) => {
 }
 
 const testCameraConnection = async () => {
-  testing.value = true
-  
+  if (!formRef.value) return
+
   try {
-    await apiService.testCamera(cameraForm)
-    ElMessage.success('连接测试成功')
+    await formRef.value.validate()
+    testing.value = true
+
+    // 调用后端API测试连接
+    const response = await apiService.testCameraConnection({
+      url: cameraForm.url,
+      username: cameraForm.username,
+      password: cameraForm.password,
+      protocol: cameraForm.protocol
+    })
+
+    if (response.success) {
+      ElMessage.success('摄像头连接测试成功！')
+    } else {
+      ElMessage.error(`连接测试失败: ${response.message}`)
+    }
   } catch (error) {
-    ElMessage.error('连接测试失败')
+    if (error.message) {
+      // 表单验证错误
+      return
+    }
+    ElMessage.error('连接测试失败，请检查网络和摄像头设置')
   } finally {
     testing.value = false
   }
@@ -475,38 +475,33 @@ const viewLive = (camera) => {
   router.push(`/live?camera=${camera.id}`)
 }
 
-const getStreamUrl = (cameraId) => {
-  return apiService.getStreamUrl(cameraId)
-}
-
 const handleImageError = (event) => {
   event.target.style.display = 'none'
 }
 
 const resetForm = () => {
   Object.keys(cameraForm).forEach(key => {
-    if (key === 'port') {
-      cameraForm[key] = 554
+    if (key === 'protocol') {
+      cameraForm[key] = 'rtsp'
     } else if (key === 'resolution') {
       cameraForm[key] = '1920x1080'
     } else if (key === 'fps') {
       cameraForm[key] = 25
     } else if (key === 'aiEnabled') {
-      cameraForm[key] = false
-    } else if (key === 'detectionTypes') {
-      cameraForm[key] = []
+      cameraForm[key] = true
     } else {
       cameraForm[key] = ''
     }
   })
-  
+
   if (formRef.value) {
     formRef.value.clearValidate()
   }
 }
 
-onMounted(() => {
-  refreshCameras()
+onMounted(async () => {
+  await systemStore.fetchCameras()
+  await loadStreamUrls()
 })
 </script>
 
@@ -562,7 +557,8 @@ onMounted(() => {
   object-fit: cover;
 }
 
-.camera-offline {
+.camera-offline,
+.camera-loading {
   width: 100%;
   height: 100%;
   display: flex;
@@ -573,9 +569,23 @@ onMounted(() => {
   font-size: 14px;
 }
 
-.camera-offline .el-icon {
+.camera-offline .el-icon,
+.camera-loading .el-icon {
   font-size: 48px;
   margin-bottom: 8px;
+}
+
+.camera-loading .el-icon {
+  animation: rotate 2s linear infinite;
+}
+
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .camera-overlay {
@@ -629,6 +639,12 @@ onMounted(() => {
 .camera-actions .el-button {
   flex: 1;
   min-width: 0;
+}
+
+.form-tip {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
 }
 
 /* 响应式 */

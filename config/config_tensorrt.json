@@ -1,0 +1,110 @@
+{
+    "system": {
+        "name": "AISecurityVision",
+        "version": "1.0.0",
+        "log_level": "info",
+        "max_threads": 8
+    },
+    
+    "ai_config": {
+        "backend": "AUTO",
+        "backend_priority": ["TENSORRT", "RKNN", "CPU"],
+        "model_path": "models/yolov8n.rknn",
+        "tensorrt_model_path": "models/yolov8n_fp16.engine",
+        "onnx_model_path": "models/yolov8n.onnx",
+        "confidence_threshold": 0.25,
+        "nms_threshold": 0.45,
+        "input_size": [640, 640],
+        
+        "enabled_categories": [
+            "person",
+            "car",
+            "truck",
+            "bus",
+            "motorcycle",
+            "bicycle"
+        ],
+        
+        "rknn_config": {
+            "target_platform": "RK3588",
+            "enable_multi_core": true,
+            "core_mask": 7,
+            "zero_copy": true
+        },
+        
+        "tensorrt_config": {
+            "precision": "FP16",
+            "max_batch_size": 1,
+            "workspace_size": 1073741824,
+            "enable_dla": false,
+            "dla_core": -1,
+            "enable_profiling": false,
+            "min_timing_iterations": 2,
+            "avg_timing_iterations": 1,
+            "use_cuda_graph": false
+        },
+        
+        "performance": {
+            "enable_async": true,
+            "queue_size": 10,
+            "max_inference_threads": 2,
+            "batch_timeout_ms": 50
+        }
+    },
+    
+    "video_sources": [
+        {
+            "id": "camera_1",
+            "type": "rtsp",
+            "url": "rtsp://admin:password@192.168.1.100:554/stream1",
+            "fps": 25,
+            "resolution": [1920, 1080],
+            "reconnect_interval": 5000,
+            "buffer_size": 5
+        }
+    ],
+    
+    "detection_zones": [
+        {
+            "id": "entrance",
+            "camera_id": "camera_1",
+            "polygon": [[100, 100], [500, 100], [500, 400], [100, 400]],
+            "enabled_categories": ["person"],
+            "alert_on_enter": true,
+            "alert_on_exit": false
+        }
+    ],
+    
+    "alarm_config": {
+        "min_detection_frames": 3,
+        "cooldown_seconds": 30,
+        "delivery_methods": ["http", "websocket", "mqtt"],
+        
+        "http_config": {
+            "url": "http://localhost:8080/api/alarms",
+            "method": "POST",
+            "headers": {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer YOUR_TOKEN"
+            },
+            "timeout": 5000,
+            "retry_count": 3
+        }
+    },
+    
+    "database": {
+        "type": "sqlite",
+        "path": "aibox.db",
+        "connection_pool_size": 10,
+        "busy_timeout": 5000
+    },
+    
+    "api_server": {
+        "host": "0.0.0.0",
+        "port": 8080,
+        "cors_enabled": true,
+        "max_request_size": 104857600,
+        "request_timeout": 30000,
+        "enable_swagger": true
+    }
+}

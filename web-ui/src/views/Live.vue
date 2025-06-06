@@ -180,7 +180,7 @@
           <el-select v-model="newCameraData.resolution">
             <el-option label="1920x1080 (Full HD)" value="1920x1080" />
             <el-option label="1280x720 (HD)" value="1280x720" />
-            <el-option label="640x480 (VGA)" value="640x480" />
+            <el-option label="640x480 (SD)" value="640x480" />
           </el-select>
         </el-form-item>
 
@@ -221,20 +221,58 @@
       width="600px"
     >
       <div v-if="selectedCameraData" class="camera-dialog-content">
-        <el-form :model="selectedCameraData" label-width="100px">
-          <el-form-item label="摄像头名称">
-            <el-input v-model="selectedCameraData.name" />
+        <el-form
+          ref="editCameraForm"
+          :model="selectedCameraData"
+          :rules="cameraRules"
+          label-width="120px"
+        >
+          <el-form-item label="摄像头名称" prop="name">
+            <el-input
+              v-model="selectedCameraData.name"
+              placeholder="请输入摄像头名称"
+            />
           </el-form-item>
 
-          <el-form-item label="RTSP地址">
-            <el-input v-model="selectedCameraData.rtspUrl" />
+          <el-form-item label="协议类型" prop="protocol">
+            <el-select v-model="selectedCameraData.protocol" placeholder="请选择协议">
+              <el-option label="RTSP" value="rtsp" />
+              <el-option label="RTMP" value="rtmp" />
+              <el-option label="HTTP" value="http" />
+            </el-select>
+          </el-form-item>
+
+          <el-form-item label="RTSP地址" prop="url">
+            <el-input
+              v-model="selectedCameraData.url"
+              placeholder="rtsp://username:password@ip:port/path"
+            />
+            <div class="form-tip">
+              示例: rtsp://admin:password@192.168.1.100:554/stream1
+            </div>
+          </el-form-item>
+
+          <el-form-item label="用户名">
+            <el-input
+              v-model="selectedCameraData.username"
+              placeholder="摄像头用户名（可选）"
+            />
+          </el-form-item>
+
+          <el-form-item label="密码">
+            <el-input
+              v-model="selectedCameraData.password"
+              type="password"
+              placeholder="摄像头密码（可选）"
+              show-password
+            />
           </el-form-item>
 
           <el-form-item label="分辨率">
             <el-select v-model="selectedCameraData.resolution">
-              <el-option label="1920x1080" value="1920x1080" />
-              <el-option label="1280x720" value="1280x720" />
-              <el-option label="640x480" value="640x480" />
+              <el-option label="1920x1080 (Full HD)" value="1920x1080" />
+              <el-option label="1280x720 (HD)" value="1280x720" />
+              <el-option label="640x480 (SD)" value="640x480" />
             </el-select>
           </el-form-item>
 
@@ -243,10 +281,12 @@
               v-model="selectedCameraData.fps"
               :min="1"
               :max="30"
+              controls-position="right"
             />
+            <span class="form-tip">fps</span>
           </el-form-item>
 
-          <el-form-item label="AI检测">
+          <el-form-item label="启用AI检测">
             <el-switch v-model="selectedCameraData.aiEnabled" />
           </el-form-item>
         </el-form>
@@ -254,7 +294,13 @@
 
       <template #footer>
         <el-button @click="cameraDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveCameraSettings">保存</el-button>
+        <el-button
+          type="primary"
+          @click="saveCameraSettings"
+          :loading="savingSettings"
+        >
+          保存
+        </el-button>
       </template>
     </el-dialog>
   </div>
@@ -277,6 +323,8 @@ const loadingStreams = ref([])
 const detections = ref({})
 const cameraDialogVisible = ref(false)
 const selectedCameraData = ref(null)
+const editCameraForm = ref(null)
+const savingSettings = ref(false)
 const videoContainer = ref(null)
 const streamUrls = ref({})
 
@@ -422,18 +470,60 @@ const toggleFullscreen = () => {
 }
 
 const openCameraDialog = (camera) => {
-  selectedCameraData.value = { ...camera }
+  // 确保所有字段都有默认值
+  selectedCameraData.value = {
+    id: camera.id,
+    name: camera.name || '',
+    protocol: camera.protocol || 'rtsp',
+    url: camera.url || camera.rtspUrl || '',
+    username: camera.username || '',
+    password: camera.password || '',
+    resolution: camera.resolution || '1920x1080',
+    fps: camera.fps || 25,
+    aiEnabled: camera.aiEnabled !== undefined ? camera.aiEnabled : true,
+    ...camera
+  }
   cameraDialogVisible.value = true
 }
 
 const saveCameraSettings = async () => {
+  if (!editCameraForm.value) return
+
   try {
-    await apiService.updateCamera(selectedCameraData.value.id, selectedCameraData.value)
+    await editCameraForm.value.validate()
+    savingSettings.value = true
+
+    // 解析分辨率
+    const [width, height] = selectedCameraData.value.resolution.split('x').map(Number)
+
+    // 构建摄像头数据
+    const cameraData = {
+      id: selectedCameraData.value.id,
+      name: selectedCameraData.value.name,
+      url: selectedCameraData.value.url,
+      protocol: selectedCameraData.value.protocol,
+      username: selectedCameraData.value.username,
+      password: selectedCameraData.value.password,
+      width,
+      height,
+      fps: selectedCameraData.value.fps,
+      enabled: true
+    }
+
+    await apiService.updateCamera(selectedCameraData.value.id, cameraData)
     ElMessage.success('摄像头设置已保存')
     cameraDialogVisible.value = false
     await systemStore.fetchCameras()
+
+    // 刷新视频流
+    refreshStreams()
   } catch (error) {
-    ElMessage.error('保存失败')
+    if (error !== false) { // 不是表单验证错误
+      console.error('Failed to save camera settings:', error)
+      ElMessage.error('保存失败')
+    }
+  } finally {
+    savingSettings.value = false
   }
 }
 

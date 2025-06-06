@@ -5,6 +5,11 @@
 #include <iomanip>
 #include <cstdlib>
 #include <fstream>
+#include <unistd.h>
+#include <sys/file.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
 #include "core/TaskManager.h"
 #include "core/VideoPipeline.h"
 #include "api/APIService.h"
@@ -16,6 +21,11 @@ using namespace AISecurityVision;
 using json = nlohmann::json;
 // Global flag for graceful shutdown
 std::atomic<bool> g_running{true};
+// Global lock file descriptor for single instance
+static int g_lockfd = -1;
+
+// Forward declaration
+void releaseSingleInstanceLock();
 
 void signalHandler(int signal) {
     static int signalCount = 0;
@@ -27,7 +37,134 @@ void signalHandler(int signal) {
     // Force exit after 3 signals
     if (signalCount >= 3) {
         LOG_ERROR() << "[Main] Force exit after multiple signals";
+        releaseSingleInstanceLock();
         std::exit(1);
+    }
+}
+
+// Function to kill all existing AISecurityVision processes except current one
+bool killExistingProcesses() {
+    LOG_INFO() << "[Main] Checking for existing AISecurityVision processes...";
+
+    pid_t currentPid = getpid();
+    std::vector<pid_t> processesToKill;
+
+    // Find all AISecurityVision processes except current one
+    FILE* pipe = popen("pgrep -f AISecurityVision 2>/dev/null", "r");
+    if (pipe) {
+        char buffer[128];
+        while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+            pid_t pid = atoi(buffer);
+            if (pid != currentPid && pid > 0) {
+                processesToKill.push_back(pid);
+                LOG_INFO() << "[Main] Found existing AISecurityVision process: " << pid;
+            }
+        }
+        pclose(pipe);
+    }
+
+    // Kill each process individually
+    for (pid_t pid : processesToKill) {
+        LOG_INFO() << "[Main] Terminating process: " << pid;
+        if (kill(pid, SIGTERM) == 0) {
+            // Wait a moment for graceful shutdown
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+            // Check if process still exists, force kill if necessary
+            if (kill(pid, 0) == 0) {
+                LOG_WARN() << "[Main] Force killing process: " << pid;
+                kill(pid, SIGKILL);
+            }
+        } else {
+            LOG_WARN() << "[Main] Failed to terminate process " << pid << ": " << strerror(errno);
+        }
+    }
+
+    if (processesToKill.empty()) {
+        LOG_INFO() << "[Main] No existing AISecurityVision processes found";
+    } else {
+        LOG_INFO() << "[Main] Terminated " << processesToKill.size() << " existing AISecurityVision processes";
+        // Wait a moment for cleanup
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
+
+    return true;
+}
+
+// Function to ensure single instance using file lock
+bool ensureSingleInstance() {
+    const char* lockFile = "/tmp/aisecurityvision.lock";
+
+    // First try to acquire lock without killing processes
+    g_lockfd = open(lockFile, O_CREAT | O_RDWR, 0666);
+    if (g_lockfd == -1) {
+        LOG_ERROR() << "[Main] Failed to create lock file: " << strerror(errno);
+        return false;
+    }
+
+    // Try to acquire exclusive lock (non-blocking)
+    if (flock(g_lockfd, LOCK_EX | LOCK_NB) == 0) {
+        // Successfully acquired lock - we are the first instance
+        pid_t pid = getpid();
+
+        // Truncate file and write our PID
+        if (ftruncate(g_lockfd, 0) == -1) {
+            LOG_WARN() << "[Main] Failed to truncate lock file: " << strerror(errno);
+        }
+        lseek(g_lockfd, 0, SEEK_SET);
+
+        char pidStr[32];
+        snprintf(pidStr, sizeof(pidStr), "%d\n", pid);
+        if (write(g_lockfd, pidStr, strlen(pidStr)) == -1) {
+            LOG_WARN() << "[Main] Failed to write PID to lock file: " << strerror(errno);
+        }
+
+        // Only kill orphaned processes after we have the lock
+        LOG_INFO() << "[Main] Successfully acquired single instance lock (PID: " << pid << ")";
+        killExistingProcesses();
+
+        return true;
+    } else {
+        // Lock acquisition failed
+        if (errno == EWOULDBLOCK) {
+            // Check if the lock holder is still alive
+            char buffer[32];
+            ssize_t bytesRead = read(g_lockfd, buffer, sizeof(buffer) - 1);
+            if (bytesRead > 0) {
+                buffer[bytesRead] = '\0';
+                pid_t lockHolderPid = atoi(buffer);
+
+                if (lockHolderPid > 0 && kill(lockHolderPid, 0) == 0) {
+                    LOG_ERROR() << "[Main] Another instance of AISecurityVision is already running (PID: " << lockHolderPid << ")";
+                    LOG_ERROR() << "[Main] Please stop the existing instance before starting a new one";
+                } else {
+                    LOG_WARN() << "[Main] Found stale lock file with dead process (PID: " << lockHolderPid << "), cleaning up...";
+                    close(g_lockfd);
+                    unlink(lockFile);
+
+                    // Try again after cleanup
+                    return ensureSingleInstance();
+                }
+            } else {
+                LOG_ERROR() << "[Main] Another instance of AISecurityVision is already running";
+            }
+        } else {
+            LOG_ERROR() << "[Main] Failed to acquire lock: " << strerror(errno);
+        }
+        close(g_lockfd);
+        g_lockfd = -1;
+        return false;
+    }
+}
+
+// Function to release single instance lock
+void releaseSingleInstanceLock() {
+    if (g_lockfd != -1) {
+        flock(g_lockfd, LOCK_UN);
+        close(g_lockfd);
+        g_lockfd = -1;
+        unlink("/tmp/aisecurityvision.lock");
+        LOG_INFO() << "[Main] Released single instance lock";
     }
 }
 
@@ -124,6 +261,11 @@ std::vector<CameraConfig> loadCameraConfigFromDatabase() {
         // Get all camera IDs from database
         auto cameraIds = dbManager.getAllCameraIds();
         LOG_INFO() << "[Config] Found " << cameraIds.size() << " cameras in database";
+
+        if (cameraIds.empty()) {
+            LOG_INFO() << "[Config] No cameras found in database";
+            return cameras;
+        }
 
         for (const std::string& cameraId : cameraIds) {
             std::string configJson = dbManager.getCameraConfig(cameraId);
@@ -304,6 +446,15 @@ int main(int argc, char* argv[]) {
     LOG_INFO() << "Version: 1.0.0";
     LOG_INFO() << "Build: " << __DATE__ << " " << __TIME__;
     LOG_INFO() << "===================================";
+
+    // Ensure single instance before doing anything else
+    if (!ensureSingleInstance()) {
+        LOG_ERROR() << "[Main] Failed to ensure single instance. Exiting.";
+        return 1;
+    }
+
+    // Register cleanup function for lock release
+    std::atexit(releaseSingleInstanceLock);
 
     // Parse command line arguments
     int apiPort = 8080;
@@ -556,14 +707,19 @@ int main(int argc, char* argv[]) {
         LOG_INFO() << "[Main] Stopping task manager...";
         taskManager.stop();
 
+        // Release single instance lock
+        releaseSingleInstanceLock();
+
         LOG_INFO() << "[Main] Shutdown complete";
         return 0;
 
     } catch (const std::exception& e) {
         LOG_ERROR() << "[Main] Fatal error: " << e.what();
+        releaseSingleInstanceLock();
         return 1;
     } catch (...) {
         LOG_ERROR() << "[Main] Unknown fatal error occurred";
+        releaseSingleInstanceLock();
         return 1;
     }
 }

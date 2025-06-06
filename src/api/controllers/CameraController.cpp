@@ -77,6 +77,13 @@ void CameraController::loadCameraConfigsFromDatabase() {
 
             try {
                 nlohmann::json config = nlohmann::json::parse(configJson);
+
+                // Skip disabled or deleted cameras
+                if (!config.value("enabled", true) || config.contains("deleted_at")) {
+                    logInfo("Skipping disabled/deleted camera: " + cameraId);
+                    continue;
+                }
+
                 CameraConfig camera;
 
                 camera.id = cameraId;
@@ -88,14 +95,14 @@ void CameraController::loadCameraConfigsFromDatabase() {
                 camera.width = config.value("width", 1920);
                 camera.height = config.value("height", 1080);
                 camera.fps = config.value("fps", 25);
-                camera.mjpeg_port = config.value("mjpeg_port", 8000);
+                camera.mjpeg_port = 0; // Will be dynamically allocated
                 camera.enabled = config.value("enabled", true);
 
-                if (!camera.url.empty()) {
+                if (!camera.url.empty() && camera.enabled) {
                     m_cameraConfigs.push_back(camera);
                     logInfo("Loaded camera from database: " + camera.id + " (" + camera.name + ")");
                 } else {
-                    logWarn("Camera " + cameraId + " has no URL, skipping");
+                    logWarn("Camera " + cameraId + " has no URL or is disabled, skipping");
                 }
 
             } catch (const std::exception& e) {
@@ -103,7 +110,7 @@ void CameraController::loadCameraConfigsFromDatabase() {
             }
         }
 
-        logInfo("Loaded " + std::to_string(m_cameraConfigs.size()) + " cameras from database");
+        logInfo("Loaded " + std::to_string(m_cameraConfigs.size()) + " enabled cameras from database");
 
     } catch (const std::exception& e) {
         logError("Failed to load camera configs from database: " + std::string(e.what()));
@@ -192,46 +199,7 @@ void CameraController::handlePostVideoSource(const std::string& request, std::st
             m_cameraConfigs.push_back(config);
         }
 
-        // Save to database
-        ::DatabaseManager dbManager;
-        if (dbManager.initialize()) {
-            // Convert CameraConfig to JSON for database storage
-            nlohmann::json configJson;
-            configJson["camera_id"] = config.id;
-            configJson["name"] = config.name;
-            configJson["rtsp_url"] = config.url;
-            configJson["protocol"] = config.protocol;
-            configJson["username"] = config.username;
-            configJson["password"] = config.password;
-            configJson["width"] = config.width;
-            configJson["height"] = config.height;
-            configJson["fps"] = config.fps;
-            // MJPEG port is dynamically allocated, don't store in database
-            // configJson["mjpeg_port"] = config.mjpeg_port;
-            configJson["enabled"] = config.enabled;
-            configJson["detection_enabled"] = true;
-            configJson["recording_enabled"] = false;
-            configJson["detection_config"] = {
-                {"confidence_threshold", 0.5},
-                {"nms_threshold", 0.4},
-                {"backend", "RKNN"},
-                {"model_path", "models/yolov8n.rknn"}
-            };
-            configJson["stream_config"] = {
-                {"fps", config.fps},
-                {"quality", 80},
-                {"max_width", config.width},
-                {"max_height", config.height}
-            };
-
-            if (!dbManager.saveCameraConfig(config.id, configJson.dump())) {
-                logWarn("Failed to save camera config to database: " + config.id);
-            } else {
-                logInfo("Saved camera config to database: " + config.id);
-            }
-        }
-
-        // Start video pipeline for new cameras asynchronously to avoid blocking API
+        // Start video pipeline for new cameras first to validate configuration
         if (isNewCamera && m_taskManager && config.enabled && m_threadPool) {
             // Check if operation is already pending for this camera
             if (isOperationPending(config.id)) {
@@ -256,11 +224,64 @@ void CameraController::handlePostVideoSource(const std::string& request, std::st
             // Mark operation as pending
             markOperationPending(config.id);
 
-            // Submit pipeline initialization to thread pool
-            m_threadPool->submitDetached([this, source]() {
+            // Submit pipeline initialization to thread pool with database callback
+            m_threadPool->submitDetached([this, source, config]() {
+                bool pipelineSuccess = false;
                 try {
                     if (m_taskManager && m_taskManager->addVideoSource(source)) {
                         logInfo("Started video pipeline for new camera: " + source.id);
+                        pipelineSuccess = true;
+
+                        // Only save to database after successful pipeline initialization
+                        ::DatabaseManager dbManager;
+                        if (dbManager.initialize()) {
+                            // Convert CameraConfig to JSON for database storage
+                            nlohmann::json configJson;
+                            configJson["camera_id"] = config.id;
+                            configJson["name"] = config.name;
+                            configJson["rtsp_url"] = config.url;
+                            configJson["protocol"] = config.protocol;
+                            configJson["username"] = config.username;
+                            configJson["password"] = config.password;
+                            configJson["width"] = config.width;
+                            configJson["height"] = config.height;
+                            configJson["fps"] = config.fps;
+                            // MJPEG port is dynamically allocated, don't store in database
+                            // configJson["mjpeg_port"] = config.mjpeg_port;
+                            configJson["enabled"] = config.enabled;
+                            configJson["detection_enabled"] = true;
+                            configJson["recording_enabled"] = false;
+                            configJson["detection_config"] = {
+                                {"confidence_threshold", 0.5},
+                                {"nms_threshold", 0.4},
+                                {"backend", "RKNN"},
+                                {"model_path", "models/yolov8n.rknn"}
+                            };
+                            configJson["stream_config"] = {
+                                {"fps", config.fps},
+                                {"quality", 80},
+                                {"max_width", config.width},
+                                {"max_height", config.height}
+                            };
+
+                            if (!dbManager.saveCameraConfig(config.id, configJson.dump())) {
+                                logWarn("Failed to save camera config to database: " + config.id);
+                                // Remove pipeline if database save fails
+                                if (m_taskManager) {
+                                    m_taskManager->removeVideoSource(config.id);
+                                }
+                                pipelineSuccess = false;
+                            } else {
+                                logInfo("Saved camera config to database after successful pipeline init: " + config.id);
+                            }
+                        } else {
+                            logError("Failed to initialize database for camera: " + config.id);
+                            // Remove pipeline if database init fails
+                            if (m_taskManager) {
+                                m_taskManager->removeVideoSource(config.id);
+                            }
+                            pipelineSuccess = false;
+                        }
                     } else {
                         logError("Failed to start video pipeline for camera: " + source.id);
                     }
@@ -270,9 +291,55 @@ void CameraController::handlePostVideoSource(const std::string& request, std::st
 
                 // Mark operation as complete
                 markOperationComplete(source.id);
+
+                if (!pipelineSuccess) {
+                    // Remove from in-memory configuration if pipeline failed
+                    auto it = std::find_if(m_cameraConfigs.begin(), m_cameraConfigs.end(),
+                                          [&config](const CameraConfig& c) { return c.id == config.id; });
+                    if (it != m_cameraConfigs.end()) {
+                        m_cameraConfigs.erase(it);
+                    }
+                }
             });
 
             logInfo("Initiated async video pipeline startup for camera: " + config.id);
+        } else if (!isNewCamera) {
+            // For existing cameras, save to database immediately
+            ::DatabaseManager dbManager;
+            if (dbManager.initialize()) {
+                // Convert CameraConfig to JSON for database storage
+                nlohmann::json configJson;
+                configJson["camera_id"] = config.id;
+                configJson["name"] = config.name;
+                configJson["rtsp_url"] = config.url;
+                configJson["protocol"] = config.protocol;
+                configJson["username"] = config.username;
+                configJson["password"] = config.password;
+                configJson["width"] = config.width;
+                configJson["height"] = config.height;
+                configJson["fps"] = config.fps;
+                configJson["enabled"] = config.enabled;
+                configJson["detection_enabled"] = true;
+                configJson["recording_enabled"] = false;
+                configJson["detection_config"] = {
+                    {"confidence_threshold", 0.5},
+                    {"nms_threshold", 0.4},
+                    {"backend", "RKNN"},
+                    {"model_path", "models/yolov8n.rknn"}
+                };
+                configJson["stream_config"] = {
+                    {"fps", config.fps},
+                    {"quality", 80},
+                    {"max_width", config.width},
+                    {"max_height", config.height}
+                };
+
+                if (!dbManager.saveCameraConfig(config.id, configJson.dump())) {
+                    logWarn("Failed to save camera config to database: " + config.id);
+                } else {
+                    logInfo("Updated existing camera config in database: " + config.id);
+                }
+            }
         }
 
         response = createJsonResponse("{\"status\":\"success\",\"message\":\"Camera configuration saved and pipeline started\"}");

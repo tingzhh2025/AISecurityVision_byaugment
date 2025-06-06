@@ -279,6 +279,15 @@ void APIService::setupRoutes() {
         addCorsHeaders(res);
     });
 
+    // Delete camera configuration from database
+    m_httpServer->Delete(R"(/api/cameras/config/([^/]+)$)", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string cameraId = req.matches[1];
+        std::string response;
+        m_cameraController->handleDeleteCameraConfig(cameraId, response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
     // Test camera connection
     m_httpServer->Post("/api/cameras/test-connection", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
         std::string response;

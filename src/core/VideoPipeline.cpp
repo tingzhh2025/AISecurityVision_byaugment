@@ -266,16 +266,20 @@ void VideoPipeline::processingThread() {
             if (!m_decoder->getNextFrame(frame, timestamp)) {
                 m_consecutiveErrors.fetch_add(1);
 
-                if (shouldReconnect() && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                if (shouldReconnect() && (MAX_RECONNECT_ATTEMPTS == -1 || reconnectAttempts < MAX_RECONNECT_ATTEMPTS)) {
                     LOG_INFO() << "[VideoPipeline] Attempting reconnection: " << m_source.id
                               << " (attempt " << (reconnectAttempts + 1) << ")";
 
                     attemptReconnection();
                     reconnectAttempts++;
                     m_totalReconnects.fetch_add(1);
+
+                    // Reset consecutive errors after successful reconnection attempt
+                    m_consecutiveErrors.store(0);
+
                     std::this_thread::sleep_for(std::chrono::milliseconds(RECONNECT_DELAY_MS));
                     continue;
-                } else {
+                } else if (MAX_RECONNECT_ATTEMPTS != -1) {
                     handleError("Failed to decode frame, max reconnect attempts reached");
                     break;
                 }

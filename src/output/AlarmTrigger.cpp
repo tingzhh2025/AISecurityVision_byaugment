@@ -17,6 +17,13 @@ using namespace AISecurityVision;
 #include "../../third_party/mqtt/simple_mqtt.h"
 #else
 #include <mqtt/async_client.h>
+
+// Implementation of custom deleter for MQTT client
+void AlarmTrigger::MQTTClientDeleter::operator()(void* ptr) const {
+    if (ptr) {
+        delete static_cast<mqtt::async_client*>(ptr);
+    }
+}
 #endif
 #endif
 
@@ -560,9 +567,43 @@ bool AlarmTrigger::connectMQTTClient(const MQTTAlarmConfig& config) {
             return false;
         }
 #else
-        // TODO: Implement Paho MQTT C++ client connection
-        LOG_ERROR() << "[AlarmTrigger] Paho MQTT C++ client not yet implemented";
-        return false;
+        // Use Paho MQTT C++ client
+        std::string serverURI = "tcp://" + config.broker + ":" + std::to_string(config.port);
+        std::string clientId = config.client_id.empty() ? "aibox_" + std::to_string(std::time(nullptr)) : config.client_id;
+
+        auto* client = new mqtt::async_client(serverURI, clientId);
+        m_mqttClient.reset(client);
+
+        mqtt::connect_options connOpts;
+        connOpts.set_keep_alive_interval(config.keep_alive_seconds);
+        connOpts.set_clean_session(true);
+        connOpts.set_automatic_reconnect(config.auto_reconnect);
+
+        if (!config.username.empty()) {
+            connOpts.set_user_name(config.username);
+            if (!config.password.empty()) {
+                connOpts.set_password(config.password);
+            }
+        }
+
+        try {
+            auto tok = client->connect(connOpts);
+            tok->wait_for(std::chrono::milliseconds(config.connection_timeout_ms));
+
+            if (client->is_connected()) {
+                m_mqttConnected.store(true);
+                m_currentMQTTConfig = config;
+                LOG_INFO() << "[AlarmTrigger] Connected to MQTT broker: " << config.broker
+                          << ":" << config.port;
+                return true;
+            } else {
+                LOG_ERROR() << "[AlarmTrigger] Failed to connect to MQTT broker";
+                return false;
+            }
+        } catch (const mqtt::exception& exc) {
+            LOG_ERROR() << "[AlarmTrigger] MQTT connection error: " << exc.what();
+            return false;
+        }
 #endif
 
     } catch (const std::exception& e) {
@@ -578,7 +619,19 @@ bool AlarmTrigger::connectMQTTClient(const MQTTAlarmConfig& config) {
 void AlarmTrigger::disconnectMQTTClient() {
 #ifdef HAVE_MQTT
     if (m_mqttClient) {
+#ifdef USE_SIMPLE_MQTT
         m_mqttClient->disconnect();
+#else
+        try {
+            auto* client = static_cast<mqtt::async_client*>(m_mqttClient.get());
+            if (client && client->is_connected()) {
+                auto tok = client->disconnect();
+                tok->wait();
+            }
+        } catch (const mqtt::exception& exc) {
+            LOG_ERROR() << "[AlarmTrigger] MQTT disconnect error: " << exc.what();
+        }
+#endif
         m_mqttClient.reset();
         m_mqttConnected.store(false);
         LOG_INFO() << "[AlarmTrigger] Disconnected from MQTT broker";
@@ -594,7 +647,22 @@ bool AlarmTrigger::publishMQTTMessage(const std::string& topic, const std::strin
     }
 
     try {
+#ifdef USE_SIMPLE_MQTT
         return m_mqttClient->publish(topic, payload, qos, retain);
+#else
+        auto* client = static_cast<mqtt::async_client*>(m_mqttClient.get());
+        if (!client) {
+            return false;
+        }
+
+        auto msg = mqtt::make_message(topic, payload);
+        msg->set_qos(qos);
+        msg->set_retained(retain);
+
+        auto tok = client->publish(msg);
+        tok->wait();
+        return true;
+#endif
     } catch (const std::exception& e) {
         LOG_ERROR() << "[AlarmTrigger] MQTT publish error: " << e.what();
         return false;

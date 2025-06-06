@@ -15,7 +15,9 @@ class FFmpegDecoder;
 // AI Security Vision namespace forward declarations
 namespace AISecurityVision {
     class YOLOv8Detector;
+#ifdef ENABLE_RKNN_NPU
     class YOLOv8RKNNDetector;
+#endif
     class AgeGenderAnalyzer;  // Person statistics extension
 }
 
@@ -187,7 +189,9 @@ private:
     // Processing modules
     std::unique_ptr<FFmpegDecoder> m_decoder;
     std::unique_ptr<AISecurityVision::YOLOv8Detector> m_detector;
+#ifdef ENABLE_RKNN_NPU
     std::unique_ptr<AISecurityVision::YOLOv8RKNNDetector> m_optimizedDetector;
+#endif
     std::unique_ptr<ByteTracker> m_tracker;
     std::unique_ptr<ReIDExtractor> m_reidExtractor;
     std::unique_ptr<FaceRecognizer> m_faceRecognizer;
@@ -237,8 +241,8 @@ private:
     std::chrono::steady_clock::time_point m_startTime;
 
     // Constants
-    static constexpr int MAX_RECONNECT_ATTEMPTS = 5;
-    static constexpr int RECONNECT_DELAY_MS = 5000;
+    static constexpr int MAX_RECONNECT_ATTEMPTS = -1; // Unlimited reconnect attempts
+    static constexpr int RECONNECT_DELAY_MS = 10000;  // 10 seconds as requested
     static constexpr double HEALTH_CHECK_INTERVAL_S = 10.0;
     static constexpr size_t MAX_CONSECUTIVE_ERRORS = 10;
     static constexpr double FRAME_TIMEOUT_S = 30.0;
