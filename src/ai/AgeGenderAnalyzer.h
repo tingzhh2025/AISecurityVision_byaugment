@@ -78,8 +78,9 @@ public:
 
     /**
      * @brief Initialize the analyzer with InsightFace model pack
-     * @param packPath Path to the InsightFace model pack file
+     * @param packPath Path to the InsightFace model pack file (platform-specific)
      * @return true if initialization successful, false otherwise
+     * @note On x86 platforms, this will return false as RK3588-specific models are not compatible
      */
     bool initialize(const std::string& packPath = "models/Pikachu.pack");
     

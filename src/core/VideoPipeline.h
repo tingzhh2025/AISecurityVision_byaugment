@@ -122,6 +122,9 @@ public:
     // Person statistics configuration (optional extension)
     void setPersonStatsEnabled(bool enabled);
     bool isPersonStatsEnabled() const;
+    bool enablePersonStatsWithValidation(); // Returns true if successfully enabled, false if platform incompatible
+    void disablePersonStats(); // Disable person statistics and clean up resources
+    bool isPersonStatsPlatformSupported() const; // Returns true if platform supports person stats
     void setPersonStatsConfig(float genderThreshold, float ageThreshold, int batchSize, bool enableCaching);
 
     // Forward declaration for PersonStats
@@ -201,7 +204,7 @@ private:
     // Output modules
     std::unique_ptr<Recorder> m_recorder;
     std::unique_ptr<Streamer> m_streamer;
-    std::unique_ptr<AlarmTrigger> m_alarmTrigger;
+    // Note: AlarmTrigger is now managed by TaskManager, accessed via pointer
 
     // Person statistics modules (optional extension)
     std::unique_ptr<AISecurityVision::AgeGenderAnalyzer> m_ageGenderAnalyzer;

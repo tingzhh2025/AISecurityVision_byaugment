@@ -67,20 +67,76 @@ bool AgeGenderAnalyzer::initialize(const std::string& modelPath) {
     }
 
 #ifdef HAVE_INSIGHTFACE
-    LOG_INFO() << "[AgeGenderAnalyzer] Initializing InsightFace with pack: " << modelPath;
+    // Determine the correct model path based on platform
+    std::string actualModelPath = modelPath;
+
+    // Check if the provided model path is platform-specific
+    if (modelPath == "models/Pikachu.pack") {
+        // Check platform and select appropriate model
+        #if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
+            // x86/x64 platform - use TensorRT-compatible InsightFace
+            #ifdef HAVE_TENSORRT
+                LOG_INFO() << "[AgeGenderAnalyzer] x86_64 platform with TensorRT support detected";
+                LOG_INFO() << "[AgeGenderAnalyzer] Using TensorRT-accelerated InsightFace for person statistics";
+
+                // Try TensorRT-specific model pack first
+                std::string tensorrtModelPath = "models/Pikachu_x86_64.pack";
+                if (access(tensorrtModelPath.c_str(), F_OK) == 0) {
+                    actualModelPath = tensorrtModelPath;
+                    LOG_INFO() << "[AgeGenderAnalyzer] Using TensorRT-optimized model pack: " << actualModelPath;
+                } else {
+                    LOG_WARN() << "[AgeGenderAnalyzer] TensorRT-optimized model pack not found: " << tensorrtModelPath;
+                    LOG_WARN() << "[AgeGenderAnalyzer] Falling back to generic model pack (may cause compatibility issues)";
+                    actualModelPath = "models/Pikachu.pack";
+                }
+            #else
+                LOG_WARN() << "[AgeGenderAnalyzer] x86 platform detected, but TensorRT support not available";
+                LOG_WARN() << "[AgeGenderAnalyzer] Person statistics will be disabled on this platform";
+                LOG_INFO() << "[AgeGenderAnalyzer] To enable person statistics on x86, compile with TensorRT support";
+                return false;
+            #endif
+        #elif defined(__aarch64__) || defined(__arm__)
+            // ARM platform - check if it's RK3588
+            LOG_INFO() << "[AgeGenderAnalyzer] ARM platform detected, using RK3588-optimized model pack";
+            actualModelPath = "models/Pikachu.pack";  // Keep original for ARM platforms
+        #else
+            LOG_WARN() << "[AgeGenderAnalyzer] Unknown platform, disabling person statistics";
+            return false;
+        #endif
+    }
+
+    LOG_INFO() << "[AgeGenderAnalyzer] Initializing InsightFace with pack: " << actualModelPath;
 
     // Check if pack file exists
-    if (access(modelPath.c_str(), F_OK) != 0) {
-        LOG_ERROR() << "[AgeGenderAnalyzer] Pack file not found: " << modelPath;
+    if (access(actualModelPath.c_str(), F_OK) != 0) {
+        LOG_ERROR() << "[AgeGenderAnalyzer] Pack file not found: " << actualModelPath;
+        LOG_WARN() << "[AgeGenderAnalyzer] Person statistics will be disabled";
         return false;
     }
 
-    m_packPath = modelPath;
+    m_packPath = actualModelPath;
 
     // Initialize InsightFace
-    HResult ret = HFLaunchInspireFace(modelPath.c_str());
+    HResult ret = HFLaunchInspireFace(actualModelPath.c_str());
     if (ret != HSUCCEED) {
         LOG_ERROR() << "[AgeGenderAnalyzer] Failed to launch InsightFace: " << ret;
+        LOG_ERROR() << "[AgeGenderAnalyzer] Model pack: " << actualModelPath;
+
+        // Provide specific error guidance based on platform
+        #if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
+            LOG_ERROR() << "[AgeGenderAnalyzer] x86_64 platform detected - this may be due to:";
+            LOG_ERROR() << "[AgeGenderAnalyzer]   1. RK3588-specific models being used on x86_64 platform";
+            LOG_ERROR() << "[AgeGenderAnalyzer]   2. Missing TensorRT-compatible model pack (Pikachu_x86_64.pack)";
+            LOG_ERROR() << "[AgeGenderAnalyzer]   3. InsightFace library not compiled with TensorRT support";
+            LOG_INFO() << "[AgeGenderAnalyzer] Solution: Create TensorRT-compatible model pack or disable person statistics";
+        #elif defined(__aarch64__) || defined(__arm__)
+            LOG_ERROR() << "[AgeGenderAnalyzer] ARM platform detected - this may be due to:";
+            LOG_ERROR() << "[AgeGenderAnalyzer]   1. Incompatible model pack format";
+            LOG_ERROR() << "[AgeGenderAnalyzer]   2. Missing RK3588-specific models";
+            LOG_ERROR() << "[AgeGenderAnalyzer]   3. InsightFace library not compiled with RKNN support";
+        #endif
+
+        LOG_WARN() << "[AgeGenderAnalyzer] Person statistics will be disabled due to model loading failure";
         return false;
     }
 
