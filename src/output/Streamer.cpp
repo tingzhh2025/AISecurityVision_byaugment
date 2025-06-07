@@ -542,9 +542,8 @@ void Streamer::drawDetections(cv::Mat& frame, const std::vector<cv::Rect>& detec
         // Draw bounding box with thicker line for better visibility
         cv::rectangle(frame, bbox, bboxColor, 3);
 
-        // Draw corner markers for better visibility
-        int cornerSize = 15;
-        drawCornerMarkers(frame, bbox, bboxColor, cornerSize);
+        // Note: Removed drawCornerMarkers to avoid duplicate drawing
+        // The main rectangle is sufficient for detection visualization
 
         // Draw label with confidence if available
         if (i < labels.size() && !labels[i].empty()) {
