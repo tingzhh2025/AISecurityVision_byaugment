@@ -50,24 +50,38 @@ void PersonStatsController::handleGetPersonStats(const std::string& request, std
 
 void PersonStatsController::handlePostPersonStatsEnable(const std::string& request, std::string& response, const std::string& cameraId) {
     try {
+        logInfo("PersonStatsController::handlePostPersonStatsEnable called with cameraId: " + cameraId);
+
         if (cameraId.empty()) {
+            logWarn("PersonStatsController: camera_id is empty");
             response = createErrorResponse("camera_id is required", 400);
             return;
         }
 
         if (!m_taskManager) {
+            logError("PersonStatsController: TaskManager not initialized");
             response = createErrorResponse("TaskManager not initialized", 500);
             return;
         }
 
         auto pipeline = m_taskManager->getPipeline(cameraId);
         if (!pipeline) {
+            logWarn("PersonStatsController: Camera not found: " + cameraId);
             response = createErrorResponse("Camera not found: " + cameraId, 404);
             return;
         }
 
-        // Enable person statistics in pipeline
-        pipeline->setPersonStatsEnabled(true);
+        logInfo("PersonStatsController: Attempting to enable person statistics with validation");
+
+        // Try to enable person statistics in pipeline
+        bool enableResult = pipeline->enablePersonStatsWithValidation();
+
+        if (!enableResult) {
+            // Failed to enable - likely due to platform incompatibility or model issues
+            response = createErrorResponse("Person statistics cannot be enabled on this platform. This feature requires RK3588 hardware with compatible InsightFace models.", 422);
+            logWarn("Failed to enable person statistics for camera " + cameraId + ": platform incompatible");
+            return;
+        }
 
         std::ostringstream json;
         json << "{"
@@ -81,6 +95,7 @@ void PersonStatsController::handlePostPersonStatsEnable(const std::string& reque
         logInfo("Enabled person statistics for camera: " + cameraId);
 
     } catch (const std::exception& e) {
+        logError("PersonStatsController exception: " + std::string(e.what()));
         response = createErrorResponse("Failed to enable person stats: " + std::string(e.what()), 500);
     }
 }

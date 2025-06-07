@@ -14,6 +14,7 @@
 #include "../output/Recorder.h"
 #include "../output/Streamer.h"
 #include "../output/AlarmTrigger.h"
+#include "TaskManager.h"
 // Person statistics extensions (optional)
 #include "../ai/PersonFilter.h"
 #include "../ai/AgeGenderAnalyzer.h"
@@ -159,7 +160,7 @@ bool VideoPipeline::initialize() {
         // Initialize output modules
         m_recorder = std::make_unique<Recorder>();
         m_streamer = std::make_unique<Streamer>();
-        m_alarmTrigger = std::make_unique<AlarmTrigger>();
+        // AlarmTrigger is now managed by TaskManager
 
         // Configure streamer with appropriate settings
         StreamConfig streamConfig;
@@ -175,8 +176,7 @@ bool VideoPipeline::initialize() {
                   << " on port " << streamConfig.port;
 
         if (!m_recorder->initialize(m_source.id) ||
-            !m_streamer->initialize(m_source.id) ||
-            !m_alarmTrigger->initialize()) {
+            !m_streamer->initialize(m_source.id)) {
             handleError("Failed to initialize output modules");
             return false;
         }
@@ -437,8 +437,14 @@ void VideoPipeline::processFrame(const cv::Mat& frame, int64_t timestamp) {
         m_streamer->processFrame(result);
     }
 
-    if (result.hasAlarm && m_alarmTrigger) {
-        m_alarmTrigger->triggerAlarm(result);
+    // Trigger alarm through TaskManager's AlarmTrigger
+    if (result.hasAlarm) {
+        // Get TaskManager instance and trigger alarm
+        auto& taskManager = TaskManager::getInstance();
+        AlarmTrigger* alarmTrigger = taskManager.getAlarmTrigger();
+        if (alarmTrigger) {
+            alarmTrigger->triggerAlarm(result);
+        }
     }
 
     // Person statistics processing (optional, backward compatible)
@@ -1113,6 +1119,51 @@ void VideoPipeline::setPersonStatsEnabled(bool enabled) {
 
 bool VideoPipeline::isPersonStatsEnabled() const {
     return m_personStatsEnabled.load();
+}
+
+bool VideoPipeline::enablePersonStatsWithValidation() {
+    // Try to initialize AgeGenderAnalyzer to validate platform compatibility
+    if (!m_ageGenderAnalyzer) {
+        m_ageGenderAnalyzer = std::make_unique<AISecurityVision::AgeGenderAnalyzer>();
+    }
+
+    // Test initialization
+    bool initResult = m_ageGenderAnalyzer->initialize();
+    if (!initResult) {
+        LOG_WARN() << "[VideoPipeline] Cannot enable person statistics: AgeGenderAnalyzer initialization failed (platform incompatible)";
+        m_personStatsEnabled.store(false);
+        // Clean up failed analyzer
+        m_ageGenderAnalyzer.reset();
+        return false;
+    }
+
+    // Successfully initialized, enable the feature
+    m_personStatsEnabled.store(true);
+    LOG_INFO() << "[VideoPipeline] Person statistics enabled with validation for pipeline: " << m_source.id;
+    return true;
+}
+
+bool VideoPipeline::isPersonStatsPlatformSupported() const {
+    // Create a temporary analyzer to test platform compatibility
+    auto tempAnalyzer = std::make_unique<AISecurityVision::AgeGenderAnalyzer>();
+    bool supported = tempAnalyzer->initialize();
+
+    // Clean up the temporary analyzer
+    tempAnalyzer.reset();
+
+    return supported;
+}
+
+void VideoPipeline::disablePersonStats() {
+    // Disable the feature
+    m_personStatsEnabled.store(false);
+
+    // Clean up the analyzer if it exists
+    if (m_ageGenderAnalyzer) {
+        m_ageGenderAnalyzer.reset();
+    }
+
+    LOG_INFO() << "[VideoPipeline] Person statistics disabled for pipeline: " << m_source.id;
 }
 
 void VideoPipeline::setPersonStatsConfig(float genderThreshold, float ageThreshold, int batchSize, bool enableCaching) {

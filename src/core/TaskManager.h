@@ -15,6 +15,7 @@
 // Forward declarations
 class VideoPipeline;
 class MJPEGPortManager;
+class AlarmTrigger;
 
 // VideoSource is now defined in VideoPipeline.h
 struct VideoSource;
@@ -186,6 +187,11 @@ public:
     int getMJPEGPort(const std::string& cameraId) const;
     std::unordered_map<std::string, int> getAllMJPEGPortAllocations() const;
 
+    // Alarm Management
+    AlarmTrigger* getAlarmTrigger() const;
+    bool initializeAlarmTrigger();
+    void shutdownAlarmTrigger();
+
     // Configuration constants
     static constexpr size_t MAX_PIPELINES = 16;
     static constexpr int MONITORING_INTERVAL_MS = 1000;
@@ -280,6 +286,10 @@ private:
                                const std::vector<float>& features2) const;
 
     void updateCrossCameraTrackingStats();
+
+    // Alarm management
+    std::unique_ptr<AlarmTrigger> m_alarmTrigger;
+    mutable std::mutex m_alarmMutex;
 };
 
 // VideoSource is now defined in VideoPipeline.h

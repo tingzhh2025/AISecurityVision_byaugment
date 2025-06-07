@@ -170,6 +170,8 @@ export const apiService = {
   deleteAlert: (id) => api.delete(`/alerts/${id}`),
   getAlarmConfigs: () => api.get('/alarms/config'),
   saveAlarmConfig: (config) => api.post('/alarms/config', config),
+  updateAlarmConfig: (id, config) => api.put(`/alarms/config/${id}`, config),
+  deleteAlarmConfig: (id) => api.delete(`/alarms/config/${id}`),
   testAlarm: (config) => api.post('/alarms/test', config),
   getAlarmStatus: () => api.get('/alarms/status'),
 

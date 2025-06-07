@@ -32,6 +32,12 @@ const routes = [
         meta: { title: '报警管理', icon: 'Warning' }
       },
       {
+        path: '/alarm-config',
+        name: 'AlarmConfig',
+        component: () => import('@/views/AlarmConfig.vue'),
+        meta: { title: '报警配置', icon: 'Setting' }
+      },
+      {
         path: '/cameras',
         name: 'Cameras',
         component: () => import('@/views/Cameras.vue'),

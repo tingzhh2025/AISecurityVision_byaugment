@@ -39,6 +39,10 @@ public:
 private:
     std::string getControllerName() const override { return "SystemController"; }
 
+    // System information utilities
+    std::string getPlatformInfo() const;
+    std::string getMemoryInfo() const;
+
     // File serving utilities
     std::string readFile(const std::string& filePath);
     std::string getMimeType(const std::string& filePath);

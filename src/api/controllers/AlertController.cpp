@@ -104,11 +104,17 @@ void AlertController::handlePostAlarmConfig(const std::string& request, std::str
 
         } else if (method == "websocket") {
             config.method = AlarmMethod::WEBSOCKET;
-            config.webSocketConfig.port = std::stoi(url);  // Assuming URL contains port number
 
-            int reconnectInterval = parseJsonInt(request, "reconnect_interval_ms", 5000);
-            if (reconnectInterval < 1000 || reconnectInterval > 60000) {
-                reconnectInterval = 5000;
+            // Parse port from JSON
+            int port = parseJsonInt(request, "port", 8081);
+            if (port < 1024 || port > 65535) {
+                port = 8081;
+            }
+            config.webSocketConfig.port = port;
+
+            int reconnectInterval = parseJsonInt(request, "ping_interval_ms", 30000);
+            if (reconnectInterval < 5000 || reconnectInterval > 60000) {
+                reconnectInterval = 30000;
             }
             config.webSocketConfig.ping_interval_ms = reconnectInterval;
 
@@ -159,17 +165,15 @@ void AlertController::handlePostAlarmConfig(const std::string& request, std::str
             config.priority = 1;
         }
 
-        // Get AlarmTrigger from TaskManager (assuming it's accessible)
-        // For now, we'll create a static AlarmTrigger instance
-        // In a real implementation, this should be managed by TaskManager
-        static AlarmTrigger alarmTrigger;
-        static bool initialized = false;
-        if (!initialized) {
-            alarmTrigger.initialize();
-            initialized = true;
+        // Get AlarmTrigger from TaskManager
+        auto& taskManager = TaskManager::getInstance();
+        AlarmTrigger* alarmTrigger = taskManager.getAlarmTrigger();
+        if (!alarmTrigger) {
+            response = createErrorResponse("Alarm system not available", 503);
+            return;
         }
 
-        if (!alarmTrigger.addAlarmConfig(config)) {
+        if (!alarmTrigger->addAlarmConfig(config)) {
             response = createErrorResponse("Failed to add alarm configuration", 500);
             return;
         }
@@ -193,14 +197,14 @@ void AlertController::handlePostAlarmConfig(const std::string& request, std::str
 
 void AlertController::handleGetAlarmConfigs(const std::string& request, std::string& response) {
     try {
-        static AlarmTrigger alarmTrigger;
-        static bool initialized = false;
-        if (!initialized) {
-            alarmTrigger.initialize();
-            initialized = true;
+        auto& taskManager = TaskManager::getInstance();
+        AlarmTrigger* alarmTrigger = taskManager.getAlarmTrigger();
+        if (!alarmTrigger) {
+            response = createErrorResponse("Alarm system not available", 503);
+            return;
         }
 
-        auto configs = alarmTrigger.getAlarmConfigs();
+        auto configs = alarmTrigger->getAlarmConfigs();
 
         std::ostringstream json;
         json << "{"
@@ -238,15 +242,15 @@ void AlertController::handlePostTestAlarm(const std::string& request, std::strin
             cameraId = "test_camera";
         }
 
-        static AlarmTrigger alarmTrigger;
-        static bool initialized = false;
-        if (!initialized) {
-            alarmTrigger.initialize();
-            initialized = true;
+        auto& taskManager = TaskManager::getInstance();
+        AlarmTrigger* alarmTrigger = taskManager.getAlarmTrigger();
+        if (!alarmTrigger) {
+            response = createErrorResponse("Alarm system not available", 503);
+            return;
         }
 
         // Trigger test alarm
-        alarmTrigger.triggerTestAlarm(eventType, cameraId);
+        alarmTrigger->triggerTestAlarm(eventType, cameraId);
 
         std::ostringstream json;
         json << "{"
@@ -299,18 +303,18 @@ std::string AlertController::serializeAlarmConfig(const struct AlarmConfig& conf
 
 void AlertController::handleGetAlarmStatus(const std::string& request, std::string& response) {
     try {
-        static AlarmTrigger alarmTrigger;
-        static bool initialized = false;
-        if (!initialized) {
-            alarmTrigger.initialize();
-            initialized = true;
+        auto& taskManager = TaskManager::getInstance();
+        AlarmTrigger* alarmTrigger = taskManager.getAlarmTrigger();
+        if (!alarmTrigger) {
+            response = createErrorResponse("Alarm system not available", 503);
+            return;
         }
 
         // Get alarm system status and statistics
-        size_t pendingCount = alarmTrigger.getPendingAlarmsCount();
-        size_t deliveredCount = alarmTrigger.getDeliveredAlarmsCount();
-        size_t failedCount = alarmTrigger.getFailedAlarmsCount();
-        double avgDeliveryTime = alarmTrigger.getAverageDeliveryTime();
+        size_t pendingCount = alarmTrigger->getPendingAlarmsCount();
+        size_t deliveredCount = alarmTrigger->getDeliveredAlarmsCount();
+        size_t failedCount = alarmTrigger->getFailedAlarmsCount();
+        double avgDeliveryTime = alarmTrigger->getAverageDeliveryTime();
 
         std::ostringstream json;
         json << "{"
@@ -414,5 +418,154 @@ void AlertController::handleMarkAlertAsRead(const std::string& alertId, std::str
 
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to mark alert as read: " + std::string(e.what()), 500);
+    }
+}
+
+void AlertController::handleGetAlarmConfig(const std::string& request, std::string& response, const std::string& configId) {
+    try {
+        auto& taskManager = TaskManager::getInstance();
+        AlarmTrigger* alarmTrigger = taskManager.getAlarmTrigger();
+        if (!alarmTrigger) {
+            response = createErrorResponse("Alarm system not available", 503);
+            return;
+        }
+
+        auto configs = alarmTrigger->getAlarmConfigs();
+
+        // Find the specific config
+        for (const auto& config : configs) {
+            if (config.id == configId) {
+                std::ostringstream json;
+                json << "{"
+                     << "\"config\":" << serializeAlarmConfig(config) << ","
+                     << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
+                     << "}";
+
+                response = createJsonResponse(json.str());
+                logInfo("Retrieved alarm config: " + configId);
+                return;
+            }
+        }
+
+        response = createErrorResponse("Alarm config not found: " + configId, 404);
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to get alarm config: " + std::string(e.what()), 500);
+    }
+}
+
+void AlertController::handlePutAlarmConfig(const std::string& request, std::string& response, const std::string& configId) {
+    try {
+        auto& taskManager = TaskManager::getInstance();
+        AlarmTrigger* alarmTrigger = taskManager.getAlarmTrigger();
+        if (!alarmTrigger) {
+            response = createErrorResponse("Alarm system not available", 503);
+            return;
+        }
+
+        // Parse the request to get updated config
+        AlarmConfig config;
+        if (!deserializeAlarmConfig(request, config)) {
+            response = createErrorResponse("Invalid alarm config format", 400);
+            return;
+        }
+
+        // Ensure the ID matches
+        config.id = configId;
+
+        if (!alarmTrigger->updateAlarmConfig(config)) {
+            response = createErrorResponse("Failed to update alarm configuration", 500);
+            return;
+        }
+
+        std::ostringstream json;
+        json << "{"
+             << "\"status\":\"success\","
+             << "\"message\":\"Alarm configuration updated successfully\","
+             << "\"config_id\":\"" << configId << "\","
+             << "\"updated_at\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+        logInfo("Updated alarm configuration: " + configId);
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to update alarm config: " + std::string(e.what()), 500);
+    }
+}
+
+void AlertController::handleDeleteAlarmConfig(const std::string& request, std::string& response, const std::string& configId) {
+    try {
+        auto& taskManager = TaskManager::getInstance();
+        AlarmTrigger* alarmTrigger = taskManager.getAlarmTrigger();
+        if (!alarmTrigger) {
+            response = createErrorResponse("Alarm system not available", 503);
+            return;
+        }
+
+        if (!alarmTrigger->removeAlarmConfig(configId)) {
+            response = createErrorResponse("Alarm config not found: " + configId, 404);
+            return;
+        }
+
+        std::ostringstream json;
+        json << "{"
+             << "\"status\":\"success\","
+             << "\"message\":\"Alarm configuration deleted successfully\","
+             << "\"config_id\":\"" << configId << "\","
+             << "\"deleted_at\":\"" << getCurrentTimestamp() << "\""
+             << "}";
+
+        response = createJsonResponse(json.str());
+        logInfo("Deleted alarm configuration: " + configId);
+
+    } catch (const std::exception& e) {
+        response = createErrorResponse("Failed to delete alarm config: " + std::string(e.what()), 500);
+    }
+}
+
+bool AlertController::deserializeAlarmConfig(const std::string& json, struct AlarmConfig& config) {
+    try {
+        auto jsonObj = nlohmann::json::parse(json);
+
+        config.id = jsonObj.value("id", "");
+        std::string method = jsonObj.value("method", "http");
+        config.enabled = jsonObj.value("enabled", true);
+        config.priority = jsonObj.value("priority", 1);
+
+        if (method == "http") {
+            config.method = AlarmMethod::HTTP_POST;
+            config.httpConfig.url = jsonObj.value("url", "");
+            config.httpConfig.timeout_ms = jsonObj.value("timeout_ms", 5000);
+
+            if (jsonObj.contains("headers") && jsonObj["headers"].is_string()) {
+                std::string headersStr = jsonObj["headers"];
+                if (!headersStr.empty()) {
+                    auto headersJson = nlohmann::json::parse(headersStr);
+                    for (const auto& item : headersJson.items()) {
+                        config.httpConfig.headers[item.key()] = item.value().get<std::string>();
+                    }
+                }
+            }
+        } else if (method == "websocket") {
+            config.method = AlarmMethod::WEBSOCKET;
+            config.webSocketConfig.port = jsonObj.value("port", 8081);
+            config.webSocketConfig.ping_interval_ms = jsonObj.value("ping_interval_ms", 30000);
+        } else if (method == "mqtt") {
+            config.method = AlarmMethod::MQTT;
+            config.mqttConfig.broker = jsonObj.value("broker", "");
+            config.mqttConfig.port = jsonObj.value("port", 1883);
+            config.mqttConfig.topic = jsonObj.value("topic", "aibox/alarms");
+            config.mqttConfig.qos = jsonObj.value("qos", 1);
+            config.mqttConfig.username = jsonObj.value("username", "");
+            config.mqttConfig.password = jsonObj.value("password", "");
+            config.mqttConfig.keep_alive_seconds = jsonObj.value("keep_alive_seconds", 60);
+        } else {
+            return false;
+        }
+
+        return true;
+    } catch (const std::exception& e) {
+        return false;
     }
 }

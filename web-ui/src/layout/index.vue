@@ -105,7 +105,9 @@ const menuItems = [
   { path: '/live', meta: { title: '实时监控', icon: 'VideoCamera' } },
   { path: '/playback', meta: { title: '录像回放', icon: 'VideoPlay' } },
   { path: '/alerts', meta: { title: '报警管理', icon: 'Warning' } },
+  { path: '/alarm-config', meta: { title: '报警配置', icon: 'Bell' } },
   { path: '/cameras', meta: { title: '摄像头管理', icon: 'Camera' } },
+  { path: '/person-statistics', meta: { title: '人员统计', icon: 'User' } },
   { path: '/settings', meta: { title: '系统设置', icon: 'Setting' } }
 ]
 

@@ -20,16 +20,18 @@ namespace AISecurityVision {
  * Hierarchy (lowest to highest):
  * 1. MJPEG_PORT_MANAGER - Resource allocation level
  * 2. CROSS_CAMERA_TRACKING - Cross-component coordination
- * 3. TASK_MANAGER - System-wide pipeline management
- * 4. VIDEO_PIPELINE - Individual pipeline operations
- * 5. PERSON_STATS - High-level statistics processing
+ * 3. ALARM_TRIGGER - Alarm system management
+ * 4. TASK_MANAGER - System-wide pipeline management
+ * 5. VIDEO_PIPELINE - Individual pipeline operations
+ * 6. PERSON_STATS - High-level statistics processing
  */
 enum class LockLevel : int {
     MJPEG_PORT_MANAGER = 1,
     CROSS_CAMERA_TRACKING = 2,
-    TASK_MANAGER = 3,
-    VIDEO_PIPELINE = 4,
-    PERSON_STATS = 5
+    ALARM_TRIGGER = 3,
+    TASK_MANAGER = 4,
+    VIDEO_PIPELINE = 5,
+    PERSON_STATS = 6
 };
 
 /**

@@ -5,6 +5,8 @@
 #include <sstream>
 #include <fstream>
 #include <thread>
+#include <iomanip>
+#include <algorithm>
 
 using namespace AISecurityVision;
 
@@ -87,9 +89,9 @@ void SystemController::handleGetSystemInfo(const std::string& request, std::stri
              << "\"system_name\":\"AI Security Vision System\","
              << "\"version\":\"1.0.0\","
              << "\"build_date\":\"" << __DATE__ << " " << __TIME__ << "\","
-             << "\"platform\":\"RK3588 Ubuntu\","
+             << "\"platform\":\"" << getPlatformInfo() << "\","
              << "\"cpu_cores\":" << std::thread::hardware_concurrency() << ","
-             << "\"memory_total\":\"8GB\","
+             << "\"memory_total\":\"" << getMemoryInfo() << "\","
              << "\"gpu_info\":\"" << m_taskManager->getGpuMemoryUsage() << "\","
              << "\"uptime_seconds\":0,"
              << "\"timestamp\":\"" << getCurrentTimestamp() << "\""
@@ -545,4 +547,83 @@ void SystemController::handleStaticFile(const std::string& request, std::string&
     } catch (const std::exception& e) {
         response = createErrorResponse("Failed to load file: " + std::string(e.what()), 500);
     }
+}
+
+std::string SystemController::getPlatformInfo() const {
+    std::string platform = "Unknown";
+
+    // Detect architecture
+    std::string arch = "Unknown";
+#ifdef __x86_64__
+    arch = "x86_64";
+#elif defined(__aarch64__)
+    arch = "aarch64";
+#elif defined(__arm__)
+    arch = "arm";
+#endif
+
+    // Detect if we have TensorRT support
+    bool hasTensorRT = false;
+#ifdef HAVE_TENSORRT
+    hasTensorRT = true;
+#endif
+
+    // Detect if we have RKNN support
+    bool hasRKNN = false;
+#ifdef HAVE_RKNN
+    hasRKNN = true;
+#endif
+
+    // Build platform string
+    if (arch == "x86_64") {
+        if (hasTensorRT) {
+            platform = "x86_64 Ubuntu (TensorRT)";
+        } else {
+            platform = "x86_64 Ubuntu (CPU)";
+        }
+    } else if (arch == "aarch64") {
+        if (hasRKNN) {
+            platform = "RK3588 Ubuntu (RKNN)";
+        } else if (hasTensorRT) {
+            platform = "aarch64 Ubuntu (TensorRT)";
+        } else {
+            platform = "aarch64 Ubuntu (CPU)";
+        }
+    } else {
+        platform = arch + " Ubuntu";
+    }
+
+    return platform;
+}
+
+std::string SystemController::getMemoryInfo() const {
+    try {
+        std::ifstream meminfo("/proc/meminfo");
+        if (!meminfo.is_open()) {
+            return "Unknown";
+        }
+
+        std::string line;
+        long totalMemKB = 0;
+
+        while (std::getline(meminfo, line)) {
+            if (line.find("MemTotal:") == 0) {
+                std::istringstream iss(line);
+                std::string label, unit;
+                iss >> label >> totalMemKB >> unit;
+                break;
+            }
+        }
+
+        if (totalMemKB > 0) {
+            double totalMemGB = totalMemKB / 1024.0 / 1024.0;
+            std::ostringstream oss;
+            oss << std::fixed << std::setprecision(1) << totalMemGB << "GB";
+            return oss.str();
+        }
+    } catch (const std::exception& e) {
+        // Fallback to default
+    }
+
+    return "8GB"; // Fallback
 }

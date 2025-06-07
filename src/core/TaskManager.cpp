@@ -1,6 +1,7 @@
 #include "TaskManager.h"
 #include "VideoPipeline.h"
 #include "MJPEGPortManager.h"
+#include "../output/AlarmTrigger.h"
 #include <iostream>
 #include <sstream>
 #include <fstream>
@@ -38,10 +39,16 @@ TaskManager::TaskManager() {
     if (!initializeGpuMonitoring()) {
         LOG_INFO() << "[TaskManager] GPU monitoring not available";
     }
+
+    // Initialize alarm trigger
+    if (!initializeAlarmTrigger()) {
+        LOG_ERROR() << "[TaskManager] Failed to initialize alarm trigger";
+    }
 }
 
 TaskManager::~TaskManager() {
     stop();
+    shutdownAlarmTrigger();
     cleanupGpuMonitoring();
 }
 
@@ -1078,4 +1085,47 @@ int TaskManager::getMJPEGPort(const std::string& cameraId) const {
 std::unordered_map<std::string, int> TaskManager::getAllMJPEGPortAllocations() const {
     auto& portManager = AISecurityVision::MJPEGPortManager::getInstance();
     return portManager.getAllAllocations();
+}
+
+// Alarm management implementation
+bool TaskManager::initializeAlarmTrigger() {
+    AISecurityVision::HierarchicalMutexLock lock(m_alarmMutex, AISecurityVision::LockLevel::ALARM_TRIGGER, "TaskManager::m_alarmMutex");
+
+    try {
+        m_alarmTrigger = std::make_unique<AlarmTrigger>();
+        if (m_alarmTrigger->initialize()) {
+            LOG_INFO() << "[TaskManager] AlarmTrigger initialized successfully";
+            return true;
+        } else {
+            LOG_ERROR() << "[TaskManager] Failed to initialize AlarmTrigger";
+            m_alarmTrigger.reset();
+            return false;
+        }
+    } catch (const std::exception& e) {
+        LOG_ERROR() << "[TaskManager] Exception initializing AlarmTrigger: " << e.what();
+        m_alarmTrigger.reset();
+        return false;
+    }
+}
+
+void TaskManager::shutdownAlarmTrigger() {
+    AISecurityVision::HierarchicalMutexLock lock(m_alarmMutex, AISecurityVision::LockLevel::ALARM_TRIGGER, "TaskManager::m_alarmMutex");
+
+    if (m_alarmTrigger) {
+        m_alarmTrigger->shutdown();
+        m_alarmTrigger.reset();
+        LOG_INFO() << "[TaskManager] AlarmTrigger shutdown complete";
+    }
+}
+
+AlarmTrigger* TaskManager::getAlarmTrigger() const {
+    AISecurityVision::HierarchicalMutexLock lock(m_alarmMutex, AISecurityVision::LockLevel::ALARM_TRIGGER, "TaskManager::m_alarmMutex");
+    return m_alarmTrigger.get();
+}
+
+void TaskManager::cleanupPipeline(const std::string& sourceId) {
+    // This method is called internally to clean up failed pipelines
+    // The actual cleanup is handled in removeVideoSource
+    LOG_INFO() << "[TaskManager] Cleaning up pipeline: " << sourceId;
+    removeVideoSource(sourceId);
 }

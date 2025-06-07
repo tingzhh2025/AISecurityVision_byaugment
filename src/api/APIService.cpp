@@ -9,6 +9,7 @@
 #include "controllers/LogController.h"
 #include "controllers/StatisticsController.h"
 #include "../core/TaskManager.h"
+#include "../core/VideoPipeline.h"
 #include "../onvif/ONVIFDiscovery.h"
 #include "../network/NetworkManager.h"
 #include "../core/Logger.h"
@@ -334,13 +335,76 @@ void APIService::setupRoutes() {
         addCorsHeaders(res);
     });
 
-    // Enable person stats
+    // Simple test route
+    m_httpServer->Post("/api/test-person-stats", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        LOG_INFO() << "[APIService] POST /api/test-person-stats called";
+        res.status = 200;
+        res.set_content("{\"status\":\"test_success\"}", "application/json");
+        addCorsHeaders(res);
+    });
+
+    // Even simpler test route - POST version copying working route structure
+    m_httpServer->Post("/api/simple-test", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        LOG_INFO() << "[APIService] POST /api/simple-test called";
+        std::string response = "{\"status\":\"success\",\"message\":\"POST test OK\"}";
+        res.set_content(response, "application/json");
+        addCorsHeaders(res);
+    });
+
+    // GET test route
+    m_httpServer->Get("/api/simple-test", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        LOG_INFO() << "[APIService] GET /api/simple-test called";
+        res.status = 200;
+        res.set_content("GET OK", "text/plain");
+        addCorsHeaders(res);
+    });
+
+    // Add a logger for all requests
+    m_httpServer->set_logger([](const httplib::Request& req, const httplib::Response& res) {
+        LOG_INFO() << "[APIService] " << req.method << " " << req.path << " -> " << res.status;
+    });
+
+    // Enable person stats - simplified approach with dynamic camera ID
     m_httpServer->Post(R"(/api/cameras/([^/]+)/person-stats/enable)", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
         std::string cameraId = req.matches[1];
-        std::string response;
-        m_personStatsController->handlePostPersonStatsEnable(req.body, response, cameraId);
-        res.set_content(stripHttpHeaders(response), "application/json");
-        addCorsHeaders(res);
+        LOG_INFO() << "[APIService] POST /api/cameras/" << cameraId << "/person-stats/enable called";
+
+        try {
+            auto& taskManager = TaskManager::getInstance();
+
+            auto pipeline = taskManager.getPipeline(cameraId);
+            if (!pipeline) {
+                LOG_WARN() << "[APIService] Camera not found: " << cameraId;
+                res.status = 404;
+                res.set_content("{\"error\":\"Camera not found\"}", "application/json");
+                addCorsHeaders(res);
+                return;
+            }
+
+            LOG_INFO() << "[APIService] Attempting to enable person statistics with validation";
+
+            // Try to enable person statistics in pipeline
+            bool enableResult = pipeline->enablePersonStatsWithValidation();
+
+            if (!enableResult) {
+                LOG_WARN() << "[APIService] Failed to enable person statistics: platform incompatible";
+                res.status = 422;
+                res.set_content("{\"error\":\"Person statistics cannot be enabled on this platform\"}", "application/json");
+                addCorsHeaders(res);
+                return;
+            }
+
+            LOG_INFO() << "[APIService] Successfully enabled person statistics for camera: " << cameraId;
+            res.status = 200;
+            res.set_content("{\"status\":\"success\",\"message\":\"Person statistics enabled\"}", "application/json");
+            addCorsHeaders(res);
+
+        } catch (const std::exception& e) {
+            LOG_ERROR() << "[APIService] Exception in person stats enable: " << e.what();
+            res.status = 500;
+            res.set_content("{\"error\":\"Internal server error\"}", "application/json");
+            addCorsHeaders(res);
+        }
     });
 
     // Disable person stats
@@ -350,6 +414,45 @@ void APIService::setupRoutes() {
         m_personStatsController->handlePostPersonStatsDisable(req.body, response, cameraId);
         res.set_content(stripHttpHeaders(response), "application/json");
         addCorsHeaders(res);
+    });
+
+    // Get person stats status
+    m_httpServer->Get(R"(/api/cameras/([^/]+)/person-stats/status)", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string cameraId = req.matches[1];
+        LOG_INFO() << "[APIService] GET /api/cameras/" << cameraId << "/person-stats/status called";
+
+        try {
+            auto& taskManager = TaskManager::getInstance();
+
+            auto pipeline = taskManager.getPipeline(cameraId);
+            if (!pipeline) {
+                LOG_WARN() << "[APIService] Camera not found: " << cameraId;
+                res.status = 404;
+                res.set_content("{\"error\":\"Camera not found\"}", "application/json");
+                addCorsHeaders(res);
+                return;
+            }
+
+            // Get person statistics status
+            bool isEnabled = pipeline->isPersonStatsEnabled();
+            bool platformSupported = pipeline->isPersonStatsPlatformSupported();
+
+            nlohmann::json response = {
+                {"camera_id", cameraId},
+                {"person_stats_enabled", isEnabled},
+                {"platform_supported", platformSupported}
+            };
+
+            res.status = 200;
+            res.set_content(response.dump(), "application/json");
+            addCorsHeaders(res);
+            LOG_INFO() << "[APIService] GET /api/cameras/" << cameraId << "/person-stats/status -> 200";
+        } catch (const std::exception& e) {
+            LOG_ERROR() << "[APIService] Exception in person-stats status: " << e.what();
+            res.status = 500;
+            res.set_content("{\"error\":\"Internal server error\"}", "application/json");
+            addCorsHeaders(res);
+        }
     });
 
     // Get person stats config
@@ -465,6 +568,30 @@ void APIService::setupRoutes() {
     m_httpServer->Get("/api/alarms/status", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
         std::string response;
         m_alertController->handleGetAlarmStatus("", response);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    m_httpServer->Get(R"(/api/alarms/config/([^/]+)$)", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string configId = req.matches[1];
+        std::string response;
+        m_alertController->handleGetAlarmConfig("", response, configId);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    m_httpServer->Put(R"(/api/alarms/config/([^/]+)$)", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string configId = req.matches[1];
+        std::string response;
+        m_alertController->handlePutAlarmConfig(req.body, response, configId);
+        res.set_content(stripHttpHeaders(response), "application/json");
+        addCorsHeaders(res);
+    });
+
+    m_httpServer->Delete(R"(/api/alarms/config/([^/]+)$)", [this, addCorsHeaders](const httplib::Request& req, httplib::Response& res) {
+        std::string configId = req.matches[1];
+        std::string response;
+        m_alertController->handleDeleteAlarmConfig("", response, configId);
         res.set_content(stripHttpHeaders(response), "application/json");
         addCorsHeaders(res);
     });
